@@ -13,12 +13,24 @@ PRSH is forked from [TournamentStreamHelper](https://github.com/TournamentStream
 
 ### Install (end users)
 
-Pre-built installers are produced from `PRSH.spec` (PyInstaller) and `installer/PRSH.iss` (Inno Setup, Windows):
+Grab a build from the [latest release](https://github.com/matt-gree/ProjectRioStreamHelper/releases/latest):
 
-- **macOS** — `PRSH-macOS-arm64.zip` or `PRSH-macOS-x86_64.zip` from the [latest release](https://github.com/matt-gree/PRSH/releases/latest); unzip and drag `PRSH.app` to Applications.
-- **Windows** — `PRSH-Setup.exe` from the [latest release](https://github.com/matt-gree/PRSH/releases/latest); run the installer.
+- **macOS** — `PRSH-macOS-arm64.zip` (Apple Silicon) or `PRSH-macOS-x86_64.zip` (Intel); unzip and drag `PRSH.app` to Applications.
+- **Windows** — `PRSH-Setup.exe`; run the installer.
 
 Launch the app, then open `http://localhost:5260` in any browser. A system-tray icon stays running while the server is up.
+
+#### First launch: your OS will warn you
+
+PRSH is **not code-signed** — a signing certificate is an annual fee this project doesn't carry. The builds are produced in the open by [GitHub Actions](.github/workflows/build-release.yml) from the tagged source, but your computer has no way to know that, so it will object the first time. This is expected, and here's how to get past it:
+
+- **macOS** — right-click (or Control-click) `PRSH.app` and choose **Open**, then **Open** again in the dialog. Using the normal double-click gives you "unidentified developer" with no way through; the right-click route is the supported override. If macOS says the app is **damaged**, that's the quarantine flag on a downloaded zip rather than actual damage — clear it with:
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/PRSH.app
+  ```
+- **Windows** — SmartScreen shows "Windows protected your PC". Click **More info**, then **Run anyway**.
+
+You only have to do this once per install. If you'd rather not, [run from source](#run-from-source) instead.
 
 ### Run from source
 
@@ -41,13 +53,17 @@ npm run dev:win        # Windows
 
 PRSH does **not** ship Mario Superstar Baseball images (Nintendo IP). Without them, the UI and overlays will render with broken images. You need to supply the asset folder yourself before the app is usable.
 
-**Where to put it.** PRSH looks for assets in a writable folder under your user data directory:
+**Where to get it.** The community image pack lives in the [Mario Superstar Baseball Discord](https://discord.gg/WfkYyaHBEu).
+
+**The fast way in.** Download the pack, unzip it, then **Connections → MSB image pack → Import…** and select the unzipped folder. PRSH finds the pack inside whatever you pick (a wrapper folder from the zip is fine) and **copies** the images into its own folder, so nothing breaks later when you tidy up your Downloads. The card's census re-checks itself the moment the copy lands.
+
+**Where it puts them.** PRSH's own assets folder, under your user data directory:
 
 - **macOS** — `~/Library/Application Support/PRSH/user_data/game_assets/msb/`
 - **Windows** — `%LOCALAPPDATA%\PRSH\user_data\game_assets\msb\`
 - **Run from source** — `./user_data/game_assets/msb/`
 
-The folder is created automatically on first launch. Drop your asset pack inside so the layout looks like:
+The folder is created automatically on first launch. Import fills it for you; to populate it by hand, drop your asset pack inside so the layout looks like:
 
 ```
 .../user_data/game_assets/msb/
@@ -56,88 +72,69 @@ The folder is created automatically on first launch. Drop your asset pack inside
 └── gameIcons/         bat.png, glove.png, superstar.png
 ```
 
-**Settings → Project Rio → MSB Image Assets** validates the folder against the canonical filename lists from [pyrio](https://github.com/matt-gree/pyrio) and shows exactly what's missing per category.
+The **Connections** tab's MSB image pack card validates the folder against the canonical filename lists from [pyrio](https://github.com/matt-gree/pyrio) and shows exactly what's missing per category.
 
-The fastest way to find the folder is **Settings → Project Rio → MSB Image Assets → Open Folder**, which reveals it in Finder/Explorer. The Welcome screen also shows whether assets were found on first launch.
+**Open Folder** on the same card reveals it in Finder/Explorer, for dropping files in by hand — tab back to PRSH and the census re-checks itself. The Welcome screen also shows whether assets were found on first launch.
 
-**Custom location.** If you keep a shared asset pack for use across multiple tools, point PRSH at it via **Settings → Project Rio → MSB Image Assets → Browse...** and select your folder. The override persists in `settings.json`.
+**Custom location.** If you keep a shared asset pack for use across multiple tools, point PRSH at it via **Connections → MSB image pack → Browse…** and select your folder — that stores a *pointer* rather than copying, and the override persists in `settings.json`. Importing clears it again, since the pack PRSH just copied in is the one it should read.
 
 ---
 
 ## How It Works
 
-The web UI shows one or more **scoreboards**. Each scoreboard is an independent set of state keys (teams, players, score, inning, runners, etc.) that can be populated from one of four input methods. The same state drives both the in-app UI and the OBS browser-source overlays in `public/layout/`.
+The console shows one or more **scoreboards** (boards). Each board is an independent set of state keys (teams, players, score, inning, runners, etc.) and has its own desk on the **Production** tab. The same state drives the console and every OBS browser-source overlay in `public/layout/`.
 
 State changes flow through a single store (`server/state.py`) that broadcasts diffs over SocketIO and optionally (toggle in settings) exports each value as a text file under `user_data/stream_labels/` for use as OBS Text Sources.
 
 ---
 
-## Input Methods
+## Where a Board's Game Comes From
 
-Each scoreboard has a **Source** dropdown (in the score-controls panel) with four options. Switching source changes which inputs are active and which side panel appears.
+There is no source picker. **Board 1 follows the local HUD file** while **Connections → Project Rio → Follow local HUD** is on; every other board (and board 1 with that switch off) takes its games from the Project Rio API. The board desk shows which with a `HUD` / `API` badge on its game-state header.
 
-### 1. Manual
+A board with no game on it is simply empty: you can bind a match to it, and the score, count and runners can be set by hand from the board desk.
 
-You type or click everything yourself: player names, characters, score, balls/strikes/outs, runners on base, captains, superstars. Nothing is read from the game. Use this when there's no live HUD file (e.g., reviewing a recorded set, or operating a scoreboard for a remote player).
+### Local HUD (board 1)
 
-All scoreboard fields are editable in this mode.
-
-### 2. HUD (live local game)
-
-PRSH watches Project Rio's `decoded.hud.json` file and pushes every change into the scoreboard in real time — score, inning, half-inning, batter/pitcher, balls/strikes/outs, runners on base, character stats. This is the right mode when *you* are running the Project Rio client locally.
+PRSH watches Project Rio's `decoded.hud.json` file and pushes every change into the board in real time — score, inning, half-inning, batter/pitcher, balls/strikes/outs, runners on base, character stats. This is the right setup when *you* are running the Project Rio client locally.
 
 **HUD file default paths (auto-detected):**
 - macOS: `~/Library/Application Support/Project Rio/HudFiles/decoded.hud.json`
 - Windows: `%APPDATA%\Project Rio\HudFiles\decoded.hud.json`
-- Override for custom path located in Settings
+- Override for custom path on the **Connections** tab
 
-The watcher uses OS-level file events (kqueue / inotify / ReadDirectoryChanges via `watchfiles`), so there's no polling cost between game updates.
+The watcher uses OS-level file events (kqueue / inotify / ReadDirectoryChanges via `watchfiles`), so there's no polling cost between game updates. **Re-read HUD** on the board desk reloads the file by hand.
 
-**Side preservation.** Project Rio randomly assigns away/home each game. PRSH keeps the same player on the same side across back-to-back games via three layers:
-1. **Pinned player** (Settings → Project Rio) — always force a named player onto Team 1 or Team 2.
-2. **Back-to-back detection** — if a returning player switched sides, auto-swap.
-3. **Manual swap button** — persists for the rest of the current game.
+**Side preservation.** Project Rio randomly assigns away/home each game. PRSH decides which player sits on side 1 and side 2 on every board, in this order:
+1. **Swap sides** on the board desk — outranks everything for the rest of the current game. **Use auto** hands the sides back.
+2. **The bound match** — a match's side 1 participant is seated on side 1.
+3. **Pinned player** (Address Book → **Side**) — give someone a preferred side and PRSH seats
+   them there. Any number of people can have one; if two players in the same game want the *same*
+   side, the pin steps aside and the next layer decides.
+4. **Back-to-back detection** — if a returning player switched sides, auto-swap.
 
-Player text fields (full name, country, pronoun, social handles) remain manually editable in HUD mode; only the Rio-supplied fields lock to the game.
+The desk shows which layer decided with a badge beside **Swap sides**. While a game is feeding the board, the fields the feed writes (score, count, runners) stop taking input — a hand edit would be overwritten by the next frame. Address Book fields (name, pronouns, socials) still resolve from the Address Book.
 
-### 3. Live API Game
+### Project Rio API (every other board)
 
-Pulls active games from the Project Rio API (`https://api.projectrio.app/`) instead of from a local HUD file. Use this for **remote** matches you're casting — pick the game from a searchable list and PRSH polls the API to keep the scoreboard live.
+For **remote** matches you're casting. The board desk's **Games** region picks how the board plays:
 
-**Populating the list (right-side panel when source is "Live API Game"):**
-- **Refresh** — fetch the current set of ongoing games once.
-- **Auto-poll** — keep refreshing on an interval (default 10 s, configurable 5–300 s). When auto-poll is on, the currently loaded game also gets re-applied automatically so its score/state stays current.
-- **Filters** — Username, Vs Username, Game Mode (resolved from the API's tag-set list).
-- **Load** — assign that game's data to the scoreboard.
+**One game** — pick a single game and keep it on the board.
+- **Live** tab: the games being played right now. The list loads when you open it; **Refresh** re-fetches it.
+- **Completed** tab: search finished games by game mode, player, opponent, date range and **Limit** (Rio returns at most 50), then **Find games**.
+- **Put on board** puts that game on the board. A live game stays current on its own — PRSH keeps polling it while it is on a board.
 
-The pinned-player setting is honored here too; if the pinned player is on the "wrong" side of the API game, sides are swapped on load.
+**Rotating** — cycle the board through a pool of games.
+- **Scope**: `Live + Completed`, `Live Only` or `Completed Only`.
+- **Filter**: game modes, player, opponent, and (for completed games) date range and limit. **Find games** fills the pool from the filter.
+- **Seconds per game** — how long each game stays up (5–600 s).
+- **Keep pool current** — re-checks the filter on an interval (10–600 s, default 60) so newly started and newly finished games join the pool and ones that no longer match leave it. Off = the pool only changes when you press **Find games**.
+- **Pool games** opens the pool's member list, where you can exclude a game (and put it back).
+- **Start rotating** / **Stop**, with previous / next to step by hand.
 
-### 4. Rotator
+A rotation that was running when PRSH closed resumes on the next launch. A game that fails to apply logs a warning and the rotation moves on.
 
-Cycles a scoreboard through a list of games at a configurable interval — typically used to display a continuous "now playing” or “previous matches" feed without hand-loading each game. Games can come from the **completed** API endpoint, the **ongoing** endpoint, or both.
-
-**Populating the rotation (right-side panel when source is "Rotator"):**
-
-1. **Search completed games** (top of the panel):
-   - **Username**, **Vs Username**, **Tags** (game modes), **Limit** (games returned).
-   - Click **Search** to fetch from `/games`. Each search creates a *search set* — labeled chips you can stack, remove individually, or reuse. New searches add to the pool rather than replacing it.
-   - Filters persist across page reloads (`settings.rotation_search.*`) and the rotation is re-fetched automatically when the app restarts.
-
-2. **Pull in live games**: open **Manage → Live Games** tab and click **Refresh Live Games**. Live games can be added to the rotation alongside completed ones.
-
-3. **Auto-poll** (optional): keeps re-fetching the completed-games query on an interval so newly finished games are automatically added to the pool.
-
-4. **Manage modal**: a dual-pane (Available / In Rotation) view per pool with column filters (Username, Stadium, Mode, Date range), sortable headers, and pagination. **Add** / **Remove** moves games between panes; **Load** assigns a single game to the scoreboard immediately without changing rotation membership.
-
-5. **Pool selector** — choose `Both`, `Live Only`, or `Completed` to control which games the rotator advances through.
-
-6. **Interval** — seconds between auto-advances (5–600).
-
-7. **Start** — begins the rotation. Use `< / >` to step manually; the badge shows `current/total · seconds-to-next`.
-
-Rotations resume across app restarts. If a rotation was active when PRSH was closed, it re-fetches the completed-game pool and restarts the same rotation in the background on next launch.
-
-**Per-rotation behavior:** stats for every player in the rotation are pre-fetched in the background as soon as the rotation starts, so transitions don't block on the API. A failure to apply one game logs a warning and moves on rather than killing the rotation.
+The pinned-player rule applies to API games too: if a pinned player is on the "wrong" side of a game, the sides are swapped when it is applied.
 
 ---
 
@@ -149,7 +146,7 @@ Overlays subscribe to `v1.state.set` / `v1.state.set_batch` over SocketIO and re
 
 > ⚠ When *editing* an overlay HTML file, hard-refresh the browser source (Cmd/Ctrl+Shift+R) to bypass the cache. Safari may also need Option+Cmd+E first.
 
-You can also wire **OBS Text Sources** to individual values — enable export under **Settings → General** and PRSH will mirror each state key into a `.txt` file under `user_data/stream_labels/`.
+You can also wire **OBS Text Sources** to individual values — enable **Write text files for OBS** under **Settings → Output** and PRSH will mirror each state key into a `.txt` file under `user_data/stream_labels/`.
 
 ---
 
@@ -166,8 +163,7 @@ Loaded bracket data is exposed both in the in-app Bracket view and via the brack
 
 ## Controller Overlay (optional)
 
-PRSH can manage an optional `gc-overlay` subprocess that draws controller inputs as an OBS browser source. Configure under **Settings → Controller Overlay**:
-- **Path** — auto-detected as a sibling `../gc-overlay/` directory or inside the frozen bundle; can be set manually.
+PRSH can manage an optional `gc-overlay` subprocess that draws controller inputs as an OBS browser source. It ships with PRSH (and is found as the `gc-overlay/` submodule in a source checkout), so there is nothing to locate. Configure under **Connections → Controller reader**:
 - **Port** — default 8069.
 - **Controller / Auto-start** — which controller to capture and whether to launch on app start.
 
@@ -175,19 +171,19 @@ PRSH can manage an optional `gc-overlay` subprocess that draws controller inputs
 
 ## Multiple Scoreboards
 
-Click **+** in the scoreboard tab strip to add another scoreboard. Each scoreboard:
-- Has its own source (one can be HUD while another is on a Rotator).
+Add a board from the **+** in the Production rack's **BOARDS** section. Each board:
+- Takes its games independently (board 1 can follow the HUD while board 2 rotates API games).
 - Has its own state subtree (`score.{N}.*`).
-- Can be renamed via the pencil icon (the alias appears in the tab and can be referenced from layouts).
-- Can be removed (close button); at least one scoreboard always remains.
+- Can be renamed by clicking the title of its desk.
+- Can be removed from its rack row; at least one board always remains.
 
-Each layout HTML file accepts a `?scoreboard=N` query parameter to bind to a specific scoreboard.
+Each layout HTML file accepts a `?scoreboard=N` query parameter to bind to a specific board (a missing parameter means board 1).
 
 ---
 
 ## Settings & Data
 
-- **`user_data/settings.json`** — all user preferences (HUD path, pinned player, rotation config, auto-poll state, etc.).
+- **`user_data/settings.json`** — all user preferences (HUD path, each board's games and rotation, design settings, etc.).
 - **`user_data/state.json`** — persisted scoreboard state. If the app fails to start due to corrupt state: `echo '{}' > user_data/state.json`.
 - **`user_data/branding/`** — drop tournament logos here; served at `/branding/`.
 - **`user_data/stream_labels/`** — text-file mirror of state (off by default).
@@ -215,4 +211,9 @@ For development guidance — module layout, performance rules, and patterns for 
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
+
+PRSH is a fork of [TournamentStreamHelper](https://github.com/joaorb64/TournamentStreamHelper)
+by João Ribeiro Bezerra, rebuilt as a single-game web app for Mario Superstar
+Baseball. TSH is MIT-licensed and its copyright notice is retained in
+[LICENSE](LICENSE) as that licence requires.

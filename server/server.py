@@ -9,16 +9,30 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.http_cache import REVALIDATE, RevalidatingStaticFiles
+from server.utils.tasks import spawn, drain
 from server.api.v1.assets import get_msb_assets_path
-from server.paths import user_data_dir, ensure_game_data
+from server.api.v1.layouts import layout_url
+from server.paths import app_root, user_data_dir, rio_visualizer_dir
 from server.rio.game_pool import OngoingGamePool, CompletedGamePool
-from server.rio.rotation import RotationManager
+from server.rio.rotation import PoolManager
 from server.rio.provider import RioGameDataProvider
+from server import boards
+from server.rio import stats_api
 from server.settings import Settings, Config
 from server.startgg.provider import StartGGProvider
-from server.challonge.provider import ChallongeProvider
 from server.controller_overlay import ControllerOverlay
+from server.postgame.watch import StatFileWatcher
 from server.announcements import Announcements
+from server.automations import Automations
+from server.league_logos import LeagueLogos
+from server.participants import Participants
+from server.match import Match
+from server.schedule import Schedule
+from server.utils.projection import run_startup_projection
+from server.commentary import Commentary
+from server.organizers import Organizers
+from server.playerplates import PlayerPlates
 from server.state import State
 from server.utils import json
 
@@ -32,7 +46,7 @@ async def load_manifest() -> dict:
     # PyInstaller on Windows drops files inside hidden (dot-prefixed) dirs,
     # so the spec also stages a copy at dist/vite_manifest.json. Prefer the
     # Vite-native path in dev, fall back to the staged copy in frozen builds.
-    candidates = [Path("./dist/.vite/manifest.json"), Path("./dist/vite_manifest.json")]
+    candidates = [app_root() / "dist/.vite/manifest.json", app_root() / "dist/vite_manifest.json"]
     manifest_json = next((p for p in candidates if p.is_file()), None)
     if manifest_json is None:
         logger.warning(
@@ -49,13 +63,31 @@ async def load_manifest() -> dict:
         logger.exception("[manifest] failed to parse {}: {}", manifest_json, exc)
         return {"css": css, "js": js}
 
+    # ONLY ENTRY CHUNKS GET A <script> TAG.
+    #
+    # This used to inject `entry["file"]` for EVERY manifest record. That was
+    # harmless only because the build produced exactly one chunk — the moment
+    # anything is code-split, the manifest also lists each lazy chunk, and
+    # emitting a tag per record would load the whole app up front and defeat
+    # the split entirely. A dynamic `import()` fetches its own chunk; the
+    # document must reference the entry and nothing else.
+    #
+    # CSS is collected from every record on purpose: Vite files a lazy route's
+    # stylesheet under that route's chunk, and a stylesheet arriving with the
+    # chunk would repaint the page mid-navigation.
     for name, entry in manifest.items():
-        if "file" in entry:
-            logger.debug("[manifest] adding js: {}", entry["file"])
+        if entry.get("isEntry") and "file" in entry:
+            logger.debug("[manifest] adding js entry: {}", entry["file"])
             js.append(entry["file"])
         for css_file in entry.get("css", []):
             logger.debug("[manifest] adding css: {}", css_file)
             css.append(css_file)
+
+    # A manifest with no `isEntry` record at all is a build we don't understand;
+    # shipping a page with no script is a white screen, so fall back loudly.
+    if not js:
+        logger.warning("[manifest] no entry chunk found — falling back to every record")
+        js = [e["file"] for e in manifest.values() if "file" in e]
 
     logger.info("[manifest] loaded {} js / {} css entries", len(js), len(css))
     return {"css": css, "js": js}
@@ -63,38 +95,116 @@ async def load_manifest() -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # on_startup
-    ensure_game_data()
     consumer = asyncio.create_task(State.Consumer())
+    # Owns state.json: the queue raises a dirty flag, this turns it back into a
+    # write, at most once per State.PERSIST_INTERVAL. Started before Load() so
+    # the very first boot projection is already covered.
+    persister = asyncio.create_task(State.Persister())
     await State.Load()
+    # The Event Header's banner line moved off the shared event-fact namespace
+    # and onto the element (overlays.eventheader.message). Settings is already
+    # loaded by the time the lifespan runs, so this is the one place both stores
+    # are in memory — the settings side seeds, the state side drops its copy, and
+    # neither module has to import the other.
+    _msg = (State.state.get("tournamentInfo", {}) or {}).get("message", "")
+    if _msg and await Settings.adopt_eventheader_message(_msg):
+        await State.Unset("tournamentInfo.message")
+    # Load the participant registry back into memory before anything that reads
+    # it (resurface, Match projection). Without this the address book starts
+    # empty every launch even though it persisted to participants.json.
+    await Participants.Load()
+    # Player Lock moved off the global settings pair and onto the person — a pin
+    # is a fact about a participant, not about the app. Same seam as the event
+    # header adoption above: the book has to be in memory before anything can be
+    # written onto a row, and Settings already is. One-shot; it clears the keys.
+    await Participants.adopt_legacy_pin()
+    # League logos ride the State write path, so the hook has to be in place
+    # before the first frame — the provider's boot read — goes through it.
+    LeagueLogos.Start()
     await RioGameDataProvider.Start()
+    # AFTER the provider, on purpose. Boards that booted holding a game are
+    # flagged as not-current (server/boards.py), and the provider's own boot read
+    # of decoded.hud.json — a one-shot read of a file that was already on disk,
+    # not a frame that arrived — goes through the ordinary per-frame batch, which
+    # clears the flag. Marking first would be undone by it; marking after is what
+    # lets an archive read be treated as an archive with no new argument threaded
+    # through every apply path. Before the pools, so a genuinely fresh API game
+    # clears the flag the moment it lands.
+    await boards.mark_restored()
+    # Warm the Rio caches once per launch rather than trusting a cache.pkl
+    # timestamp that can be a day stale. Fire-and-forget so a slow/offline Rio
+    # API doesn't delay startup; the manual Settings refresh covers mid-session.
+    # prime_caches orders the two halves — the mode list now (a HUD frame waits
+    # on it), the completer-cache rebuild a minute in (it starves the loop).
+    spawn(stats_api.prime_caches(), name="stats.prime_caches")
     await OngoingGamePool.Start()
     await CompletedGamePool.Start()
-    await RotationManager.Start()
+    await PoolManager.Start()
     await StartGGProvider.Start()
-    await ChallongeProvider.Start()
     await ControllerOverlay.Start()
+    # Auto-capture. After the provider (the stat directory is derived from the
+    # resolved HUD path) and before the match projections, which is where a
+    # capture's match hop would land anyway.
+    await StatFileWatcher.Start()
     await Announcements.Start()
+    # Fold the pre-queues `schedule.queue`/`schedule.title` keys into
+    # `schedule.queues`, and project the flat union every schedule reader uses.
+    # BEFORE Match.project_all: a bad match must not be able to leave the schedule
+    # unmigrated, and nothing in the projections reads the queue.
+    await run_startup_projection("Schedule", Schedule.ensure_migrated())
+    # Re-apply every persisted match onto its bound board(s) (resume-on-startup
+    # spirit). Runs after State + registry are loaded.
+    await Match.project_all()
+    # Re-resolve the persisted commentary desk against the current registry so a
+    # renamed/edited caster reflows on launch (resolve-by-copy, like Match).
+    await Commentary.project_all()
+    # Same for the player-plates band — re-resolve its config against the current
+    # registry/matches so a match-fed plate reflects the latest names on launch.
+    await PlayerPlates.project_all()
+    # And the competition's organizers, which are address-book references now
+    # rather than nine free-text fields — so a handle edited in the Address Book
+    # reflows on launch, the same contract as the three projectors above.
+    await Organizers.project_all()
+
+    # Container automations. Registers the state write hooks (so a rule decides
+    # in the same batch as its trigger) and settles every container: a producer's
+    # suspension is restored from the mirrored reason, anything else returns to
+    # its resting occupant. Last, so State + Settings are loaded and the boot
+    # projections have already landed.
+    await Automations.Start()
+    # And settle every board once: a board restored from disk carries whatever
+    # logos it had when PRSH exited, against a book that may have changed since.
+    await run_startup_projection("LeagueLogos", LeagueLogos.project_all())
 
     # If stream labels are enabled but the output dir is missing, do a full
     # export so OBS Text (GDI+) sources don't point at missing files.
-    if await State._is_export_enabled():
+    if State._is_export_enabled():
         import os
-        if not os.path.isdir(str(State._stream_labels_out)):
+        if not os.path.isdir(str(State._labels_dir())):
             await State.ExportAll()
 
     # wait for signal for shutdown
     yield
 
     # on_shutdown
+    await Automations.Stop()
+    LeagueLogos.Stop()
     await Announcements.Stop()
+    await StatFileWatcher.Stop()
     await ControllerOverlay.Stop()
-    await ChallongeProvider.Stop()
     await StartGGProvider.Stop()
-    await RotationManager.Stop()
+    await PoolManager.Stop()
     await CompletedGamePool.Stop()
     await OngoingGamePool.Stop()
     await RioGameDataProvider.Stop()
+    # Background work spawned during the run — a stats refresh, a game-end
+    # resolver mid-retry — gets a bounded chance to finish before the state
+    # queue closes under it, then is cancelled.
+    await drain(timeout=3.0)
     consumer.cancel()
+    # Cancelled, not awaited: the unconditional SaveImmediately below is the
+    # trailing write, so whatever the persister was waiting out is superseded.
+    persister.cancel()
 
     shutdown_tasks = [
         asyncio.create_task(Settings.Save()),
@@ -106,7 +216,19 @@ async def lifespan(app: FastAPI):
             shutdown_tasks.append(asyncio.create_task(asyncio.to_thread(Tray.icon.stop)))
     except Exception:
         pass
-    await asyncio.wait(shutdown_tasks, timeout=5.0)
+    # gather (not wait) so a failed save is logged instead of silently
+    # swallowed; the timeout still bounds a hung save at shutdown.
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(*shutdown_tasks, return_exceptions=True), timeout=5.0
+        )
+    except asyncio.TimeoutError:
+        logger.warning("shutdown tasks did not finish within 5s — exiting anyway")
+    else:
+        for task in shutdown_tasks:
+            exc = task.exception()
+            if exc is not None:
+                logger.error("shutdown task failed: {!r}", exc)
 
 app = FastAPI(lifespan=lifespan)
 
@@ -123,13 +245,20 @@ async def _unhandled_exception_handler(_request: Request, exc: Exception) -> ORJ
     logger.exception("unhandled exception in request handler: {}", exc)
     return ORJSONResponse({"error": "Internal server error"}, status_code=500)
 
+# Static app assets resolve against the repo root / frozen bundle root
+# (app_root), never the CWD, so `python main.py` works from any directory.
+_dist_dir = app_root() / "dist"
+_public_dir = app_root() / "public"
+
 # In dev mode dist/ may not exist yet; fall back to public/ for the template
-_template_dir = "./dist" if Path("./dist").is_dir() else "./public"
+_template_dir = str(_dist_dir) if _dist_dir.is_dir() else str(_public_dir)
 templates = Jinja2Templates(directory=_template_dir)
 
 # react assets (/dist/assets) — only mount if built; in dev mode Vite serves these
-if Path("./dist/assets").is_dir():
-    app.mount("/assets", StaticFiles(directory="./dist/assets"), name="assets")
+if (_dist_dir / "assets").is_dir():
+    # Vite build output, content-hashed — a new build is a new URL, so this is
+    # the ONE static tree that should be cached hard. See server/http_cache.py.
+    app.mount("/assets", StaticFiles(directory=str(_dist_dir / "assets")), name="assets")
 
 # MSB assets — user-supplied (Nintendo IP, not bundled). Served from a
 # user-configurable path (Settings → Project Rio → MSB Image Assets) with
@@ -144,16 +273,30 @@ async def msb_asset(file_path: str):
         requested.relative_to(base.resolve())  # path-traversal guard
     except ValueError:
         return HTMLResponse("Forbidden", status_code=403)
-    if not requested.is_file():
-        return HTMLResponse("Not Found", status_code=404)
-    return FileResponse(str(requested))
+    # Revalidated like the /game_assets mount this route shadows: a producer
+    # replaces the pack in place, under the same filenames, mid-event.
+    if requested.is_file():
+        return FileResponse(str(requested), headers={"cache-control": REVALIDATE})
+    # Dev fallback: assets dropped into the repo's public/game_assets/msb/.
+    # This route is registered before the /game_assets static mount and would
+    # otherwise shadow it for every /msb/* path, so resolve it here. No-op in
+    # frozen builds (no public/ dir) where everything lives in user_data.
+    fallback_base = (_public_dir / "game_assets/msb").resolve()
+    fallback = (fallback_base / file_path).resolve()
+    try:
+        fallback.relative_to(fallback_base)  # path-traversal guard
+    except ValueError:
+        return HTMLResponse("Forbidden", status_code=403)
+    if fallback.is_file():
+        return FileResponse(str(fallback), headers={"cache-control": REVALIDATE})
+    return HTMLResponse("Not Found", status_code=404)
 
 # game assets (non-MSB) — served from public/game_assets/
-if Path("./public/game_assets").is_dir():
-    app.mount("/game_assets", StaticFiles(directory="./public/game_assets"), name="game_assets")
+if (_public_dir / "game_assets").is_dir():
+    app.mount("/game_assets", RevalidatingStaticFiles(directory=str(_public_dir / "game_assets")), name="game_assets")
 
 # OBS browser source layouts — served from public/layout/
-_layout_dir = Path("./public/layout")
+_layout_dir = _public_dir / "layout"
 
 @app.get("/layout", response_class=HTMLResponse)
 @app.get("/layout/", response_class=HTMLResponse)
@@ -173,7 +316,9 @@ async def layout_index(request: Request) -> HTMLResponse:
                 layouts.append({
                     "group": group.name,
                     "name": f.stem,
-                    "url": f"{base}/layout/{rel}",
+                    # as_posix: a Path renders with the native separator, which
+                    # would put a backslash in this URL on Windows.
+                    "url": layout_url(base, rel),
                 })
 
     rows = ""
@@ -212,17 +357,41 @@ async def layout_index(request: Request) -> HTMLResponse:
     return HTMLResponse(html)
 
 if _layout_dir.is_dir():
-    app.mount("/layout", StaticFiles(directory="./public/layout", html=True), name="layout")
+    app.mount("/layout", RevalidatingStaticFiles(directory=str(_layout_dir), html=True), name="layout")
+
+# RioVisualizer shared web assets (renderer.js core + themes) — served straight
+# from the submodule so the hit overlay and the standalone debug tool share one
+# source of truth. (Frozen builds bundle this dir; that's wired in PRSH.spec.)
+_rio_viz_web = rio_visualizer_dir() / "web"
+if _rio_viz_web.is_dir():
+    app.mount("/rio-visualizer", RevalidatingStaticFiles(directory=str(_rio_viz_web)), name="rio_visualizer")
 
 # Tournament branding assets (logos) — served from user_data/branding/
 _branding_dir = user_data_dir() / "branding"
 _branding_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/branding", StaticFiles(directory=str(_branding_dir)), name="branding")
+app.mount("/branding", RevalidatingStaticFiles(directory=str(_branding_dir)), name="branding")
+
+# Design-package assets (element theme SVGs). A dynamic route rather than a
+# static mount because each request resolves across two roots: the built-in
+# packages in ./public/design/ and user-installed ones in
+# user_data/design_packages/. Validation lives in design_packages.resolve_asset.
+from server.design_packages import resolve_asset as _resolve_design_asset  # noqa: E402
+
+
+@app.get("/design/{package_id}/{filename}")
+async def design_asset(package_id: str, filename: str):
+    path = _resolve_design_asset(package_id, filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="No such design asset")
+    # A theme SVG is fetched as a SUBRESOURCE, so nothing revalidates it for
+    # us — see server/http_cache.py for what that costs a producer editing a
+    # package while OBS is open.
+    return FileResponse(path, headers={"cache-control": REVALIDATE})
 
 # Favicon
 @app.get("/favicon.png")
 async def favicon():
-    return FileResponse("./public/favicon.png", media_type="image/png")
+    return FileResponse(str(_public_dir / "favicon.png"), media_type="image/png")
 
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)

@@ -1,0 +1,428 @@
+<svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMax meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Matchup History: the same band geometry as the Default
+    (Rio) theme, painted with the user's Design-tab CSS variables instead of
+    the Rio brand palette (data-design-vars="app" opts in - the mount runs
+    applyDesignSettings so accent / card background / text / border / font /
+    shadow all follow the app's design knobs).
+
+    A card says WHO WON. It used to be two team logos, two scores and a 0.45
+    opacity on the losing number, which at broadcast size is not a cue at all
+    and which named neither player anyway - the logos are the CAPTAINS' teams,
+    and those change from game to game. Each card is a two-row scoreline now
+    (portrait . NAME . score per side, side 1 always on top), the winner row
+    drawn in the producer's accent and the loser row dimmed whole.
+
+    Dim is a fill-opacity, never `opacity`: setText rewrites the opacity
+    attribute on every slot it binds, so the captions, dates, modes and
+    modes this theme meant to hold at 0.65 were all rendering at full.
+
+    SLOT CONTRACT (the mount binds by data-slot; see public/design/README.md):
+      logo           <image>  tournament logo (/branding/); hidden if none
+      logo-default   <g>      Rio mushroom shown when no logo is set
+      event-name     <text>   start.gg event/tournament name; optional
+      subtitle       <text>   the match label (e.g. Winners Final); optional
+      side1-name / side2-name <text>  player names (auto-fit to data-maxw)
+      side1-sprite / side2-sprite <image>  chosen captain headshot; hidden if none
+      side1-seed / side2-seed <text>  bracket seed ("#1 SEED"); optional
+      side1-wins / side2-wins <text>  all-time series win counts
+      total-games    <text>   "ALL TIME . N GAMES" / "FIRST MEETING" (the
+                              summary's one caption, under the pill)
+      history-container <g>   divider + cards; hidden on a first meeting
+      game{i} (i=1..5) <g>    one recent-game card; hidden when absent
+      game{i}-side{T}-row <g> the whole row; dimmed for the loser
+      game{i}-side{T}-win <g> the winner marker; shown on the winning side only
+      game{i}-side{T}-logo <image>  team logo (captain-icon fallback)
+      game{i}-side{T}-name <text>   that side's player, restated per card
+      game{i}-side{T}-score <text>  final score
+      game{i}-date-full <text> the date WITH the year: a head-to-head reaches
+                              back seasons, so a bare "SEP 8" on the fifth card
+                              dates it to no particular year
+      game{i}-mode    <text>   the competition. game{i}-stadium is a real slot
+                              the mount binds and these themes do not draw:
+                              see the note on the card row
+
+    COLOUR: CSS variables resolve in SVG ONLY through inline style="", never
+    via presentation attributes.
+  -->
+  <defs>
+    <clipPath id="cmuBand"><rect x="48" y="632" width="1824" height="392" rx="16"/></clipPath>
+
+    <!-- .. THE PROJECT RIO MARK ..................................... -->
+    <!-- Verbatim pixel data from public/game_assets/ProjectRio.svg. Classic
+         repaints everything else from the user's Design-tab variables, but not
+         this: it is the Project Rio logo, not decoration. -->
+    <symbol id="rio-mark" viewBox="0 0 16 16" shape-rendering="crispEdges">
+        <rect x="5" y="0" width="6" height="1" fill="#000000"/>
+        <rect x="3" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="5" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="6" y="1" width="1" height="1" fill="#ffffff"/>
+        <rect x="7" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="1" width="2" height="1" fill="#ffffff"/>
+        <rect x="10" y="1" width="1" height="1" fill="#ff0000"/>
+        <rect x="11" y="1" width="2" height="1" fill="#000000"/>
+        <rect x="2" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="3" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="2" width="2" height="1" fill="#ffffff"/>
+        <rect x="7" y="2" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="2" width="3" height="1" fill="#ffffff"/>
+        <rect x="11" y="2" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="2" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="3" width="4" height="1" fill="#ffffff"/>
+        <rect x="8" y="3" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="3" width="3" height="1" fill="#ffffff"/>
+        <rect x="12" y="3" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="3" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="4" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="4" width="3" height="1" fill="#ffffff"/>
+        <rect x="9" y="4" width="1" height="1" fill="#ff0000"/>
+        <rect x="10" y="4" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="4" width="2" height="1" fill="#ff0000"/>
+        <rect x="14" y="4" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="5" width="2" height="1" fill="#ff0000"/>
+        <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="5" width="1" height="1" fill="#ff0000"/>
+        <rect x="7" y="5" width="3" height="1" fill="#ffffff"/>
+        <rect x="10" y="5" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="5" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="5" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="4" y="6" width="3" height="1" fill="#ffffff"/>
+        <rect x="7" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="8" y="6" width="4" height="1" fill="#ffffff"/>
+        <rect x="12" y="6" width="1" height="1" fill="#ff0000"/>
+        <rect x="13" y="6" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="6" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="5" y="7" width="3" height="1" fill="#ffffff"/>
+        <rect x="8" y="7" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="11" y="7" width="2" height="1" fill="#ff0000"/>
+        <rect x="13" y="7" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="7" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="3" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="6" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="8" y="8" width="1" height="1" fill="#ff0000"/>
+        <rect x="9" y="8" width="1" height="1" fill="#ffffff"/>
+        <rect x="10" y="8" width="3" height="1" fill="#ff0000"/>
+        <rect x="13" y="8" width="2" height="1" fill="#ffffff"/>
+        <rect x="15" y="8" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="2" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="6" y="9" width="4" height="1" fill="#000000"/>
+        <rect x="10" y="9" width="4" height="1" fill="#ff0000"/>
+        <rect x="14" y="9" width="1" height="1" fill="#ffffff"/>
+        <rect x="15" y="9" width="1" height="1" fill="#000000"/>
+        <rect x="0" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="4" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="6" y="10" width="4" height="1" fill="#ffffff"/>
+        <rect x="10" y="10" width="2" height="1" fill="#000000"/>
+        <rect x="12" y="10" width="3" height="1" fill="#ff0000"/>
+        <rect x="15" y="10" width="1" height="1" fill="#000000"/>
+        <rect x="1" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="3" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="11" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="13" y="11" width="1" height="1" fill="#ff0000"/>
+        <rect x="14" y="11" width="1" height="1" fill="#000000"/>
+        <rect x="2" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="4" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="12" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="12" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="12" width="2" height="1" fill="#000000"/>
+        <rect x="3" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="6" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="7" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="9" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="10" y="13" width="2" height="1" fill="#ffffff"/>
+        <rect x="12" y="13" width="1" height="1" fill="#000000"/>
+        <rect x="4" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="14" width="6" height="1" fill="#ffffff"/>
+        <rect x="11" y="14" width="1" height="1" fill="#000000"/>
+        <rect x="5" y="15" width="6" height="1" fill="#000000"/>
+    </symbol>
+  </defs>
+
+  <!-- band base: app card background + border + shadow -->
+  <rect x="48" y="632" width="1824" height="392" rx="16" style="fill:var(--card-bg, rgba(15,15,25,0.88));filter:var(--card-shadow-filter, none)"/>
+  <rect x="48" y="632" width="1824" height="392" rx="16" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px)"/>
+
+  <g clip-path="url(#cmuBand)">
+    <!-- accent rail + top highlight -->
+    <rect x="48" y="632" width="10" height="392" style="fill:var(--accent, #f59e0b)"/>
+    <rect x="48" y="632" width="1824" height="2" fill="#ffffff" opacity="0.05"/>
+
+    <!-- ░░ BRAND CAP ░░ -->
+    <image data-slot="logo" x="84" y="647" width="110" height="110" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <g data-slot="logo-default">
+      <!-- The BOX stays 110: it is a slot for whatever logo the user uploaded,
+           and that is arbitrary artwork with no grid. The MARK inside it is not
+           arbitrary — it is a 16px pixel grid painted with crispEdges, so at a
+           size that is not a whole multiple the renderer snaps its rows to uneven
+           widths and the baseball stitching reads as a corrupted asset. 112 is
+           7 x 16, centred on the same box. -->
+      <use href="#rio-mark" x="83" y="646" width="112" height="112"/>
+    </g>
+
+    <!-- ░░ SERIES SUMMARY ░░ -->
+    <!-- Left: what this band is, and how deep the record goes. ONE caption,
+         carrying data: the pill had a static "LAST 5 MEETINGS" under it and
+         the all-time count floating alone above the score, which is two
+         captions saying nearly the same thing from opposite ends of the strip.
+         The cards each carry a full date now, so the static one had nothing
+         left to tell anyone. -->
+    <rect x="228" y="670" width="220" height="34" rx="6" style="fill:var(--accent, #f59e0b)"/>
+    <text x="338" y="694" text-anchor="middle" style="fill:#ffffff;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="18" font-weight="700" letter-spacing="2.5">HEAD TO HEAD</text>
+    <text data-slot="total-games" data-maxw="300" x="228" y="726" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500" letter-spacing="1.5">ALL TIME</text>
+
+    <!-- The score PLATE. See the note on PLATE_X in the generator: the two
+         counts hung in open band between the two names, 144 units clear on one
+         side and 129 on the other, so neither name read as labelling the
+         number beside it. Each count is centred in its half, so a two-digit
+         total grows evenly instead of dragging one edge outward. -->
+    <rect x="800" y="663" width="320" height="78" rx="12" fill="#ffffff" opacity="0.06"/>
+    <rect x="800" y="663" width="320" height="78" rx="12" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+    <text data-slot="side1-wins" data-maxw="120" x="880" y="724" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="64" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+    <text x="960" y="716" text-anchor="middle" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="600">&#8211;</text>
+    <text data-slot="side2-wins" data-maxw="120" x="1040" y="724" text-anchor="middle" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="64" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+
+    <!-- Each side: portrait . name . seed, the name anchored against the
+         plate and the seed hanging below it so a seedless side stays centred.
+         THE PORTRAIT IS PINNED TO THE NAME, not authored at an x: the name is
+         the data, so a fixed portrait left a short name (Joan, 82 units) with
+         its captain icon floating 170 away while a long one (MattGree, 153)
+         sat 95 from it. Moving the portrait inward next to the score only
+         moves the hole to the other side of the name, and holds it open in
+         the common state, because a captain exists only once a match is
+         bound. pinBesideText in mount-utils.js; the authored x here is the
+         longest-name position, which is what a theme engine-less renderer
+         falls back to. -->
+    <image data-slot="side1-sprite" data-pin-before="side1-name" data-pin-gap="16" x="464" y="666" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="side1-name" data-maxw="220" x="772" y="716" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="40" font-weight="700">Player One</text>
+    <text data-slot="side1-seed" data-maxw="220" x="772" y="742" text-anchor="end" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="18" font-weight="600" letter-spacing="1" opacity="0">#1 SEED</text>
+    <text data-slot="side2-name" data-maxw="220" x="1148" y="716" text-anchor="start" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="40" font-weight="700">Player Two</text>
+    <text data-slot="side2-seed" data-maxw="220" x="1148" y="742" text-anchor="start" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="18" font-weight="600" letter-spacing="1" opacity="0">#4 SEED</text>
+    <image data-slot="side2-sprite" data-pin-after="side2-name" data-pin-gap="16" x="1384" y="666" width="72" height="72" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <!-- Right: the event over the round. Both are empty until a start.gg set
+         is bound. The marquee stays CENTRED on the band rather than sliding
+         over to fill this column, because it would then jump the moment a set
+         loaded: an empty third is cheaper than a subject that moves. -->
+    <text data-slot="event-name" data-maxw="340" x="1836" y="696" text-anchor="end" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="20" font-weight="600" letter-spacing="1" opacity="0">MSB Singles</text>
+    <text data-slot="subtitle" data-maxw="340" x="1836" y="732" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="30" font-weight="700" opacity="0">Winners Final</text>
+
+    <!-- ░░ GAME CARDS (newest first) ░░
+         Each card is a two-row scoreline: the authored SIDES, never away/home,
+         so side 1 is the top row on all five and the eye can scan one column
+         and count. The winner row is drawn (plate . rail . W) and the loser row
+         dimmed whole, its team logo with it; rowOutcome in matchup-mount.js is
+         the rule.
+
+         A CARD HAS ONE FOOTER LINE AND NO STADIUM. The mode and the park were
+         two dim 19px lines stacked in the same face, colour and weight, so
+         they read as one indistinguishable grey block under the scoreline
+         rather than as two facts: nothing told the eye which mattered, and
+         the pair was the tallest thing on the card after the rows. The mode
+         is the competition and earns its place; the park is flavour a history
+         card does not need, and Slice26 dropped it for the same reason. The
+         mount still binds game{i}-stadium as an optional slot, so a theme
+         that wants it only has to draw it. What is left matches the DATE it
+         brackets (17px, not 19), so the two captions frame the rows instead
+         of competing with them, and the line they gave up went to the rows:
+         48 units tall and snug, 56 now. -->
+    <g data-slot="history-container">
+      <!-- The divider is IN here with the cards, so a first meeting does not
+           draw a rule under nothing. The band itself does not collapse (no
+           band-compact), so a first meeting is a summary strip over open card
+           background. -->
+      <rect x="64" y="772" width="1792" height="2" style="fill:rgba(255,255,255,0.12)"/>
+
+      <g data-slot="game1" opacity="0">
+        <rect x="72" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04"/>
+        <rect x="72" y="786" width="344" height="220" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+        <text data-slot="game1-date-full" data-maxw="170" x="100" y="818" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500" letter-spacing="1">JUN 1, 2026</text>
+        <rect x="100" y="830" width="290" height="1" fill="#ffffff" opacity="0.07"/>
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g data-slot="game1-side1-win" opacity="0">
+          <rect x="84" y="842" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="84" y="842" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="304" y="878" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game1-side1-row">
+          <image data-slot="game1-side1-logo" x="100" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game1-side1-name" data-maxw="128" x="154" y="878" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player One</text>
+          <text data-slot="game1-side1-score" data-maxw="56" x="390" y="884" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g data-slot="game1-side2-win" opacity="0">
+          <rect x="84" y="902" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="84" y="902" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="304" y="938" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game1-side2-row">
+          <image data-slot="game1-side2-logo" x="100" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game1-side2-name" data-maxw="128" x="154" y="938" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player Two</text>
+          <text data-slot="game1-side2-score" data-maxw="56" x="390" y="944" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <text data-slot="game1-mode" data-maxw="290" x="100" y="986" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500">Game mode</text>
+      </g>
+
+      <g data-slot="game2" opacity="0">
+        <rect x="430" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04"/>
+        <rect x="430" y="786" width="344" height="220" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+        <text data-slot="game2-date-full" data-maxw="170" x="458" y="818" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500" letter-spacing="1">JUN 1, 2026</text>
+        <rect x="458" y="830" width="290" height="1" fill="#ffffff" opacity="0.07"/>
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g data-slot="game2-side1-win" opacity="0">
+          <rect x="442" y="842" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="442" y="842" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="662" y="878" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game2-side1-row">
+          <image data-slot="game2-side1-logo" x="458" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game2-side1-name" data-maxw="128" x="512" y="878" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player One</text>
+          <text data-slot="game2-side1-score" data-maxw="56" x="748" y="884" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g data-slot="game2-side2-win" opacity="0">
+          <rect x="442" y="902" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="442" y="902" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="662" y="938" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game2-side2-row">
+          <image data-slot="game2-side2-logo" x="458" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game2-side2-name" data-maxw="128" x="512" y="938" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player Two</text>
+          <text data-slot="game2-side2-score" data-maxw="56" x="748" y="944" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <text data-slot="game2-mode" data-maxw="290" x="458" y="986" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500">Game mode</text>
+      </g>
+
+      <g data-slot="game3" opacity="0">
+        <rect x="788" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04"/>
+        <rect x="788" y="786" width="344" height="220" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+        <text data-slot="game3-date-full" data-maxw="170" x="816" y="818" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500" letter-spacing="1">JUN 1, 2026</text>
+        <rect x="816" y="830" width="290" height="1" fill="#ffffff" opacity="0.07"/>
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g data-slot="game3-side1-win" opacity="0">
+          <rect x="800" y="842" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="800" y="842" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="1020" y="878" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game3-side1-row">
+          <image data-slot="game3-side1-logo" x="816" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game3-side1-name" data-maxw="128" x="870" y="878" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player One</text>
+          <text data-slot="game3-side1-score" data-maxw="56" x="1106" y="884" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g data-slot="game3-side2-win" opacity="0">
+          <rect x="800" y="902" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="800" y="902" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="1020" y="938" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game3-side2-row">
+          <image data-slot="game3-side2-logo" x="816" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game3-side2-name" data-maxw="128" x="870" y="938" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player Two</text>
+          <text data-slot="game3-side2-score" data-maxw="56" x="1106" y="944" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <text data-slot="game3-mode" data-maxw="290" x="816" y="986" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500">Game mode</text>
+      </g>
+
+      <g data-slot="game4" opacity="0">
+        <rect x="1146" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04"/>
+        <rect x="1146" y="786" width="344" height="220" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+        <text data-slot="game4-date-full" data-maxw="170" x="1174" y="818" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500" letter-spacing="1">JUN 1, 2026</text>
+        <rect x="1174" y="830" width="290" height="1" fill="#ffffff" opacity="0.07"/>
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g data-slot="game4-side1-win" opacity="0">
+          <rect x="1158" y="842" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="1158" y="842" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="1378" y="878" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game4-side1-row">
+          <image data-slot="game4-side1-logo" x="1174" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game4-side1-name" data-maxw="128" x="1228" y="878" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player One</text>
+          <text data-slot="game4-side1-score" data-maxw="56" x="1464" y="884" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g data-slot="game4-side2-win" opacity="0">
+          <rect x="1158" y="902" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="1158" y="902" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="1378" y="938" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game4-side2-row">
+          <image data-slot="game4-side2-logo" x="1174" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game4-side2-name" data-maxw="128" x="1228" y="938" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player Two</text>
+          <text data-slot="game4-side2-score" data-maxw="56" x="1464" y="944" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <text data-slot="game4-mode" data-maxw="290" x="1174" y="986" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500">Game mode</text>
+      </g>
+
+      <g data-slot="game5" opacity="0">
+        <rect x="1504" y="786" width="344" height="220" rx="10" fill="#ffffff" opacity="0.04"/>
+        <rect x="1504" y="786" width="344" height="220" rx="10" fill="none" style="stroke:var(--border-color, rgba(255,255,255,0.12))" stroke-width="1"/>
+        <text data-slot="game5-date-full" data-maxw="170" x="1532" y="818" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500" letter-spacing="1">JUN 1, 2026</text>
+        <rect x="1532" y="830" width="290" height="1" fill="#ffffff" opacity="0.07"/>
+
+        <!-- side 1: the winner plate, then the row that sits on it -->
+        <g data-slot="game5-side1-win" opacity="0">
+          <rect x="1516" y="842" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="1516" y="842" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="1736" y="878" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game5-side1-row">
+          <image data-slot="game5-side1-logo" x="1532" y="848" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game5-side1-name" data-maxw="128" x="1586" y="878" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player One</text>
+          <text data-slot="game5-side1-score" data-maxw="56" x="1822" y="884" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <!-- side 2: the winner plate, then the row that sits on it -->
+        <g data-slot="game5-side2-win" opacity="0">
+          <rect x="1516" y="902" width="320" height="56" rx="10" style="fill:var(--accent, #f59e0b)" opacity="0.18"/>
+          <rect x="1516" y="902" width="5" height="56" rx="2.5" style="fill:var(--accent, #f59e0b)"/>
+          <text x="1736" y="938" text-anchor="middle" style="fill:var(--accent, #f59e0b);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="24" font-weight="700">W</text>
+        </g>
+        <g data-slot="game5-side2-row">
+          <image data-slot="game5-side2-logo" x="1532" y="908" width="44" height="44" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+          <text data-slot="game5-side2-name" data-maxw="128" x="1586" y="938" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif);text-shadow:var(--text-shadow, none)" font-size="22" font-weight="700">Player Two</text>
+          <text data-slot="game5-side2-score" data-maxw="56" x="1822" y="944" text-anchor="end" style="fill:var(--text-primary, #ffffff);font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="40" font-weight="700" font-variant-numeric="tabular-nums">0</text>
+        </g>
+
+        <text data-slot="game5-mode" data-maxw="290" x="1532" y="986" style="fill:var(--text-primary, #ffffff);fill-opacity:0.65;font-family:var(--font-body, 'Inter', system-ui, -apple-system, sans-serif)" font-size="17" font-weight="500">Game mode</text>
+      </g>
+    </g>
+
+  </g>
+</svg>

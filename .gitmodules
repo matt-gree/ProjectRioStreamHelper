@@ -4,3 +4,6 @@
 [submodule "gc-overlay"]
 	path = gc-overlay
 	url = https://github.com/matt-gree/gc-overlay.git
+[submodule "rio-visualizer"]
+	path = rio-visualizer
+	url = https://github.com/matt-gree/RioVisualizer

@@ -1,190 +1,140 @@
-import { useState, useEffect, useCallback } from 'react';
-import {
-    Modal, Stack, PasswordInput, Button, Group, Badge, Text, Divider,
-    TextInput, ActionIcon, Tooltip, SegmentedControl, Switch,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { useState, useEffect, useCallback, useId } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Text, Divider, Loader } from './ui/primitives';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Switch } from './ui/switch';
+import { SegmentedControl } from './ui/segmented-control';
+import { notifications } from '../lib/notify';
+import { cn } from '../lib/utils';
 import LogsViewer from './LogsViewer';
 import { useSettingsStore, useConfigStore } from '../context/store';
-import { useAssetsVersionStore } from '../lib/assets';
+import { comboFromEvent } from '../context/staging';
 import { SupportLinks } from './SupportLinks';
+import { SIDE_LABEL_MODES, useSideLabels } from '../routes/production/sides';
 
+// Click-to-record hotkey field: focus it, press a combo, done. Esc cancels.
+function HotkeyInput({ id, value, onChange }) {
+    const [recording, setRecording] = useState(false);
+    return (
+        <Input
+            id={id}
+            readOnly
+            value={recording ? 'Press a key…' : (value || '')}
+            placeholder="Click to set"
+            onFocus={() => setRecording(true)}
+            onBlur={() => setRecording(false)}
+            onKeyDown={(e) => {
+                if (!recording) return;
+                e.preventDefault();
+                if (e.key === 'Escape') { setRecording(false); e.currentTarget.blur(); return; }
+                const combo = comboFromEvent(e);
+                if (combo) { onChange(combo); setRecording(false); e.currentTarget.blur(); }
+            }}
+            className="h-7 w-36 cursor-pointer text-center text-xs"
+        />
+    );
+}
+
+/*
+ * The modal's ONE row shape: what the setting is on the left (a label and at
+ * most one short hint), the control on the right. It had three — switch-left,
+ * control-right, and label-and-control inline — so the eye had to find the
+ * control again on every row. `htmlFor` makes the words a click target for the
+ * control and gives it its accessible name; a row without one (a button) is
+ * named by the button's own text.
+ */
+function SettingRow({ label, hint, htmlFor, title, children, className }) {
+    const Words = htmlFor ? 'label' : 'div';
+    return (
+        <div className={cn('flex items-center justify-between gap-6', className)} title={title}>
+            <Words htmlFor={htmlFor} className={cn('flex min-w-0 flex-col gap-0.5', htmlFor && 'cursor-pointer')}>
+                <span className="text-sm leading-tight">{label}</span>
+                {hint && <span className="text-xs leading-snug text-muted-foreground">{hint}</span>}
+            </Words>
+            <div className="flex shrink-0 items-center gap-2">{children}</div>
+        </div>
+    );
+}
+
+function Section({ label, children }) {
+    return (
+        <section className="flex flex-col gap-4">
+            <Divider label={label} />
+            {children}
+        </section>
+    );
+}
+
+// `general.disable_export` is inverted and has been stored as a bool, "" and
+// "1" over its life; the server reads it the same way (`State._is_export_enabled`).
+function exportEnabled(disabled) {
+    if (disabled === undefined || disabled === null) return false; // default: off
+    if (typeof disabled === 'string') return ['', '0', 'false', 'no', 'off'].includes(disabled.trim().toLowerCase());
+    return !disabled;
+}
 
 /**
- * Settings modal with HUD path configuration and Challonge API key.
+ * App preferences and the escape hatches. Anything that points OUTSIDE PRSH
+ * (HUD file, MSB pack, gc-overlay, OBS, LAN bind) lives on the Connections tab.
  */
 export default function SettingsModal({ opened, onClose }) {
-    // Challonge API key state
-    const [challongeKey, setChallongeKey] = useState('');
-    const [challongeConfigured, setChallongeConfigured] = useState(false);
-    const [challongeSaving, setChallongeSaving] = useState(false);
+    const ids = {
+        confirm: useId(), hotkey: useId(),
+        capture: useId(), labels: useId(),
+    };
+    const setSetting = useSettingsStore(state => state.setItem);
 
-    // HUD path state
-    const [hudPath, setHudPath] = useState('');
-    const [resolvedPath, setResolvedPath] = useState(null);
-    const [defaultPath, setDefaultPath] = useState('');
-    const [browsingInProgress, setBrowsingInProgress] = useState(false);
-    const [savingPath, setSavingPath] = useState(false);
-    const [hudPathError, setHudPathError] = useState('');
-
-    // MSB assets path state (mirrors HUD path UX)
-    const [assetsPath, setAssetsPath] = useState('');
-    const [assetsResolved, setAssetsResolved] = useState('');
-    const [assetsDefault, setAssetsDefault] = useState('');
-    const [assetsCategories, setAssetsCategories] = useState({});
-    const [assetsTotalExpected, setAssetsTotalExpected] = useState(0);
-    const [assetsTotalFound, setAssetsTotalFound] = useState(0);
-    const [assetsComplete, setAssetsComplete] = useState(false);
-    const [assetsBrowsing, setAssetsBrowsing] = useState(false);
-    const [assetsSaving, setAssetsSaving] = useState(false);
-    const [assetsRevealing, setAssetsRevealing] = useState(false);
-    const [assetsError, setAssetsError] = useState('');
-
-    // Pinned player state
-    const [pinnedPlayer, setPinnedPlayer] = useState('');
-    const [pinnedSide, setPinnedSide] = useState('Team 1');
-    const [pinnedSaving, setPinnedSaving] = useState(false);
-
-    // Controller overlay state
-    const [controllerStatus, setControllerStatus] = useState(null);
-    const [controllerPath, setControllerPath] = useState('');
-    const [controllerPathSaving, setControllerPathSaving] = useState(false);
-
-    // Stream labels (txt export) state
-    const [streamLabelsEnabled, setStreamLabelsEnabled] = useState(false);
-    const [streamLabelsSaving, setStreamLabelsSaving] = useState(false);
-
-    // Announcements state
-    const [announcementCount, setAnnouncementCount] = useState(0);
-    const [announcementsClearing, setAnnouncementsClearing] = useState(false);
-
-    // Logs viewer
-    const [logsOpen, setLogsOpen] = useState(false);
-
-    const bumpAssetsVersion = useAssetsVersionStore(s => s.bump);
-
-    // Appearance — color scheme stored as a regular setting for portability.
     const appName = useConfigStore(state => state.name) || 'PRSH';
     const appVersion = useConfigStore(state => state.version);
-    // gc-overlay (controller input) only works on macOS — hide its settings
-    // elsewhere. The flag comes from the server Config (see settings.py).
-    const controllerSupported = useConfigStore(state => state.controller_overlay_supported);
-    const colorScheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
-    const setSetting = useSettingsStore(state => state.setItem);
-    const handleColorScheme = useCallback((value) => {
-        setSetting('ui.color_scheme', value);
-    }, [setSetting]);
 
-    // Network — LAN access opt-in. Default is loopback-only; enabling exposes
-    // the app to anyone on the same WiFi (state, settings, Challonge key all
-    // unauthenticated).
-    const allowLan = useSettingsStore(state => state?.server?.allow_lan) === true;
-    const handleAllowLan = useCallback((value) => {
-        setSetting('server.allow_lan', !!value);
-        notifications.show({
-            message: value
-                ? 'LAN access enabled. Restart PRSH for the change to take effect.'
-                : 'LAN access disabled. Restart PRSH for the change to take effect.',
-            color: 'yellow',
-        });
-    }, [setSetting]);
+    // ── General ──
+    // `.mode` is the stored value with the fallback applied, so the control
+    // and the words the rest of the app uses cannot disagree.
+    const sideWords = useSideLabels();
 
-    const fetchHudPath = useCallback(async () => {
+    // ── Production ──
+    const confirmEnabled = useSettingsStore(state => state?.production?.confirm?.enabled) === true;
+    const confirmHotkey = useSettingsStore(state => state?.production?.confirm?.hotkey) || 'F9';
+    // The stat file Project Rio writes at the final out is the end-of-game
+    // signal for a local board (server/postgame/watch.py).
+    const autoCapture = useSettingsStore(state => state?.postgame?.auto_capture) !== false;
+
+    // ── Output ──
+    const labelsEnabled = exportEnabled(useSettingsStore(state => state?.general?.disable_export));
+    const [labelsSaving, setLabelsSaving] = useState(false);
+    const toggleLabels = useCallback(async (enabled) => {
+        setLabelsSaving(true);
         try {
-            const resp = await fetch('/api/v1/rio/hud-path');
-            const data = await resp.json();
-            setHudPath(data.configured || '');
-            setResolvedPath(data.resolved || null);
-            setDefaultPath(data.default || '');
-        } catch { /* ignore */ }
-    }, []);
-
-    const fetchAssetsPath = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/v1/assets/msb');
-            const data = await resp.json();
-            setAssetsPath(data.configured || '');
-            setAssetsResolved(data.resolved || '');
-            setAssetsDefault(data.default || '');
-            setAssetsCategories(data.categories || {});
-            setAssetsTotalExpected(data.total_expected || 0);
-            setAssetsTotalFound(data.total_found || 0);
-            setAssetsComplete(!!data.complete);
-        } catch { /* ignore */ }
-    }, []);
-
-    const fetchChallongeStatus = useCallback(async () => {
-        try {
-            const resp = await fetch('/api/v1/settings?key=challonge.api_key');
-            const data = await resp.json();
-            setChallongeConfigured(!!data);
-        } catch { /* ignore */ }
-    }, []);
-
-    const fetchPinnedPlayer = useCallback(async () => {
-        try {
-            const [playerResp, sideResp] = await Promise.all([
-                fetch('/api/v1/settings?key=project_rio.pinned_player'),
-                fetch('/api/v1/settings?key=project_rio.pinned_side'),
-            ]);
-            const player = await playerResp.json();
-            const side = await sideResp.json();
-            setPinnedPlayer(player || '');
-            setPinnedSide(side || 'Team 1');
-        } catch { /* ignore */ }
-    }, []);
-
-    const handleSavePinnedPlayer = useCallback(async () => {
-        setPinnedSaving(true);
-        try {
-            await Promise.all([
-                fetch(`/api/v1/settings?key=project_rio.pinned_player&value=${encodeURIComponent(pinnedPlayer.trim())}`, { method: 'PUT' }),
-                fetch(`/api/v1/settings?key=project_rio.pinned_side&value=${encodeURIComponent(pinnedSide)}`, { method: 'PUT' }),
-            ]);
-            notifications.show({
-                message: pinnedPlayer.trim() ? `Locked "${pinnedPlayer.trim()}" to ${pinnedSide}` : 'Player lock cleared',
-                color: 'green',
-            });
+            // REST rather than the socket, because the one-shot full export
+            // below must run AFTER the setting has landed — ExportAll is a
+            // no-op while export is off. Always PUT: a DELETE would let the
+            // default (disabled) re-apply on the next load.
+            const resp = await fetch(`/api/v1/settings?key=general.disable_export&value=${enabled ? '' : '1'}`, { method: 'PUT' });
+            if (!resp.ok) throw new Error(String(resp.status));
+            setSetting('general.disable_export', enabled ? '' : '1', false);
+            // Regular saves write only what changed; seed every key once.
+            if (enabled) await fetch('/api/v1/state/export-all', { method: 'POST' });
         } catch {
-            notifications.show({ message: 'Failed to save player lock', color: 'red' });
+            notifications.show({ message: 'Couldn’t change the text file export', color: 'red' });
         }
-        setPinnedSaving(false);
-    }, [pinnedPlayer, pinnedSide]);
-
-    const fetchStreamLabels = useCallback(async () => {
+        setLabelsSaving(false);
+    }, [setSetting]);
+    const revealLabels = useCallback(async () => {
         try {
-            const resp = await fetch('/api/v1/settings?key=general.disable_export');
-            const data = await resp.json();
-            // Treat empty string, "0", "false", null, false as enabled (falsy export-disabled)
-            const disabled = data === true
-                || (typeof data === 'string' && !['', '0', 'false', 'no', 'off'].includes(data.toLowerCase()));
-            setStreamLabelsEnabled(!disabled);
-        } catch { /* ignore */ }
-    }, []);
-
-    const handleToggleStreamLabels = useCallback(async (enabled) => {
-        setStreamLabelsEnabled(enabled);
-        setStreamLabelsSaving(true);
-        try {
-            // disable_export is inverted: empty string = enabled (falsy), "1" = disabled (truthy).
-            // Must always PUT — DELETE lets the default (True) re-apply on next load.
-            const value = enabled ? '' : '1';
-            await fetch(`/api/v1/settings?key=general.disable_export&value=${value}`, { method: 'PUT' });
-            // On enable, do a one-shot full export so every key has a file.
-            // Subsequent writes are diff-only (efficient).
-            if (enabled) {
-                await fetch('/api/v1/state/export-all', { method: 'POST' });
-            }
-            notifications.show({
-                message: enabled ? 'Stream labels enabled — writing to user_data/stream_labels/' : 'Stream labels disabled',
-                color: 'green',
-            });
+            const resp = await fetch('/api/v1/state/stream-labels/reveal', { method: 'POST' });
+            if (!resp.ok) throw new Error(String(resp.status));
         } catch {
-            notifications.show({ message: 'Failed to update stream labels setting', color: 'red' });
-            setStreamLabelsEnabled(!enabled);
+            notifications.show({ message: 'Couldn’t open the text file folder', color: 'red' });
         }
-        setStreamLabelsSaving(false);
     }, []);
+
+    // ── Help & recovery ──
+    const [announcementCount, setAnnouncementCount] = useState(0);
+    const [announcementsClearing, setAnnouncementsClearing] = useState(false);
+    const [resetting, setResetting] = useState(false);
+    const [resetConfirm, setResetConfirm] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
 
     const fetchAnnouncements = useCallback(async () => {
         try {
@@ -194,589 +144,194 @@ export default function SettingsModal({ opened, onClose }) {
         } catch { /* ignore */ }
     }, []);
 
-    const handleClearAnnouncements = useCallback(async () => {
+    const clearAnnouncements = useCallback(async () => {
         setAnnouncementsClearing(true);
         try {
             const resp = await fetch('/api/v1/announcements/dismiss-all', { method: 'POST' });
             const data = await resp.json();
-            if (resp.ok) {
-                const n = data.dismissed || 0;
-                setAnnouncementCount(0);
-                notifications.show({
-                    message: n === 0 ? 'No announcements to clear' : `Cleared ${n} announcement${n === 1 ? '' : 's'}`,
-                    color: 'green',
-                });
-            } else {
-                notifications.show({ message: data.error || 'Failed to clear announcements', color: 'red' });
-            }
+            if (!resp.ok) throw new Error(data.error);
+            setAnnouncementCount(0);
         } catch {
-            notifications.show({ message: 'Failed to clear announcements', color: 'red' });
+            notifications.show({ message: 'Couldn’t clear announcements', color: 'red' });
         }
         setAnnouncementsClearing(false);
     }, []);
 
-    const fetchControllerStatus = useCallback(async () => {
+    const resetBoards = useCallback(async () => {
+        setResetting(true);
         try {
-            const resp = await fetch('/api/v1/controller/status');
+            const resp = await fetch('/api/v1/scoreboards/reset', { method: 'POST' });
             const data = await resp.json();
-            setControllerStatus(data);
-            setControllerPath(data.path || '');
-        } catch { /* ignore */ }
+            notifications.show(resp.ok
+                ? { message: 'Boards and matches reset', color: 'green' }
+                : { message: data.detail || 'Reset failed', color: 'red' });
+        } catch {
+            notifications.show({ message: 'Reset failed', color: 'red' });
+        }
+        setResetting(false);
+        setResetConfirm(false);
     }, []);
-
-    const handleSaveControllerPath = useCallback(async () => {
-        setControllerPathSaving(true);
-        try {
-            const resp = await fetch(`/api/v1/controller/path?path=${encodeURIComponent(controllerPath.trim())}`, {
-                method: 'PUT',
-            });
-            const data = await resp.json();
-            // Controller endpoints intentionally return success/false in the body
-            // with HTTP 200 so the UI can read structured failure data.
-            if (data.success) {
-                notifications.show({
-                    message: data.available ? `gc-overlay found at ${data.path}` : 'Path saved but gc-overlay not found there',
-                    color: data.available ? 'green' : 'yellow',
-                });
-                await fetchControllerStatus();
-            } else {
-                notifications.show({ message: data.error || 'Failed to set path', color: 'red' });
-            }
-        } catch {
-            notifications.show({ message: 'Failed to save controller path', color: 'red' });
-        }
-        setControllerPathSaving(false);
-    }, [controllerPath, fetchControllerStatus]);
-
-    const handleSaveChallongeKey = useCallback(async () => {
-        if (!challongeKey.trim()) return;
-        setChallongeSaving(true);
-        try {
-            const resp = await fetch(`/api/v1/settings?key=challonge.api_key&value=${encodeURIComponent(challongeKey.trim())}`, {
-                method: 'PUT',
-            });
-            if (resp.ok) {
-                setChallongeConfigured(true);
-                setChallongeKey('');
-                notifications.show({ message: 'Challonge API key saved', color: 'green' });
-            } else {
-                const data = await resp.json().catch(() => ({}));
-                notifications.show({ message: data.error || 'Failed to save Challonge API key', color: 'red' });
-            }
-        } catch {
-            notifications.show({ message: 'Failed to save Challonge API key', color: 'red' });
-        }
-        setChallongeSaving(false);
-    }, [challongeKey]);
 
     useEffect(() => {
-        if (opened) {
-            fetchHudPath();
-            fetchAssetsPath();
-            fetchPinnedPlayer();
-            fetchChallongeStatus();
-            fetchControllerStatus();
-            fetchStreamLabels();
-            fetchAnnouncements();
-            setChallongeKey('');
-        }
-    }, [opened, fetchHudPath, fetchAssetsPath, fetchPinnedPlayer, fetchChallongeStatus, fetchControllerStatus, fetchStreamLabels, fetchAnnouncements]);
-
-    // Re-check the assets folder when the window regains focus — covers the
-    // case where the user dragged files into the folder in another app and
-    // tabbed back. Cheap: only fires on actual focus events.
-    useEffect(() => {
-        if (!opened) return;
-        const onFocus = () => { fetchAssetsPath(); bumpAssetsVersion(); };
-        window.addEventListener('focus', onFocus);
-        return () => window.removeEventListener('focus', onFocus);
-    }, [opened, fetchAssetsPath, bumpAssetsVersion]);
-
-    const handleSetHudPath = useCallback(async (path) => {
-        setSavingPath(true);
-        setHudPathError('');
-        try {
-            const resp = await fetch(`/api/v1/rio/hud-path?path=${encodeURIComponent(path)}`, { method: 'PUT' });
-            const data = await resp.json();
-            if (resp.ok) {
-                setHudPath(path);
-                setResolvedPath(data.resolved || null);
-                if (data.warning) {
-                    setHudPathError(data.warning);
-                } else {
-                    notifications.show({ message: path ? 'HUD path updated' : 'HUD path reset to default', color: 'green' });
-                }
-            } else {
-                setHudPathError(data.error || 'Failed to set path');
-                notifications.show({ message: data.error || 'Failed to set HUD path', color: 'red' });
-            }
-        } catch (e) {
-            setHudPathError(String(e));
-            notifications.show({ message: 'Failed to set HUD path', color: 'red' });
-        }
-        setSavingPath(false);
-    }, []);
-
-    const handleClearHudPath = useCallback(async () => {
-        await handleSetHudPath('');
-    }, [handleSetHudPath]);
-
-    const handleBrowse = useCallback(async () => {
-        setBrowsingInProgress(true);
-        setHudPathError('');
-        try {
-            const resp = await fetch('/api/v1/rio/browse-hud', { method: 'POST' });
-            const data = await resp.json();
-            if (resp.ok && data.path) {
-                await handleSetHudPath(data.path);
-            } else if (data.error) {
-                setHudPathError(data.error);
-            }
-        } catch (e) {
-            setHudPathError(String(e));
-        }
-        setBrowsingInProgress(false);
-    }, [handleSetHudPath]);
-
-    const handleSetAssetsPath = useCallback(async (path) => {
-        setAssetsSaving(true);
-        setAssetsError('');
-        try {
-            const resp = await fetch(`/api/v1/assets/msb?path=${encodeURIComponent(path)}`, { method: 'PUT' });
-            const data = await resp.json();
-            if (resp.ok) {
-                setAssetsPath(path);
-                setAssetsResolved(data.resolved || '');
-                setAssetsCategories(data.categories || {});
-                setAssetsTotalExpected(data.total_expected || 0);
-                setAssetsTotalFound(data.total_found || 0);
-                setAssetsComplete(!!data.complete);
-                bumpAssetsVersion();
-                notifications.show({ message: path ? 'MSB assets path updated' : 'MSB assets path reset to default', color: 'green' });
-            } else {
-                setAssetsError(data.error || 'Failed to set path');
-                notifications.show({ message: data.error || 'Failed to set MSB assets path', color: 'red' });
-            }
-        } catch (e) {
-            setAssetsError(String(e));
-            notifications.show({ message: 'Failed to set MSB assets path', color: 'red' });
-        }
-        setAssetsSaving(false);
-    }, []);
-
-    const handleClearAssetsPath = useCallback(async () => {
-        await handleSetAssetsPath('');
-    }, [handleSetAssetsPath]);
-
-    const handleBrowseAssets = useCallback(async () => {
-        setAssetsBrowsing(true);
-        setAssetsError('');
-        try {
-            const resp = await fetch('/api/v1/assets/msb/browse', { method: 'POST' });
-            const data = await resp.json();
-            if (resp.ok && data.path) {
-                await handleSetAssetsPath(data.path);
-            } else if (data.error) {
-                setAssetsError(data.error);
-            }
-        } catch (e) {
-            setAssetsError(String(e));
-        }
-        setAssetsBrowsing(false);
-    }, [handleSetAssetsPath]);
-
-    const handleRevealAssets = useCallback(async () => {
-        setAssetsRevealing(true);
-        try {
-            await fetch('/api/v1/assets/msb/reveal', { method: 'POST' });
-            // Re-check after a moment in case the user dropped files in, then
-            // bump the asset version so any cached <img> URLs refetch.
-            setTimeout(async () => {
-                await fetchAssetsPath();
-                bumpAssetsVersion();
-            }, 1500);
-        } catch { /* ignore */ }
-        setAssetsRevealing(false);
-    }, [fetchAssetsPath, bumpAssetsVersion]);
+        if (opened) fetchAnnouncements();
+        else setResetConfirm(false);
+    }, [opened, fetchAnnouncements]);
 
     return (
         <>
-        <Modal opened={opened} onClose={() => { bumpAssetsVersion(); onClose(); }} title="Settings" size="lg">
-            <Stack gap="sm">
-                {/* About blurb — version moved here from the app title */}
-                <Group gap="xs" align="center">
-                    <img src="/favicon.png" alt="" width={28} height={28} />
-                    <Stack gap={0}>
-                        <Text size="sm" fw={600}>
-                            {appName}{appVersion ? ` v${appVersion}` : ''}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                            Tournament stream overlay manager for Mario Superstar Baseball.
-                        </Text>
-                    </Stack>
-                </Group>
+        <Dialog open={opened} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle className="label-display">Settings</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col gap-6">
+                    <div className="flex items-center gap-2">
+                        <img src="/favicon.png" alt="" width={28} height={28} className="pixelated" />
+                        <div className="flex flex-col">
+                            <Text size="sm" fw={600}>
+                                {appName}{appVersion ? ` v${appVersion}` : ''}
+                            </Text>
+                            <Text size="xs" dimmed>
+                                Tournament stream overlay manager for Mario Superstar Baseball.
+                            </Text>
+                        </div>
+                    </div>
 
-                <Divider label="Appearance" labelPosition="center" />
-
-                <Group justify="space-between" align="center" wrap="nowrap">
-                    <Group gap="xs" align="center" wrap="nowrap">
-                        <Text size="sm">Theme</Text>
-                        <SegmentedControl
-                            size="xs"
-                            value={colorScheme}
-                            onChange={handleColorScheme}
-                            data={[
-                                { label: 'Light', value: 'light' },
-                                { label: 'Dark', value: 'dark' },
-                                { label: 'Auto', value: 'auto' },
-                            ]}
-                        />
-                    </Group>
-                    <Group gap="xs" align="center" wrap="nowrap">
-                        <Text size="sm">Welcome screen</Text>
-                        <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => {
-                                setSetting('ui.welcome_dismissed', false);
-                                onClose();
-                            }}
+                    <Section label="General">
+                        <SettingRow
+                            label="Side labels"
+                            hint="What the console calls each side. Overlays always use 1 and 2."
                         >
-                            Show again
-                        </Button>
-                    </Group>
-                </Group>
-
-                <Divider label="Project Rio" labelPosition="center" />
-
-                {/* HUD File Path */}
-                <Text size="sm" fw={500}>HUD File Path</Text>
-                <Text size="xs" c="dimmed">
-                    Path to Project Rio's decoded.hud.json file. Leave empty to use the default location.
-                </Text>
-
-                {hudPath ? (
-                    <Group gap="xs" wrap="nowrap">
-                        <TextInput
-                            size="xs"
-                            value={hudPath}
-                            readOnly
-                            style={{ flex: 1 }}
-                        />
-                        <Tooltip label="Clear (use default)">
-                            <ActionIcon size="sm" variant="subtle" color="red" onClick={handleClearHudPath} loading={savingPath}>
-                                {'×'}
-                            </ActionIcon>
-                        </Tooltip>
-                    </Group>
-                ) : (
-                    <TextInput
-                        size="xs"
-                        value=""
-                        placeholder={defaultPath}
-                        readOnly
-                    />
-                )}
-
-                <Group gap="xs">
-                    <Badge
-                        size="sm"
-                        color={resolvedPath ? 'green' : 'red'}
-                        variant="filled"
-                    >
-                        {resolvedPath ? 'Found' : 'Not Found'}
-                    </Badge>
-                    {resolvedPath && !hudPath && (
-                        <Text size="xs" c="dimmed">(using default)</Text>
-                    )}
-                </Group>
-
-                <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={handleBrowse}
-                    loading={browsingInProgress}
-                >
-                    Browse...
-                </Button>
-
-                {hudPathError && (
-                    <Text size="xs" c="red">{hudPathError}</Text>
-                )}
-
-                {/* MSB Image Assets */}
-                <Text size="sm" fw={500} mt="xs">MSB Image Assets</Text>
-                <Text size="xs" c="dimmed">
-                    Folder containing character icons, team logos, and other MSB images. Required — overlays and the UI will show broken images without it. The default location lives under user data so it survives app updates.
-                </Text>
-
-                <Group gap="md" align="flex-start" wrap="nowrap">
-                    {/* Left column: path input, status, action buttons */}
-                    <Stack gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                        {assetsPath ? (
-                            <Group gap="xs" wrap="nowrap">
-                                <TextInput
-                                    size="xs"
-                                    value={assetsPath}
-                                    readOnly
-                                    style={{ flex: 1 }}
-                                />
-                                <Tooltip label="Clear (use default)">
-                                    <ActionIcon size="sm" variant="subtle" color="red" onClick={handleClearAssetsPath} loading={assetsSaving}>
-                                        {'×'}
-                                    </ActionIcon>
-                                </Tooltip>
-                            </Group>
-                        ) : (
-                            <TextInput
+                            <SegmentedControl
                                 size="xs"
-                                value=""
-                                placeholder={assetsDefault}
-                                readOnly
+                                value={sideWords.mode}
+                                onChange={(v) => setSetting('production.side_labels', v)}
+                                data={SIDE_LABEL_MODES}
                             />
-                        )}
+                        </SettingRow>
+                    </Section>
 
-                        <Group gap="xs">
-                            <Button
-                                size="xs"
-                                variant="filled"
-                                onClick={handleRevealAssets}
-                                loading={assetsRevealing}
+                    <Section label="Production">
+                        <div className="flex flex-col gap-2">
+                            <SettingRow
+                                htmlFor={ids.confirm}
+                                label="Confirm changes before going live"
+                                hint="Production-page changes wait for Go Live. Scene switches and one-shot presses (replays, captures, Put on board) still happen at once."
                             >
-                                Open Folder
+                                <Switch
+                                    id={ids.confirm}
+                                    checked={confirmEnabled}
+                                    onCheckedChange={(v) => setSetting('production.confirm.enabled', !!v)}
+                                />
+                            </SettingRow>
+                            {confirmEnabled && (
+                                <SettingRow htmlFor={ids.hotkey} label="Go Live hotkey" className="pl-4">
+                                    <HotkeyInput
+                                        id={ids.hotkey}
+                                        value={confirmHotkey}
+                                        onChange={(combo) => setSetting('production.confirm.hotkey', combo)}
+                                    />
+                                </SettingRow>
+                            )}
+                        </div>
+                        <SettingRow
+                            htmlFor={ids.capture}
+                            label="Capture the box score when a game ends"
+                            hint="Fills the Character Spotlight and Game Summary, and credits the game to its match. Off: capture from the board’s panel."
+                        >
+                            <Switch
+                                id={ids.capture}
+                                checked={autoCapture}
+                                onCheckedChange={(v) => setSetting('postgame.auto_capture', !!v)}
+                            />
+                        </SettingRow>
+                    </Section>
+
+                    <Section label="Output">
+                        <SettingRow
+                            htmlFor={ids.labels}
+                            label="Write text files for OBS"
+                            hint="One .txt file per value, for OBS Text sources that don’t use the overlays."
+                        >
+                            <Button size="xs" variant="ghost" onClick={revealLabels}>
+                                Open folder
                             </Button>
+                            <Switch
+                                id={ids.labels}
+                                checked={labelsEnabled}
+                                onCheckedChange={toggleLabels}
+                                disabled={labelsSaving}
+                            />
+                        </SettingRow>
+                    </Section>
+
+                    <Section label="Help & recovery">
+                        <SettingRow label="Logs" hint="Copy the recent log, or open the folder for the full file, when reporting a bug.">
+                            <Button size="xs" variant="outline" onClick={() => setLogsOpen(true)}>
+                                View logs
+                            </Button>
+                        </SettingRow>
+                        <SettingRow label="Welcome checklist" hint="The setup steps shown on first launch.">
                             <Button
                                 size="xs"
                                 variant="outline"
-                                onClick={handleBrowseAssets}
-                                loading={assetsBrowsing}
+                                onClick={() => { setSetting('ui.welcome_dismissed', false); onClose(); }}
                             >
-                                Browse...
+                                Show again
                             </Button>
-                        </Group>
-                    </Stack>
-
-                    {/* Right column: per-category checkmarks */}
-                    {Object.keys(assetsCategories).length > 0 && (
-                        <Stack gap={4} style={{ flexShrink: 0 }}>
-                            {Object.entries(assetsCategories).map(([name, info]) => {
-                                const ok = info.missing_count === 0;
-                                return (
-                                    <Group key={name} gap="xs" align="center" wrap="nowrap">
-                                        <Text size="xs" c={ok ? 'teal' : 'red'} style={{ minWidth: 12, fontWeight: 700 }}>
-                                            {ok ? '✓' : '✗'}
-                                        </Text>
-                                        <Text size="xs" style={{ minWidth: 100 }}>{name}/</Text>
-                                        <Text size="xs" c="dimmed">
-                                            {info.found}/{info.expected}
-                                        </Text>
-                                    </Group>
-                                );
-                            })}
-                        </Stack>
-                    )}
-                </Group>
-
-                {/* Missing-file detail (full width, below the side-by-side block) */}
-                {Object.entries(assetsCategories).some(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0) && (
-                    <Stack gap={2} pl="xs">
-                        {Object.entries(assetsCategories)
-                            .filter(([, info]) => info.missing_count > 0 && info.missing_sample.length > 0)
-                            .map(([name, info]) => (
-                                <Text key={name} size="xs" c="dimmed" truncate>
-                                    {name}/ missing: {info.missing_sample.join(', ')}
-                                    {info.missing_count > info.missing_sample.length
-                                        ? ` (+${info.missing_count - info.missing_sample.length} more)`
-                                        : ''}
-                                </Text>
-                            ))}
-                    </Stack>
-                )}
-
-                {assetsError && (
-                    <Text size="xs" c="red">{assetsError}</Text>
-                )}
-
-                {/* Pinned Player */}
-                <Text size="sm" fw={500} mt="xs">Player Lock</Text>
-                <Text size="xs" c="dimmed">
-                    Lock a Rio username to always appear on a specific side when a game is loaded.
-                </Text>
-                <TextInput
-                    size="xs"
-                    placeholder="Rio username"
-                    value={pinnedPlayer}
-                    onChange={e => setPinnedPlayer(e.currentTarget.value)}
-                />
-                <SegmentedControl
-                    size="xs"
-                    value={pinnedSide}
-                    onChange={setPinnedSide}
-                    data={['Team 1', 'Team 2']}
-                />
-                <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={handleSavePinnedPlayer}
-                    loading={pinnedSaving}
-                >
-                    {pinnedPlayer.trim() ? 'Save Lock' : 'Clear Lock'}
-                </Button>
-
-                <Divider label="Challonge" labelPosition="center" />
-
-                <Group justify="space-between">
-                    <Text size="sm">API Key</Text>
-                    <Badge
-                        size="sm"
-                        color={challongeConfigured ? 'green' : 'red'}
-                        variant="filled"
-                    >
-                        {challongeConfigured ? 'Configured' : 'Not Set'}
-                    </Badge>
-                </Group>
-                <Text size="xs" c="dimmed">
-                    Required to load Challonge tournaments. Get your key from your Challonge account settings. You must be an admin in the Mario Superstar Baseball Netplay Events Challonge Community. Note: Challonge support will be deprecated in the future as its API support is limited.
-                </Text>
-                <PasswordInput
-                    placeholder="Enter your Challonge API key"
-                    size="xs"
-                    value={challongeKey}
-                    onChange={e => setChallongeKey(e.currentTarget.value)}
-                />
-                <Button
-                    size="xs"
-                    onClick={handleSaveChallongeKey}
-                    disabled={!challongeKey.trim() || challongeSaving}
-                    loading={challongeSaving}
-                >
-                    Save Key
-                </Button>
-
-                {controllerSupported !== false && (
-                    <>
-                        <Divider label="Controller Overlay" labelPosition="center" />
-
-                        <Group justify="space-between">
-                            <Text size="sm">gc-overlay</Text>
-                            <Badge
-                                size="sm"
-                                color={controllerStatus?.available ? 'green' : 'red'}
-                                variant="filled"
-                            >
-                                {controllerStatus?.available ? 'Found' : 'Not Found'}
-                            </Badge>
-                        </Group>
-                        <Text size="xs" c="dimmed">
-                            Path to the gc-overlay directory. Leave empty to auto-detect (looks for a sibling gc-overlay folder).
-                        </Text>
-                        <TextInput
-                            size="xs"
-                            placeholder={controllerStatus?.available ? controllerStatus.path : 'Not detected — enter path manually'}
-                            value={controllerPath}
-                            onChange={e => setControllerPath(e.currentTarget.value)}
-                        />
-                        <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={handleSaveControllerPath}
-                            loading={controllerPathSaving}
+                        </SettingRow>
+                        <SettingRow
+                            label="Announcements"
+                            hint={announcementCount === 0
+                                ? 'None active.'
+                                : `${announcementCount} active. Closing a notice hides it until the next launch; clearing hides it for good.`}
                         >
-                            Save Path
-                        </Button>
-                    </>
-                )}
+                            <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={clearAnnouncements}
+                                disabled={announcementsClearing || announcementCount === 0}
+                            >
+                                {announcementsClearing && <Loader size={12} />}
+                                Clear all
+                            </Button>
+                        </SettingRow>
+                        <SettingRow
+                            label="Reset boards and matches"
+                            hint="For a board that’s stuck. Deletes every match, and clears each board’s game, capture and playback. Your boards, running orders and HUD setting stay."
+                        >
+                            {resetConfirm ? (
+                                <>
+                                    <Button size="xs" variant="ghost" onClick={() => setResetConfirm(false)} disabled={resetting}>
+                                        Cancel
+                                    </Button>
+                                    <Button size="xs" variant="destructive" onClick={resetBoards} disabled={resetting}>
+                                        {resetting && <Loader size={12} />}
+                                        Delete and reset
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button
+                                    size="xs"
+                                    variant="outline"
+                                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                    onClick={() => setResetConfirm(true)}
+                                >
+                                    Reset…
+                                </Button>
+                            )}
+                        </SettingRow>
+                    </Section>
 
-                <Divider label="Network" labelPosition="center" />
-
-                <Switch
-                    size="sm"
-                    label="Allow LAN access (bind 0.0.0.0)"
-                    description="By default PRSH listens on loopback only (127.0.0.1) — only this computer can reach the UI and OBS overlays. Enable LAN access to use a phone or tablet on the same WiFi as a remote control. Anyone on the network will be able to read and modify scoreboards, settings, and any saved tournament API keys, so leave this off on shared networks (cafes, conventions)."
-                    checked={allowLan}
-                    onChange={e => handleAllowLan(e.currentTarget.checked)}
-                />
-
-                <Divider label="Stream Labels" labelPosition="center" />
-
-                <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
-                    <Switch
-                        size="sm"
-                        label="Enable txt export"
-                        description="Export every state key as an individual .txt file to user_data/stream_labels/. Use these as Text (GDI+) sources in OBS without needing the HTML overlays. Off by default."
-                        checked={streamLabelsEnabled}
-                        onChange={e => handleToggleStreamLabels(e.currentTarget.checked)}
-                        disabled={streamLabelsSaving}
-                        style={{ flex: 1, minWidth: 0 }}
-                    />
-                    <Button
-                        size="xs"
-                        variant="filled"
-                        onClick={async () => {
-                            try {
-                                const resp = await fetch(
-                                    '/api/v1/state/stream-labels/reveal',
-                                    { method: 'POST' },
-                                );
-                                if (!resp.ok) {
-                                    notifications.show({
-                                        message: `Reveal failed (${resp.status}). The server may need a restart to register the endpoint.`,
-                                        color: 'red',
-                                    });
-                                }
-                            } catch (e) {
-                                notifications.show({
-                                    message: `Reveal failed: ${e?.message ?? e}`,
-                                    color: 'red',
-                                });
-                            }
-                        }}
-                        style={{ flexShrink: 0 }}
-                    >
-                        Open Folder
-                    </Button>
-                </Group>
-
-                <Divider label="Announcements" labelPosition="center" />
-
-                <Text size="xs" c="dimmed">
-                    Announcements reappear each time the app launches until you clear them here or they expire. Closing a toast just hides it for the current session.
-                </Text>
-                <Group wrap="nowrap" align="center" gap="xs">
-                    <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
-                        {announcementCount === 0
-                            ? 'No active announcements'
-                            : `${announcementCount} active announcement${announcementCount === 1 ? '' : 's'}`}
-                    </Text>
-                    <Button
-                        size="xs"
-                        variant="outline"
-                        color="red"
-                        onClick={handleClearAnnouncements}
-                        loading={announcementsClearing}
-                        disabled={announcementCount === 0}
-                        style={{ flex: 1 }}
-                    >
-                        Clear
-                    </Button>
-                </Group>
-
-                <Divider label="Logs" labelPosition="center" />
-
-                <Text size="xs" c="dimmed">
-                    View recent application logs. Useful when reporting a bug — you can copy the tail, or open the folder to grab the full rotated file.
-                </Text>
-                <Button size="xs" variant="outline" onClick={() => setLogsOpen(true)} fullWidth>
-                    View logs
-                </Button>
-
-                <Text size="xs" c="dimmed" ta="center">
-                    Enjoy PRSH? Consider supporting those who make it all possible.
-                </Text>
-                <SupportLinks size="sm" gap="md" justify="center" />
-
-            </Stack>
-        </Modal>
+                    <div className="flex flex-col gap-2 border-t border-border pt-4">
+                        <Text size="xs" dimmed ta="center">
+                            Enjoy PRSH? Consider supporting those who make it all possible.
+                        </Text>
+                        <SupportLinks />
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
         <LogsViewer opened={logsOpen} onClose={() => setLogsOpen(false)} />
         </>
     );

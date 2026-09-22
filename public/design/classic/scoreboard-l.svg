@@ -1,0 +1,262 @@
+<svg viewBox="0 0 800 460" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Scoreboard L (800x460): the original full card - top row,
+    live game-state row (swaps for ELO/meta on completed games), both rosters
+    with the accent captain ring, and the linescore table. Painted with the
+    user's Design-tab CSS variables (data-design-vars="app"). Row-stack
+    contract in scoreboard-mount.js.
+  -->
+  <style>
+    .cl-name { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .cl-score { fill: var(--accent, #f59e0b); font-family: var(--font-body, 'Inter', system-ui, sans-serif);  font-variant-numeric: tabular-nums;}
+    .cl-dim  { fill: rgba(255,255,255,0.6); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .cl-dim2 { fill: rgba(255,255,255,0.4); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .cl-cell { fill: rgba(255,255,255,0.85); font-family: var(--font-body, 'Inter', system-ui, sans-serif);  font-variant-numeric: tabular-nums;}
+  </style>
+
+  <!-- ONE RECT, CARRYING ITS OWN STROKE. The mount sizes `card-bg` to
+       whatever rows are showing - that is the whole
+       row-stack contract - so a SEPARATE border rect keeps the height it was
+       authored at and the outline detaches from the card the first time a
+       producer switches a row off. It was two rects until 2026-09-12, which is
+       invisible on the shipped default (every row on) and obvious the moment
+       Rosters or Box Score comes off. -->
+  <!-- NO ACCENT RAIL. The default package hangs a vertical accent bar off the
+       left edge of every card it draws, and this board briefly carried one to
+       match. That is default's signature, not this package's: classic states a
+       card as one rounded surface with a hairline border and lets the type carry
+       the hierarchy. `card-rail` is optional in the mount
+       (scoreboard-mount.js filters the absent slot out of the size pass), which
+       is exactly what lets a package decline it. -->
+  <!-- THE BLEED IS 20 AND EVEN ON EVERY EDGE THE THEME OWNS - see "A card's
+       bleed is half the widest border its producer can set" in
+       public/design/README.md. 20 is well past the 8 that rule requires, and
+       this card can afford it: 800 wide against a 452-wide Stat Bar, where 8 is
+       the same fraction. What was wrong was the TOP, authored at 8 against 20 at
+       each side, so the widest card in the package sat jammed against one edge
+       of its own source and evenly inside the other two.
+
+       The BOTTOM is not the theme's to set. The mount anchors the row stack at
+       this rect's authored y and sizes the height to whatever rows are showing,
+       so the bottom margin is the stack: at its tallest (top 80 + live 100 +
+       rosters 76 + box 106 = 362, since row-live and row-final swap) the card
+       ends at 382 and clears the canvas by 78. Author the MAXIMUM to clear the
+       bleed; everything shorter clears more.
+
+       That bottom margin being the LARGEST is right, and it is the one place
+       this element pays for the shadow: - -card-shadow-filter is a drop-shadow
+       offset 4 DOWNWARD with a blur that defaults to 16 and reaches 80, so the
+       falloff below the card is always the longest of the four and always the
+       first to be cropped. The default package's Large board makes the same
+       trade with the same canvas (its stack is 402 and it leaves 50). -->
+  <rect data-slot="card-bg" x="20" y="20" width="760" height="400" rx="16"
+        style="fill:var(--card-bg, rgba(15,15,25,0.88));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
+
+  <!-- ░░ TOP ░░ -->
+  <g data-slot="row-top" data-h="80">
+    <image data-slot="s1-logo" x="36" y="20" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s1-name" data-maxw="220" x="84" y="53" class="cl-name" font-size="18" font-weight="700">Player One</text>
+    <image data-slot="s2-logo" x="724" y="20" width="40" height="40" preserveAspectRatio="xMidYMid meet" opacity="0"/>
+    <text data-slot="s2-name" data-maxw="220" x="716" y="53" text-anchor="end" class="cl-name" font-size="18" font-weight="700">Player Two</text>
+
+    <text data-slot="s1-score" data-maxw="64" x="356" y="60" text-anchor="end" class="cl-score" font-size="42" font-weight="800">0</text>
+    <text data-slot="s2-score" data-maxw="64" x="444" y="60" text-anchor="start" class="cl-score" font-size="42" font-weight="800">0</text>
+
+    <text data-slot="inn-half" x="400" y="34" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.5">TOP</text>
+    <text data-slot="inn-num" x="400" y="60" text-anchor="middle" class="cl-name" font-size="20" font-weight="800">1</text>
+    <g data-slot="final-badge" opacity="0">
+      <rect x="368" y="32" width="64" height="24" rx="4" style="fill:var(--final-badge-color, #ef4444)"/>
+      <text x="400" y="49" text-anchor="middle" fill="#ffffff" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="12" font-weight="800" letter-spacing="1">FINAL</text>
+    </g>
+  </g>
+
+  <!-- ░░ LIVE: each side's player, their role, their four headline stats ░░
+
+       KEYED BY SIDE, NOT BY ROLE. This row used to be bat-icon / bat-name on
+       the left and pit-icon / pit-name on the right - the batter and the pitcher
+       at FIXED ends, whichever side each was on - so every half-inning the
+       portrait sitting under a producer's name in the header above belonged to
+       the other player. Side 1's cluster now always describes side 1, and what
+       flips is which ROLE it is showing; the AB / P tag is the thing that says
+       which, so it is a slot the mount writes rather than a word in this file.
+
+       That also makes the producer's Stats switch (overlays.scoreboard.showStats,
+       Large only) real on this package: the four numbers come from
+       RioData.getStatsLine, the same resolver behind the Stat Bar and the Stat
+       Card, so a character's numbers here and on their own card agree. Batting
+       is AB / AVG / SLG / SO%, pitching IP / ERA / K% / AVG - which is the other
+       thing saying which side is which. Off blanks the eight cells and moves
+       nothing; this row has no reflow.
+
+       THE CHIP TAKES THE SIDE'S PORT COLOUR, and its text takes - -side{N}-ink,
+       which the mount COMPUTES (port 3 is #fdd835, where the white that is right
+       on the other three is unreadable). A literal white here would be illegible
+       on one port in four and nobody would find out until it was on air.
+
+       GEOMETRY IS THE DEFAULT PACKAGE'S ROW, SHIFTED UP 10, because this row is
+       100 tall where that one is 120 - so the card's total height, and every
+       producer's OBS placement, is exactly where it was. Everything in the row
+       shares one vertical centre at y=50.
+
+       No character NAME at this size: beside the icon it was the only thing in
+       the way of the numbers, and the portrait plus the ringed roster slot below
+       already say who it is. -->
+  <g data-slot="row-live" data-h="100">
+    <!-- ── side 1 ── -->
+    <rect x="28" y="40" width="30" height="20" rx="4" style="fill:var(--side1, #e53935)"/>
+    <text data-slot="s1-role" x="43" y="54" text-anchor="middle" style="fill:var(--side1-ink, #ffffff);font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="12" font-weight="700">AB</text>
+    <image data-slot="s1-live-icon" x="64" y="24" width="52" height="52" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="s1-stat-0-label" x="164" y="27" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">AB</text>
+    <text data-slot="s1-stat-0-value" x="164" y="45" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">0</text>
+    <text data-slot="s1-stat-1-label" x="232" y="27" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">AVG</text>
+    <text data-slot="s1-stat-1-value" x="232" y="45" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">.000</text>
+    <text data-slot="s1-stat-2-label" x="164" y="63" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">SLG</text>
+    <text data-slot="s1-stat-2-value" x="164" y="81" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">.000</text>
+    <text data-slot="s1-stat-3-label" x="232" y="63" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">SO%</text>
+    <text data-slot="s1-stat-3-value" x="232" y="81" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">0%</text>
+
+    <!-- ── side 2: the mirror ── -->
+    <rect x="742" y="40" width="30" height="20" rx="4" style="fill:var(--side2, #1e88e5)"/>
+    <text data-slot="s2-role" x="757" y="54" text-anchor="middle" style="fill:var(--side2-ink, #ffffff);font-family:var(--font-body, 'Inter', system-ui, sans-serif)" font-size="12" font-weight="700">P</text>
+    <image data-slot="s2-live-icon" x="684" y="24" width="52" height="52" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <text data-slot="s2-stat-0-label" x="568" y="27" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">IP</text>
+    <text data-slot="s2-stat-0-value" x="568" y="45" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">0.0</text>
+    <text data-slot="s2-stat-1-label" x="636" y="27" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">ERA</text>
+    <text data-slot="s2-stat-1-value" x="636" y="45" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">0.0</text>
+    <text data-slot="s2-stat-2-label" x="568" y="63" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">K%</text>
+    <text data-slot="s2-stat-2-value" x="568" y="81" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">0%</text>
+    <text data-slot="s2-stat-3-label" x="636" y="63" text-anchor="middle" class="cl-dim" font-size="10" font-weight="700" letter-spacing="0.6">AVG</text>
+    <text data-slot="s2-stat-3-value" x="636" y="81" text-anchor="middle" class="cl-cell" font-size="17" font-weight="700">.000</text>
+
+    <!-- ── count: 3 . 2 . 2, one short of each terminal value (a fourth ball is
+         a walk; a third strike and a third out end something) ── -->
+    <text x="289" y="31" text-anchor="end" class="cl-dim" font-size="14" font-weight="700">B</text>
+    <circle data-slot="ball-0" cx="307" cy="26" r="7" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="ball-1" cx="331" cy="26" r="7" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="ball-2" cx="355" cy="26" r="7" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <text x="289" y="55" text-anchor="end" class="cl-dim" font-size="14" font-weight="700">S</text>
+    <circle data-slot="strike-0" cx="307" cy="50" r="7" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="strike-1" cx="331" cy="50" r="7" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <text x="289" y="79" text-anchor="end" class="cl-dim" font-size="14" font-weight="700">O</text>
+    <circle data-slot="out-0" cx="307" cy="74" r="7" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+    <circle data-slot="out-1" cx="331" cy="74" r="7" style="fill:rgba(255,255,255,0.05);stroke:rgba(255,255,255,0.15);stroke-width:1"/>
+
+    <!-- ── diamond: THIS PACKAGE'S OWN - one rotated-square outline with a dot
+         at each base corner (2B top / 1B right / 3B left), unchanged since the
+         CSS original. The default package draws three wide rhombuses instead,
+         and that shape came in here for one revision before going back out: it
+         is a heavier, more literal drawing than anything else classic puts on a
+         card, and it says precisely what the outline already said.
+
+         Only the CENTRE moved - 500 to 465 - because the row around it changed:
+         the count sits at 289..362 and side 2's stat block starts at ~534, so
+         465 is the middle of what is left. The shape, its 34-unit half-width and
+         its 50 centre-line are the originals. ── -->
+    <polygon points="465,16 499,50 465,84 431,50" fill="rgba(255,255,255,0.03)" style="stroke:rgba(255,255,255,0.15);stroke-width:1.5"/>
+    <circle data-slot="base-2" cx="465" cy="16" r="5" style="fill:rgba(255,255,255,0.1)"/>
+    <circle data-slot="base-1" cx="499" cy="50" r="5" style="fill:rgba(255,255,255,0.1)"/>
+    <circle data-slot="base-3" cx="431" cy="50" r="5" style="fill:rgba(255,255,255,0.1)"/>
+    <image data-slot="runner-2" x="453" y="4" width="24" height="24" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="runner-1" x="487" y="38" width="24" height="24" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="runner-3" x="419" y="38" width="24" height="24" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+  </g>
+
+  <!-- ░░ FINAL (ELO + meta) ░░ -->
+  <!-- FINAL: game meta. ELO removed; the row is one centred stack now, and the
+       Large card says the rest in the rosters and linescore below it. -->
+  <g data-slot="row-final" data-h="56">
+    <text data-slot="meta-main" data-maxw="360" x="400" y="26" text-anchor="middle" class="cl-dim2" font-size="12">Stadium</text>
+    <text data-slot="meta-date" x="400" y="44" text-anchor="middle" class="cl-dim2" font-size="10">Date</text>
+  </g>
+
+  <!-- ░░ ROSTERS ░░ -->
+  <g data-slot="row-roster" data-h="76">
+    <rect data-slot="s1-cap-ring" data-pad="2" x="34" y="20" width="32" height="32" rx="6" fill="none" style="stroke:var(--accent, #f59e0b);stroke-width:1.5" opacity="0"/>
+    <image data-slot="s1-char-0" x="36" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-1" x="70" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-2" x="104" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-3" x="138" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-4" x="172" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-5" x="206" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-6" x="240" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-7" x="274" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s1-char-8" x="308" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <rect data-slot="s2-cap-ring" data-pad="2" x="462" y="20" width="32" height="32" rx="6" fill="none" style="stroke:var(--accent, #f59e0b);stroke-width:1.5" opacity="0"/>
+    <image data-slot="s2-char-0" x="464" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-1" x="498" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-2" x="532" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-3" x="566" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-4" x="600" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-5" x="634" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-6" x="668" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-7" x="702" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <image data-slot="s2-char-8" x="736" y="22" width="28" height="28" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+  </g>
+
+  <!-- ░░ LINESCORE ░░ -->
+  <g data-slot="row-box" data-h="106">
+    <!-- box-grid/box-total: the mount slides the R cluster left onto the last
+         real inning and the table back right by half of that, so a five- or
+         six-inning game closes the gap a nine-column grid leaves rather than
+         huddling at one end of it. layoutBox in scoreboard-mount.js. -->
+    <g data-slot="box-grid">
+      <!-- THE GAME MODE, and it is bound in BOTH states - unlike meta-main /
+           meta-date in row-final above, which are completed-game only. This
+           board declared no meta-game-mode at all until 2026-09-12, so a classic
+           Large card never named the game mode, live or final, while the Small
+           one did. It heads the name column, in the cell the table leaves empty
+           above Away / Home: standing context beside the numbers it describes,
+           which is where the default package puts it too. Self-hides when the
+           mode is unknown.
+
+           INSIDE box-grid, with the names it heads. On a short game the mount
+           slides this whole group RIGHT by half the unused innings' width to
+           close the canyon a nine-column grid leaves (layoutBox in
+           mount-utils.js), and the names travel with it - so a caption parked
+           outside the group at a fixed x would be overrun by the very column it
+           captions the moment a five-inning game ended.
+
+           Bounded to the name column's own 110 rather than to the gap before
+           inning 1: the auto-fit then guarantees it can never touch the grid, at
+           any game length, without anyone having to re-check the arithmetic. -->
+      <text data-slot="meta-game-mode" data-maxw="110" x="40" y="28" class="cl-dim" font-size="11" font-weight="600" letter-spacing="0.3">Game Mode</text>
+      <g data-slot="box-col-1"><text data-slot="box-h-1" x="180" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">1</text></g>
+      <g data-slot="box-col-2"><text data-slot="box-h-2" x="230" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">2</text></g>
+      <g data-slot="box-col-3"><text data-slot="box-h-3" x="280" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">3</text></g>
+      <g data-slot="box-col-4"><text data-slot="box-h-4" x="330" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">4</text></g>
+      <g data-slot="box-col-5"><text data-slot="box-h-5" x="380" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">5</text></g>
+      <g data-slot="box-col-6"><text data-slot="box-h-6" x="430" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">6</text></g>
+      <g data-slot="box-col-7"><text data-slot="box-h-7" x="480" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">7</text></g>
+      <g data-slot="box-col-8"><text data-slot="box-h-8" x="530" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">8</text></g>
+      <g data-slot="box-col-9"><text data-slot="box-h-9" x="580" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">9</text></g>
+      <text data-slot="box-away-name" data-maxw="110" x="40" y="56" fill="rgba(255,255,255,0.5)" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="11">Away</text>
+      <text data-slot="box-away-1" x="180" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-2" x="230" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-3" x="280" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-4" x="330" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-5" x="380" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-6" x="430" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-7" x="480" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-8" x="530" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-away-9" x="580" y="56" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-name" data-maxw="110" x="40" y="82" fill="rgba(255,255,255,0.5)" font-family="var(--font-body, 'Inter', system-ui, sans-serif)" font-size="11">Home</text>
+      <text data-slot="box-home-1" x="180" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-2" x="230" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-3" x="280" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-4" x="330" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-5" x="380" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-6" x="430" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-7" x="480" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-8" x="530" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+      <text data-slot="box-home-9" x="580" y="82" text-anchor="middle" class="cl-cell" font-size="12" font-weight="600">-</text>
+
+      <g data-slot="box-total">
+        <rect x="614" y="14" width="1" height="82" fill="rgba(255,255,255,0.12)"/>
+        <text x="646" y="28" text-anchor="middle" class="cl-dim2" font-size="10" font-weight="700">R</text>
+        <text data-slot="box-away-r" x="646" y="56" text-anchor="middle" class="cl-score" font-size="13" font-weight="800">0</text>
+        <text data-slot="box-home-r" x="646" y="82" text-anchor="middle" class="cl-score" font-size="13" font-weight="800">0</text>
+      </g>
+    </g>
+  </g>
+</svg>

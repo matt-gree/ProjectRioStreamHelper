@@ -11,16 +11,6 @@ router = APIRouter()
 
 
 @method(
-    router.get, "/rio/game",
-    version="1", id="rio.game",
-    response_class=ORJSONResponse
-)
-async def rio_game(session_id: str | None = None) -> ORJSONResponse:
-    """Get the current parsed game state from the HUD file."""
-    return ORJSONResponse(RioGameDataProvider.current_game)
-
-
-@method(
     router.post, "/rio/refresh",
     version="1", id="rio.refresh",
     response_class=ORJSONResponse
@@ -60,6 +50,27 @@ async def rio_swap(
     return ORJSONResponse({
         "success": True,
         "sides_swapped": RioGameDataProvider._sides_swapped,
+    })
+
+
+@method(
+    router.post, "/rio/swap/release",
+    version="1", id="rio.swap_release",
+    response_class=ORJSONResponse
+)
+async def rio_swap_release(session_id: str | None = None) -> ORJSONResponse:
+    """Give the sides back to the cascade — the inverse of /rio/swap.
+
+    Manual is the top layer of the side cascade and was the only one with no way
+    out: it cleared on a new game, or if a second swap happened to land on the
+    pinned orientation. A producer who swapped before binding a fixture had no
+    way to tell PRSH to stop preferring their answer.
+    """
+    await RioGameDataProvider.release_sides_override()
+    return ORJSONResponse({
+        "success": True,
+        "sides_swapped": RioGameDataProvider._sides_swapped,
+        "user_overridden": RioGameDataProvider._user_overridden,
     })
 
 

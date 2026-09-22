@@ -11,8 +11,10 @@ from socketio import ASGIApp
 from loguru import logger
 
 from server import server, socketio
-from server.state import State
+from server.paths import env_port, suppress_browser
+from server.network import Network
 from server.settings import Settings, Config as TSHConfig
+from server.participants import Participants
 from server.utils.uvilogger import setup_logger
 
 # Signals the tray (main thread on macOS) that the server is up and URL is set.
@@ -38,8 +40,12 @@ async def main() -> int:
     log_dir = os.path.join(wr, 'logs')
     os.makedirs(log_dir, exist_ok=True)
 
+    # prsh_*, not tsh_* — these files are the app's name on the user's disk and
+    # in the in-app log viewer they open to report a bug, and they carried the
+    # UPSTREAM project's initials (TournamentStreamHelper). Old tsh_* files are
+    # left alone and still listed by GET /api/v1/logs, so nothing is lost.
     logger.add(
-        os.path.join(log_dir, "tsh_info.txt"),
+        os.path.join(log_dir, "prsh_info.txt"),
         format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="INFO",
@@ -48,7 +54,7 @@ async def main() -> int:
     )
 
     logger.add(
-        os.path.join(log_dir, "tsh_error.txt"),
+        os.path.join(log_dir, "prsh_error.txt"),
         format="[{time:YYYY-MM-DD HH:mm:ss}] - {level} - {file}:{function}:{line} | {message} | {extra}",
         encoding="utf-8",
         level="ERROR",
@@ -58,18 +64,25 @@ async def main() -> int:
 
     await asyncio.gather(
         TSHConfig.Load(),
-        Settings.Load()
+        Settings.Load(),
+        Participants.Load()
     )
 
-    # TSH_DEV=1 is set by `npm run server` (via package.json).
+    # PRSH_DEV=1 is set by `npm run server` (via package.json).
     # Running python3 main.py directly uses production mode.
-    dev_mode = os.environ.get("TSH_DEV") == "1"
+    dev_mode = os.environ.get("PRSH_DEV") == "1"
     await Settings.Set("server.dev", dev_mode)
 
     allow_lan = bool(Settings.Get("server.allow_lan", False))
     host = "0.0.0.0" if allow_lan else "127.0.0.1"
-    port = Settings.Get("server.port", 5260)
-    autostart = Settings.Get("server.autostart", True)
+    # PRSH_PORT / PRSH_NO_BROWSER env overrides support isolated agent/CI
+    # runs (paired with PRSH_USER_DATA_DIR — see server/paths.py).
+    port = env_port() or Settings.Get("server.port", 5260)
+    autostart = Settings.Get("server.autostart", True) and not suppress_browser()
+
+    # What the process ACTUALLY binds, as opposed to what the setting now says —
+    # the Network card reads both to know whether a restart is pending.
+    Network.set_bound(host, port)
 
     uvi = Server(Config(
         app=ASGIApp(
@@ -144,6 +157,72 @@ def _run_asyncio():
             _server_failed.set()
 
 
+def _selftest() -> int:
+    """Launch-ability check for a freshly built binary (`PRSH --selftest`).
+
+    Reaching this function at all is most of the test: main.py's
+    module-level imports have already run, and that graph is where a
+    frozen build dies without leaving a trace. A dependency that reads its
+    own distribution metadata at import time (see the copy_metadata note in
+    PRSH.spec) raises before the app executes a line of its own code — no
+    log file, no server, just a PyInstaller crash dialog on the user's
+    machine. Nothing in CI caught that until this existed.
+
+    What follows covers the two things importing main.py does NOT reach:
+    the platform modules imported lazily inside the frozen branch below,
+    and the files that are read off disk rather than imported. PyInstaller
+    has no reason to trace either, so both are spec entries that can go
+    stale silently — a missing data path lets the app start and simply
+    serves a blank page or a themeless overlay.
+    """
+    import importlib
+
+    from server.paths import app_root
+
+    failures: list[str] = []
+
+    lazy = ['server.port_conflict']
+    if sys.platform == 'darwin':
+        lazy.append('server.tray')
+    elif sys.platform == 'win32':
+        lazy.append('server.win_window')
+    for name in lazy:
+        try:
+            importlib.import_module(name)
+        except Exception as exc:
+            failures.append(f"import {name} -> {exc.__class__.__name__}: {exc}")
+
+    # Read at runtime by path, never imported. The manifest is a pair
+    # because PyInstaller drops dot-prefixed dirs on Windows and the spec
+    # stages a second copy — server.py accepts either, so this does too.
+    root = app_root()
+    required = [
+        ('dist/index.html',),
+        ('dist/assets',),
+        ('dist/.vite/manifest.json', 'dist/vite_manifest.json'),
+        ('public/layout',),
+        ('public/design',),
+        ('public/game_assets',),
+        ('public/logo.png',),
+        ('server/rio/pyrio/CharNames.csv',),
+        ('server/rio/pyrio/constants/character_attributes.csv',),
+        ('server/rio/pyrio/constants/stadiums',),
+    ]
+    for candidates in required:
+        if not any((root / rel).exists() for rel in candidates):
+            failures.append(f"missing bundled path: {' or '.join(candidates)}")
+
+    for failure in failures:
+        print(f"selftest FAIL  {failure}")
+    if failures:
+        print(f"selftest FAILED with {len(failures)} problem(s); root={root}")
+        return 1
+
+    print(f"selftest OK  python={sys.version.split()[0]} "
+          f"frozen={getattr(sys, 'frozen', False)} root={root}")
+    return 0
+
+
 def _writable_root() -> str:
     """Return a writable root directory for logs and user data.
 
@@ -167,15 +246,22 @@ if __name__ == '__main__':
     # Pyinstaller fix
     multiprocessing.freeze_support()
 
+    # Checked before the stdout/stderr redirect and the tray/Tk branch
+    # below, so the result reaches the caller's console and the process
+    # exits instead of parking on a tray icon. CI runs this against the
+    # freshly built binary on every platform — see build-release.yml.
+    if '--selftest' in sys.argv[1:]:
+        sys.exit(_selftest())
+
     frozen = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
     if frozen:
-        # CWD is set by hooks/runtime_hook_chdir.py before imports ran.
+        # CWD is set by installer/runtime_hook_chdir.py before imports ran.
         # Use a writable root for logs (macOS .app bundles may be read-only).
         wr = _writable_root()
         log_dir = os.path.join(wr, 'logs')
         os.makedirs(log_dir, exist_ok=True)
-        sys.stderr = open(os.path.join(log_dir, 'tsh_error.txt'), 'w', encoding='utf-8')
-        sys.stdout = open(os.path.join(log_dir, 'tsh_info.txt'), 'w', encoding='utf-8')
+        sys.stderr = open(os.path.join(log_dir, 'prsh_error.txt'), 'w', encoding='utf-8')
+        sys.stdout = open(os.path.join(log_dir, 'prsh_info.txt'), 'w', encoding='utf-8')
 
     if frozen and sys.platform in ("darwin", "win32"):
         # Pre-flight port check on the main thread. If the configured port is
@@ -202,7 +288,7 @@ if __name__ == '__main__':
             # Reveal the log directory so the user can grab the file.
             try:
                 from server.port_conflict import reveal_in_file_manager
-                reveal_in_file_manager(Path(log_dir) / "tsh_error.txt")
+                reveal_in_file_manager(Path(log_dir) / "prsh_error.txt")
             except Exception:
                 pass
             sys.exit(1)

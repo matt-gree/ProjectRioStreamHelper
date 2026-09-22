@@ -1,11 +1,16 @@
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
-from server.rio.provider import RioGameDataProvider
-from server.rio.rotation import RotationManager
+from server.bindings import DEFAULT_BINDING, clear_stats_tag, get_binding, transport
+from server.bindings import hud_target_scoreboards as _hud_target_scoreboards
+from server.postgame import PostGame
+from server.rio.provider import RioGameDataProvider, release_and_clear_game
+from server.rio.rotation import PoolManager
 from server.rio.stats_tracker import StatsTracker
 from server.settings import Settings
 from server.state import State
+from server.utils.deep_dict import deep_get
+from server.utils.tasks import spawn
 
 router = APIRouter()
 
@@ -20,15 +25,13 @@ def _lowest_available_id(active: list[int]) -> int:
 
 
 def hud_target_scoreboards() -> list[int]:
-    """Return all active scoreboards whose source type is 'hud'.
+    """Scoreboards that mirror the local HUD game — at most board 1.
 
-    HUD-target is derived from per-scoreboard source config rather than a
-    separate setting, so any number of scoreboards can mirror the local HUD
-    game simultaneously.
+    HUD is a global transport on board 1 (Settings `project_rio.hud_enabled`),
+    so this returns `[1]` when board 1 is active and enabled, else `[]`.
+    Kept as a re-export for existing importers (see server/bindings.py).
     """
-    active = Settings.Get("scoreboards.active", [1])
-    sources = Settings.Get("scoreboards.sources", {})
-    return [sb for sb in active if sources.get(str(sb), {}).get("type") == "hud"]
+    return _hud_target_scoreboards()
 
 
 @method(
@@ -37,20 +40,19 @@ def hud_target_scoreboards() -> list[int]:
     response_class=ORJSONResponse
 )
 async def list_scoreboards(session_id: str | None = None) -> ORJSONResponse:
-    """List all active scoreboards with their source metadata."""
+    """List all active scoreboards with their binding metadata."""
     active = Settings.Get("scoreboards.active", [1])
-    sources = Settings.Get("scoreboards.sources", {})
     aliases = Settings.Get("scoreboards.aliases", {})
 
     scoreboards = []
     for sb_id in active:
         key = str(sb_id)
-        source_cfg = sources.get(key, {"type": "manual", "api_game_id": None})
         scoreboards.append({
             "id": sb_id,
             "alias": aliases.get(key, ""),
-            "source": source_cfg,
-            "is_hud_target": source_cfg.get("type") == "hud",
+            "binding": get_binding(sb_id),
+            "transport": transport(sb_id),
+            "is_hud_target": transport(sb_id) == "hud",
         })
     return ORJSONResponse(scoreboards)
 
@@ -69,8 +71,7 @@ async def add_scoreboard(session_id: str | None = None) -> ORJSONResponse:
     active.sort()
 
     await Settings.Set("scoreboards.active", active)
-    await Settings.Set(f"scoreboards.sources.{new_id}",
-                       {"type": "manual", "api_game_id": None})
+    await Settings.Set(f"scoreboards.binding.{new_id}", dict(DEFAULT_BINDING))
 
     return ORJSONResponse({"success": True, "id": new_id})
 
@@ -89,23 +90,49 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     if sb_id not in active:
         raise HTTPException(status_code=404, detail="Scoreboard not found")
 
-    # Clear state for this scoreboard
+    # Clear state for this scoreboard. `score.{N}` is not all of it — the
+    # post-game box score is its own top-level namespace (`postgame.{N}`) plus
+    # three in-memory caches, and `PostGame.clear` is the one thing that drops
+    # both. Unsetting only `score.{N}` left a captured box score behind, which
+    # id re-use then handed to the next board (see the teardown note below).
     await State.Unset(f"score.{sb_id}")
+    await PostGame.clear(sb_id)
 
-    old_source = Settings.Get(f"scoreboards.sources.{sb_id}.type")
+    was_hud = transport(sb_id) == "hud"
 
     # Tear down any background work owned by this scoreboard before its
     # settings are removed, so resume-on-startup can't pick it back up.
-    await RotationManager.stop_rotation(sb_id)
+    #
+    # BOTH `scoreboards.rotation.{N}` keys go, and they are different things:
+    # the Settings one is the legacy flat config, the State one is the live
+    # status mirror (`running`/`game_ids`) that the rack badge reads. Clearing
+    # only the config left the mirror behind saying `running: true`, which id
+    # re-use then handed to the next board as a rotating badge for a rotation
+    # that does not exist. `stop_rotation` does not clear it — it drops the
+    # task and the binding flag, not the projection.
+    await PoolManager.stop_rotation(sb_id, user_stop=False)
     await Settings.Unset(f"scoreboards.rotation.{sb_id}")
+    await State.Unset(f"scoreboards.rotation.{sb_id}")
 
     active.remove(sb_id)
     await Settings.Set("scoreboards.active", active)
-    await Settings.Unset(f"scoreboards.sources.{sb_id}")
+    await Settings.Unset(f"scoreboards.binding.{sb_id}")
     await Settings.Unset(f"scoreboards.aliases.{sb_id}")
+    # EVERY per-board key goes when the board does — settings and state alike.
+    # Ids are RE-USED (`_lowest_available_id`), so a leftover here is not
+    # dormant: removing the board that took fixtures from Losers and adding one
+    # back hands the new board 2 that assignment, silently, with nothing on its
+    # panel explaining where it came from.
+    #
+    # Read that as "per-board DATA", not "per-board setting". Stating it as a
+    # settings rule is how `postgame.{N}` — per-board state that does not live
+    # under `score.{N}` — sat outside the teardown while all four settings keys
+    # were handled correctly. `tests/integration/test_scoreboards_api.py` pins
+    # the whole set against id re-use; add new per-board keys there too.
+    await Settings.Unset(f"scoreboards.match_queue.{sb_id}")
 
     StatsTracker.reset_scoreboard(sb_id)
-    if old_source == "hud":
+    if was_hud:
         RioGameDataProvider._reset_side_preservation()
     else:
         RioGameDataProvider.refresh_hud_targets()
@@ -115,73 +142,314 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
 
 
 @method(
-    router.put, "/scoreboards/{sb_id}/source",
-    version="1", id="scoreboards.set_source",
+    router.put, "/scoreboards/{sb_id}/binding",
+    version="1", id="scoreboards.set_binding",
     response_class=ORJSONResponse
 )
-async def set_scoreboard_source(
+async def set_scoreboard_binding(
     sb_id: int,
-    source_type: str = "manual",
-    api_game_id: str | None = None,
+    kind: str = "single",
+    pool: str | None = None,
     session_id: str | None = None,
 ) -> ORJSONResponse:
-    """Set the data source for a scoreboard (manual, hud, or api)."""
+    """Set a scoreboard's playback mode and optional pool scope.
+
+    `kind` accepts "single" or "set"/"rotate" ("set" kept as an alias for
+    backward compatibility with pre-pool-unification callers) and maps onto
+    `playback.mode`. This endpoint only flips the mode metadata — it does not
+    itself start a rotation (see `POST /rotation/{sb}/start`), matching the
+    pre-existing split between "switch this board to rotate mode" (here) and
+    "start rotating the configured pool" (rotation.py).
+
+    Transport (HUD vs API) is derived, not set here — board 1 carries the HUD
+    when `project_rio.hud_enabled` (see server/bindings.py). A HUD-transport
+    board ignores its playback mode, but the write is still accepted so
+    toggling HUD off later reveals the stored mode.
+    """
     active = Settings.Get("scoreboards.active", [1])
     if sb_id not in active:
         raise HTTPException(status_code=404, detail="Scoreboard not found")
 
-    valid_types = ("manual", "hud", "live_game", "rotator")
-    if source_type not in valid_types:
-        raise HTTPException(status_code=400, detail=f"Invalid source type. Must be one of: {valid_types}")
+    if kind not in ("single", "set", "rotate"):
+        raise HTTPException(status_code=400, detail="kind must be 'single' or 'rotate'")
+    mode = "rotate" if kind in ("set", "rotate") else "single"
 
-    # Clear scoreboard state on source change, except HUD → Manual (preserve displayed data)
-    old_source = Settings.Get(f"scoreboards.sources.{sb_id}.type", "manual")
-    source_changed = old_source != source_type
-    if source_changed and not (old_source == "hud" and source_type == "manual"):
+    old_mode = get_binding(sb_id)["playback"].get("mode", "single")
+    mode_changed = old_mode != mode
+
+    # Leaving rotate mode stops any running pool task so it can't keep writing
+    # into a board the user has switched to single.
+    if old_mode == "rotate" and mode != "rotate":
+        await PoolManager.stop_rotation(sb_id, user_stop=True)
+
+    await Settings.Set(f"scoreboards.binding.{sb_id}.playback.mode", mode)
+    if pool in ("both", "live", "completed"):
+        await Settings.Set(f"scoreboards.binding.{sb_id}.pool.scope", pool)
+
+    # On a real mode change, clear the stale frame + game reference + stats slot
+    # (the previous mode's game no longer applies). A HUD-transport board is left
+    # alone — the HUD writer owns it.
+    if mode_changed and transport(sb_id) != "hud":
+        await Settings.Set(f"scoreboards.binding.{sb_id}.playback.gameId", None)
         await State.Set(f"score.{sb_id}", {})
+        StatsTracker.reset_scoreboard(sb_id)
         await State.Save()
 
-    # Stop any rotation when leaving the rotator source so it can't keep
-    # writing into a scoreboard the user has reassigned. Persist enabled=False
-    # so resume-on-startup also skips it.
-    if source_changed and old_source == "rotator":
-        await RotationManager.stop_rotation(sb_id)
+    return ORJSONResponse({"success": True, "binding": get_binding(sb_id)})
 
-    # Update only the keys that this endpoint owns. Preserve sibling keys
-    # (e.g. stats_tag) so a source-type change doesn't silently drop the
-    # user's per-scoreboard game-mode selection.
-    await Settings.Set(f"scoreboards.sources.{sb_id}.type", source_type)
-    await Settings.Set(f"scoreboards.sources.{sb_id}.api_game_id", api_game_id)
 
-    # Drop this scoreboard's stats slot whenever the source actually changes —
-    # the previous source's cached players/rosters no longer apply.
-    if source_changed:
+@method(
+    router.put, "/scoreboards/hud-enabled",
+    version="1", id="scoreboards.set_hud_enabled",
+    response_class=ORJSONResponse
+)
+async def set_hud_enabled(
+    enabled: bool = True,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Toggle the global HUD transport on board 1.
+
+    On → refresh HUD targets and re-apply the latest HUD game to board 1.
+    Off → refresh HUD targets (board 1 reverts to its own binding). The last
+    HUD frame is left on screen (like the old HUD→Manual behavior); it becomes
+    editable again.
+    """
+    await Settings.Set("project_rio.hud_enabled", bool(enabled))
+
+    # Side-preservation caches the HUD-target list; reset recomputes it.
+    RioGameDataProvider._reset_side_preservation()
+
+    if enabled and RioGameDataProvider.hud_watcher \
+            and RioGameDataProvider.hud_watcher.latest_game_data:
+        parsed = RioGameDataProvider.parse_game_data(
+            RioGameDataProvider.hud_watcher.latest_game_data
+        )
+        parsed = RioGameDataProvider._preserve_player_sides(parsed)
+        RioGameDataProvider.current_game = parsed
+        await RioGameDataProvider._apply_game_to_state(parsed)
+
+    await State.Save()
+    return ORJSONResponse({"success": True, "hud_enabled": bool(enabled)})
+
+
+@method(
+    router.post, "/scoreboards/{sb_id}/clear-game",
+    version="1", id="scoreboards.clear_game",
+    response_class=ORJSONResponse
+)
+async def clear_board_game(
+    sb_id: int,
+    release_match: bool = False,
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Blank one board back to a resting game, optionally releasing its fixture.
+
+    The producer's between-games verb, and the one the board desk's Clear now
+    calls. It used to build the ~120-key batch in the browser and send it as plain
+    state writes, which meant the clear could not do the one thing it had to: the
+    Match projector jointly owns `score.{N}.player.{T}.*` and runs only on a bind
+    or a fixture mutation, so blanking those keys from the client left the bound
+    fixture's names gone with nothing to restore them — the fixture slot still said
+    `M2 · Alice vs Bob` while the scoreboard drew nobody.
+
+    IT CLEARS THE POST-GAME CAPTURE TOO (`PostGame.clear`). It used to keep
+    `postgame.{N}` on the argument that the box score is a separate surface — but
+    a producer who clears a board means the GAME is gone, and a capture is that
+    game's receipt: kept, it went on driving the Game Summary and Spotlight and
+    sat on the board desk as `CAPTURED` beside a board that no longer held the
+    game it described (user call, 2026-09-18). The file it came from is still on
+    disk, so the post-game region's file picker is the way back.
+
+    And the clear SURVIVES A RESTART on a HUD board: `release_and_clear_game`
+    persists which frame was released, so the boot read of decoded.hud.json —
+    which still holds that game's last frame — does not put it back. Re-read HUD
+    is the way back for that half.
+
+    Nor the pool. The STATS TAG it does clear (``clear_stats_tag``): the mode is
+    the game's, not the board's — it is the feed's answer unless a producer
+    overrode it — so leaving the last game's season on an emptied board left the
+    one control on the game rule still describing the game just taken off it.
+
+    ``release_match`` IS THE ANSWER TO "I CLEARED IT AND IT CAME BACK".
+
+    Keeping the binding is right while the fixture still has a game to give — that
+    is the whole reason this endpoint re-projects, and a Bo3 between games must
+    keep its match on the board. But over a fixture that is DONE it produced the
+    console's most baffling outcome: the clear blanked the board, the projector
+    immediately repainted the decided fixture's two names onto it, and the
+    scoreboard went back to drawing last night's finished matchup at 0-0. The
+    producer pressed the button that empties a board and the board did not empty.
+    Two presses on two different rows (clear here, unlink in the fixture slot) were
+    the only way out, and nothing said so.
+
+    So the caller says whether the fixture is coming off, and the board desk sets
+    it from the one condition that answers it — the fixture being decided, i.e.
+    having no further game to put here.
+
+    Released FIRST, and through ``_unbind_board``: it is the one statement of the
+    unbind rule (drop the keys, blank what the projector owns, then RE-SETTLE, or
+    the board keeps explaining its orientation by a `side_reason` layer that is no
+    longer there). Restating any of that here is how the two paths drift. Clearing
+    afterwards then finds no match to re-project, which is exactly the intent.
+
+    Clears ``postgame.{N}`` in both modes (see above).
+    """
+    active = Settings.Get("scoreboards.active", [1])
+    if sb_id not in active:
+        raise HTTPException(status_code=404, detail="Scoreboard not found")
+
+    if release_match and deep_get(State.state, f"score.{sb_id}.match") is not None:
+        from server.api.v1.match import _unbind_board
+
+        await _unbind_board(sb_id)
+
+    await release_and_clear_game(sb_id)
+    await PostGame.clear(sb_id)
+    await clear_stats_tag(sb_id)
+    StatsTracker.reset_scoreboard(sb_id)
+    return ORJSONResponse(
+        {"success": True, "scoreboard": sb_id, "released": bool(release_match)}
+    )
+
+
+@method(
+    router.post, "/scoreboards/reset",
+    version="1", id="scoreboards.reset",
+    response_class=ORJSONResponse
+)
+async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONResponse:
+    """Reset all match + scoreboard state back to a clean baseline.
+
+    Recovery hatch for corrupt/stuck state — e.g. a board left in ``rotate``
+    mode after an HUD-off session (which then rejects match binds as "rotating"),
+    an orphaned match binding, or a stuck match_conflict. Keeps the active
+    scoreboard tabs (and the global HUD toggle) but returns every board to a
+    default single binding and deletes every authored match.
+
+    Steps: stop all rotations → delete all matches (unbind + blank + drop
+    conflicts) → re-project the running orders → reset each active board's
+    binding to the single default → clear each board's live score state and
+    rotation status → reset HUD side-preservation → re-apply the current HUD
+    frame to board 1 if HUD is on.
+    """
+    import copy
+
+    from server.match import Match
+    from server.schedule import Schedule
+
+    active = Settings.Get("scoreboards.active", [1])
+
+    # 1. Stop every rotation so no background task keeps writing during the reset.
+    for sb_id in list(active):
+        await PoolManager.stop_rotation(sb_id, user_stop=True)
+
+    # 2. Delete every authored match — unbind and blank the boards it held first.
+    for m in list(Match._all().keys()):
+        bound = Match.bound_scoreboards(m)
+        if bound:
+            await State.UnsetBatch(
+                [k for sb in bound
+                 for k in (f"score.{sb}.match", f"score.{sb}.match_conflict")]
+            )
+        for sb in bound:
+            await Match.clear_scoreboard(sb)
+        await State.Unset(f"match.{m}")
+
+    # 3. Flush the deletions through to the running orders. This loop unsets
+    #    `match.{M}` directly rather than going through `delete_match`, so nothing
+    #    has called `Schedule._commit` — `Schedule.queues()` would prune the dead
+    #    ids on read while the STORED `schedule.queues`/`schedule.queue` kept them,
+    #    leaving state.json and `GET /schedule` disagreeing and the console's
+    #    subject row counting fixtures that no longer exist.
+    await Schedule.reproject()
+
+    # 4. Reset each board to a clean single binding and blank its live state.
+    for sb_id in list(active):
+        await Settings.Set(f"scoreboards.binding.{sb_id}", copy.deepcopy(DEFAULT_BINDING))
+        await State.Set(f"score.{sb_id}", {})
+        # `scoreboards.rotation.{N}` names TWO different things in two stores:
+        # in State the live status mirror (`running`, `game_ids`,
+        # `cached_games`), and in Settings the legacy flat rotation config the
+        # v2 migration reads as a fallback. Clear BOTH — this hatch and
+        # `remove_scoreboard` used to do one each, opposite halves, which is
+        # what made the split easy to miss. Don't "simplify" either to one.
+        await State.Unset(f"scoreboards.rotation.{sb_id}")
+        await Settings.Unset(f"scoreboards.rotation.{sb_id}")
+        # Blank the captured box score too. A board reset to a clean baseline
+        # that still reports a post-game is exactly the stuck state this hatch
+        # exists to clear.
+        await PostGame.clear(sb_id)
         StatsTracker.reset_scoreboard(sb_id)
 
-    if source_type == "hud":
-        # Side preservation operates on the single HUD-derived game shared by
-        # all HUD targets, so resetting it on any HUD-target change is fine.
-        # _reset_side_preservation also refreshes the cached HUD-target list.
-        RioGameDataProvider._reset_side_preservation()
-
-        # Re-apply current HUD data to all HUD targets (which now includes sb_id)
-        if RioGameDataProvider.hud_watcher and RioGameDataProvider.hud_watcher.latest_game_data:
-            parsed = RioGameDataProvider.parse_game_data(
-                RioGameDataProvider.hud_watcher.latest_game_data
-            )
-            parsed = RioGameDataProvider._preserve_player_sides(parsed)
-            RioGameDataProvider.current_game = parsed
-            await RioGameDataProvider._apply_game_to_state(parsed)
-    elif old_source == "hud":
-        # Demoted from HUD — wipe side-preservation state so leftover swap
-        # flags from this scoreboard's last game don't carry into the next
-        # scoreboard promoted to HUD. Also refreshes the cached target list.
-        RioGameDataProvider._reset_side_preservation()
-
-    # Flush any state changes accumulated during this handler (no-op if nothing changed)
     await State.Save()
 
-    return ORJSONResponse({"success": True})
+    # 5. Reset side-preservation and re-seat the current HUD frame on board 1.
+    RioGameDataProvider._reset_side_preservation()
+    if RioGameDataProvider.hud_watcher \
+            and RioGameDataProvider.hud_watcher.latest_game_data \
+            and 1 in RioGameDataProvider._hud_targets:
+        parsed = RioGameDataProvider.parse_game_data(
+            RioGameDataProvider.hud_watcher.latest_game_data
+        )
+        parsed = RioGameDataProvider._preserve_player_sides(parsed)
+        RioGameDataProvider.current_game = parsed
+        await RioGameDataProvider._apply_game_to_state(parsed)
+        await State.Save()
+
+    return ORJSONResponse({"success": True, "active": active})
+
+
+@method(
+    router.put, "/scoreboards/{sb_id}/player/{team}/name-override",
+    version="1", id="scoreboards.set_name_override",
+    response_class=ORJSONResponse
+)
+async def set_player_name_override(
+    sb_id: int,
+    team: int,
+    name: str = "",
+    session_id: str | None = None,
+) -> ORJSONResponse:
+    """Pin (or clear) a manual name override for one player slot.
+
+    The override BECOMES the slot's identity: it wins over the feed name, so it
+    drives the overlay name, address-book resurface, the match identity gate,
+    and the stats fetch — while the HUD keeps feeding roster/scores/gameplay.
+    It persists across same-game HUD frames and is cleared automatically on a
+    new HUD game (see `RioGameDataProvider._clear_name_overrides`). Passing an
+    empty name clears the override immediately.
+
+    Applies to any board, but is primarily for HUD/live boards whose feed would
+    otherwise overwrite a hand-typed name every frame.
+    """
+    if team not in (1, 2):
+        raise HTTPException(status_code=400, detail="team must be 1 or 2")
+    active = Settings.Get("scoreboards.active", [1])
+    if sb_id not in active:
+        raise HTTPException(status_code=404, detail="Scoreboard not found")
+
+    name = name.strip()
+    key = f"score.{sb_id}.player.{team}.rioName_override"
+    if name:
+        await State.Set(key, name)
+    else:
+        await State.Unset(key)
+
+    # Re-apply so the effective rioName + resurface reflect the change now. A
+    # HUD/live board re-runs its current frame (which reads the override back);
+    # a board with no live frame gets the value written straight through.
+    prov = RioGameDataProvider
+    if sb_id in prov._hud_targets and prov.current_game is not None:
+        await prov._apply_game_to_state(prov.current_game)
+    elif name:
+        await State.Set(f"score.{sb_id}.player.{team}.rioName", name)
+    await State.Save()
+
+    # Stats follow the (new) identity — fetch in the background so the click
+    # returns immediately; the merged stats broadcast when ready.
+    spawn(StatsTracker.refresh_api_stats(sb_id), name=f"stats.refresh:{sb_id}")
+
+    return ORJSONResponse({"success": True, "override": name})
 
 
 @method(

@@ -6,7 +6,20 @@ name = "ProjectRioStreamHelper"
 # requires the field to be present.
 version = "0.0.0"
 description = "Tournament scoreboard helper and overlays for Mario Superstar Baseball via Project Rio"
-authors = ["João Ribeiro Bezerra <joaorb64@gmail.com>", "Isatis <isatis@foxes.gay>", "Mathias Wolfbrok <wolfy76700>", "Eion Dailey <zombiehdgaming>"]
+# This fork's author first. The TournamentStreamHelper authors below are
+# retained as attribution for the upstream work PRSH is built on (MIT, see
+# LICENSE) — the list was inherited wholesale and named nobody who wrote this
+# fork, while being served publicly at GET /api/v1/config.
+authors = [
+    "Matt Greene <mattgreemssb@gmail.com>",
+    "João Ribeiro Bezerra <joaorb64@gmail.com>",
+    "Isatis <isatis@foxes.gay>",
+    "Mathias Wolfbrok <wolfy76700>",
+    "Eion Dailey <zombiehdgaming>",
+]
+license = "MIT"
+homepage = "https://github.com/matt-gree/ProjectRioStreamHelper"
+repository = "https://github.com/matt-gree/ProjectRioStreamHelper"
 readme = "README.md"
 packages = [{include = "server"}]
 

@@ -1,357 +1,210 @@
-# TESTING.md — PRSH Test Suite Design
+# TESTING.md — PRSH Test Suite
 
-> Status: **Phases 0–4 implemented** (only the optional Tier 5 smoke remains).
-> This document specifies the regression-protection test suite for
-> ProjectRioStreamHelper and tracks its phased rollout (see [Rollout](#rollout)).
->
-> **Run it now:**
-> ```bash
-> ./venv/bin/python -m pytest          # backend (175 tests, ~1.4s)
-> npm run test:run                     # frontend (vitest, 31 tests)
-> ```
+What the suite protects, how it is laid out, and the rules that keep it
+trustworthy. The *how-to* (commands, isolated boots, fixture usage, per-area
+verification recipes) lives in [`.claude/skills/run-and-verify/SKILL.md`](.claude/skills/run-and-verify/SKILL.md);
+this file is the design it follows.
 
-## 1. Goal & philosophy
+```bash
+./venv/bin/python -m pytest          # backend  (~1,540 tests, ~13s)
+npm run test:run                     # frontend (vitest, ~1,510 tests / 76 files, ~25s)
+npm run vite:lint                    # ESLint, --max-warnings 0
+```
 
-The app currently ships with **zero automated tests** (CLAUDE.md lists this as a
-known limitation; CI only builds releases). The goal is a suite that lets a
-contributor refactor `provider.py`, add a layout, or touch the state store and
-get a fast, deterministic **"you broke X"** signal before it reaches a stream.
+Both suites run in CI ([`.github/workflows/test.yml`](.github/workflows/test.yml))
+on every PR and on pushes to `main` / `2.0.0`, and **both must stay green**.
 
-Principles, in priority order:
-
-1. **Protect the logic that silently regresses.** Pure functions and stateful
-   machines (side preservation, state diffing, settings migration, stat math)
-   are where bugs hide and where a unit test pays for itself many times over.
-2. **Fast and deterministic.** No real network, no real filesystem watching, no
-   `sleep`-based timing, no running server for the bulk of the suite. The whole
-   unit tier should run in a few seconds so it runs on every save.
-3. **Test behavior at the seam, not implementation.** Assert on `State` contents
-   and emitted SocketIO frames, not on private call counts, so refactors don't
-   break tests that should still pass.
-4. **Pin the contracts that overlays and OBS depend on.** Layout variant URLs,
-   the `?scoreboard=N` default, the `v1.state.set` / `v1.state.set_batch` event
-   shapes, and the `score.{N}.*` key names are external contracts. Lock them.
-5. **Avoid brittle E2E.** A small smoke layer is worth it; a large Selenium-style
-   suite is not, for a single-maintainer project.
-
-Non-goals: 100% coverage, testing Mantine/React internals, testing pyrio
-(it's an upstream submodule with its own tests), pixel-diffing overlays.
+> History: this file began (July 2026) as a phased rollout plan for an app with
+> no tests. Every phase shipped; the plan is retired and this is the suite as it
+> stands. The optional end-to-end smoke tier was never built — driving a real
+> instance is `scripts/prsh-agent.py` + the `drive-the-app` skill instead.
 
 ---
 
-## 2. Tooling
+## 1. Philosophy
 
-### Backend (Python)
+In priority order:
 
-| Tool | Why |
-|------|-----|
-| `pytest` | Standard runner. |
-| `pytest-asyncio` (`asyncio_mode = "auto"`) | Almost every state path is `async`. Auto mode lets `async def test_*` run without per-test decorators. |
-| `pytest-cov` | Coverage reporting in CI (report-only, no hard gate initially). |
-| `httpx` (already a dep) + `fastapi.testclient` | Exercise API routes in-process. |
+1. **Protect the logic that silently regresses.** The side cascade, series
+   crediting, projector key ownership, state diffing, settings migrations and
+   stat formatting are where a bug produces a plausible-looking broadcast with
+   the wrong thing on it. A unit test pays for itself many times over there.
+2. **Fast and deterministic.** No real network, no filesystem watching, no
+   `sleep`-based timing, no running server. The whole pair runs in well under a
+   minute, so there is no reason to run a subset and stop.
+3. **Test behavior at the seam, not the implementation.** Assert on `State`
+   contents, emitted SocketIO frames and rendered DOM — not on private call
+   counts — so a refactor that keeps the behavior keeps the tests. The
+   exception is where the *count* is the contract (a `SetBatch` is one frame).
+4. **Pin the external contracts.** Layout URLs and variants, the `?scoreboard=N`
+   default, the `v1.state.set` / `set_batch` frame shapes (both `items` and
+   `augmented`), `score.{N}.*` key names, and theme slot/modifier grammar are
+   read by OBS sources and design packages PRSH does not control.
+5. **One fact, one statement — and a test where it has to live twice.** When a
+   rule must exist in both runtimes, the test compares them (§4).
+6. **Code, tests and CLAUDE.md never disagree.** A change to behavior a test
+   encodes updates the test in the same commit.
 
-Add as a Poetry dev group so they never enter the frozen build:
-
-```toml
-# pyproject.toml
-[tool.poetry.group.dev.dependencies]
-pytest = ">=8.3"
-pytest-asyncio = ">=0.24"
-pytest-cov = ">=5.0"
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-pythonpath = ["."]    # so tests can `import server` when run from repo root
-```
-
-Run: `./venv/bin/python -m pytest` (or `poetry run pytest`).
-
-### Frontend (JS/React)
-
-| Tool | Why |
-|------|-----|
-| `vitest` | Native Vite integration — reuses `vite.config.js`, no separate build. |
-| `jsdom` | DOM for component/store tests. |
-| `@testing-library/react` + `@testing-library/user-event` | Behavior-focused component tests. |
-| `@testing-library/jest-dom` | Readable DOM matchers. |
-
-```jsonc
-// package.json scripts
-"test": "vitest",
-"test:run": "vitest run",
-"test:cov": "vitest run --coverage"
-```
-
-```js
-// vite.config.js — add:
-test: {
-  environment: 'jsdom',
-  globals: true,
-  setupFiles: './src/test/setup.js',   // imports @testing-library/jest-dom
-  include: ['src/**/*.test.{js,jsx}'],
-}
-```
-
-> Pure-JS modules (`statCalc.js`, `data/msb.js`) don't need jsdom and run fastest;
-> they're the first frontend target.
+Non-goals: coverage targets, testing React/Radix internals, testing pyrio (it is
+a submodule with its own tests), pixel-diffing overlays.
 
 ---
 
-## 3. Test architecture
+## 2. Layout
 
-### Directory layout
+### Backend — `tests/`
 
 ```
-tests/                              # Python — mirrors server/ package layout
-├── conftest.py                     # shared fixtures (singleton reset, socket mock)
-├── data/                           # fixture JSON: HUD games, API games, layout HTML
-│   ├── hud_game_top1.json
-│   ├── hud_game_backtoback.json
-│   ├── ongoing_game.json
-│   └── completed_game.json
+tests/
+├── conftest.py            # autouse isolation + opt-in helpers (§3)
+├── data/hud/              # captured decoded.hud.json frames (game1_start, game1_mid, game2_start)
+├── data/design/           # a real designer export for the theme compiler
+├── fixtures/              # cross-runtime case tables (board_lifecycle.json)
 ├── unit/
-│   ├── utils/test_deep_dict.py
-│   ├── utils/test_json.py
-│   ├── test_settings_logic.py      # _deep_merge, redaction, migrations
-│   ├── test_state.py               # SetBatch/Save/diffing/export
-│   ├── rio/test_provider_parse.py  # parse_game_data + resolvers
-│   ├── rio/test_side_preservation.py   # the crown jewel
-│   ├── rio/test_stats_tracker.py
-│   ├── rio/test_rotation.py
-│   ├── rio/test_game_pool.py
-│   └── api/test_layouts.py         # _derive_type, variant expansion
+│   ├── rio/               # provider parsing, apply-to-state, side cascade,
+│   │                      #   game end, pools, rotation, stats tracker, state completeness
+│   ├── api/               # layouts catalog, match binding / series cap / start.gg,
+│   │                      #   schedule (queues, next-up, waiting reasons), game modes
+│   ├── startgg/           # parsers, auto-fill
+│   └── test_*.py          # state, settings + migrations, participants + books,
+│                          #   projectors, postgame, automations, design packages,
+│                          #   theme compiler + Figma round trip, parity pins
 └── integration/
-    ├── test_api_state.py           # FastAPI TestClient
-    └── test_api_routes.py
-
-src/                                # JS — co-located *.test.{js,jsx}
-├── test/setup.js
-├── utils/statCalc.test.js
-├── context/store.test.js
-├── context/socket.test.jsx
-└── routes/layouts/layouts.test.js  # GLOBAL_DESIGN defaults + setting resolution
+    ├── test_api.py              # routes over TestClient
+    ├── test_scoreboards_api.py  # add / remove / reset, per-board key teardown vs id re-use
+    ├── test_branding_presets.py
+    └── test_invariants.py       # cross-model rules (§5)
 ```
 
-### The singleton-reset problem (most important fixture)
+Integration tests run **in-process** over `fastapi.testclient.TestClient` and
+`router_v1` — no uvicorn, no SocketIO boot.
 
-`State`, `Settings`, `RioGameDataProvider`, `StatsTracker`, `RotationManager`,
-`OngoingGamePool`, `CompletedGamePool` are class-level singletons. Class state
-**leaks between tests** unless reset. An `autouse` fixture in `conftest.py`
-snapshots and restores it:
+### Frontend — co-located
 
-```python
-# tests/conftest.py
-import copy, asyncio, pytest
-from unittest.mock import AsyncMock
-import server  # the package exposing the shared `socketio` instance
+Tests sit next to the module they cover (`rack.jsx` → `rack.test.jsx`), never in
+a mirror tree. The bulk is in `src/routes/production/` (console, stage panels,
+kit) and `src/routes/design/` (the Design tab).
 
-@pytest.fixture(autouse=True)
-def reset_singletons(monkeypatch):
-    from server.state import State
-    from server.settings import Settings
-    from server.rio.provider import RioGameDataProvider as P
-
-    # snapshot
-    saved = {
-        "state": copy.deepcopy(State.state),
-        "last": copy.deepcopy(State.last_state),
-        "changed": list(State.changed_keys),
-        "settings": copy.deepcopy(Settings.settings),
-    }
-    State.state, State.last_state, State.changed_keys = {}, {}, []
-    State.queue = asyncio.Queue()
-    # provider side-preservation flags
-    P._prev_player_sides, P._prev_inning = {}, None
-    P._sides_swapped = P._user_overridden = False
-    P._hud_targets = []
-    yield
-    State.state = saved["state"]; State.last_state = saved["last"]
-    State.changed_keys = saved["changed"]; Settings.settings = saved["settings"]
-
-@pytest.fixture(autouse=True)
-def mock_socket(monkeypatch):
-    """Capture emitted frames; never touch a real SocketIO server.
-    `socketio` is one shared AsyncServer instance imported by State/Settings,
-    so patching the instance method covers every caller."""
-    emit = AsyncMock()
-    monkeypatch.setattr(server.socketio, "emit", emit)
-    return emit
-```
-
-Settings reads are sync (`Settings.Get`) against the class dict, so tests just
-assign `Settings.settings[...]` or use a small `set_settings(**kw)` helper.
-File-export is **off by default** (`general.disable_export: True`), so `State`
-tests don't hit disk unless they explicitly enable it (then use `tmp_path`).
+The one exception is the **overlay runtime** under `public/layout/lib/` (mounts,
+`mount-utils`, `rio-data`, port colours, type roles): its tests are in
+`tests/overlay/`, because everything under `public/` is served as-is and a test
+file there would be a page anyone could load. Those modules are plain ES modules
+and import straight into vitest.
+Config is the `test:` block in `vite.config.js` (jsdom, globals, setup at
+`src/test/setup.js`).
 
 ---
 
-## 4. Prioritized test inventory
+## 3. Isolation
 
-Tiers are ordered by **(value × regression-risk) ÷ cost**. Implement top-down.
+### Backend: the conftest contract
 
-### Tier 1 — Pure logic (highest ROI, no async, no mocks)
+Three **autouse** fixtures give every test a clean world:
 
-| Target | File | What to lock |
-|--------|------|--------------|
-| `deep_get/set/unset` | `utils/test_deep_dict.py` | nested create, missing-path default, non-dict traversal returns default, `unset` no-ops on missing, deep `set` builds intermediate dicts. |
-| `layouts._derive_type` | `api/test_layouts.py` | `scenes/*`→`scene`, `bracket/*`→`bracket`, trailing-digit strip (`scoreboard1`→`scoreboard`), `teamlogo`→`teamlogo`, empty-stem fallback. |
-| `layouts._parse_html_meta` | same | extract `body{width/height}`, parse `<meta overlay-settings>` CSV, return `(None,None,None)` on unreadable/missing. |
-| `provider._stadium_slug` / `_resolve_char` / `_resolve_logo` / `_resolve_position` | `rio/test_provider_parse.py` | int-id → name via `LookupDicts`, passthrough strings, `bool`/`None`/`-1`/`""` → `''`, `Inv`/`None` position → `''`. |
-| `provider.parse_game_data` | same | full HUD JSON → entrants[2], roster of 9, Top/Bottom→batting side, batter/pitcher resolution, runner-name resolution from roster index, `game_mode`/`tag_set`. |
-| `provider._get_msb_team_name` | same | delegates to pyrio `team_name`; bad captain index → `''`. |
-| `settings._deep_merge` | `test_settings_logic.py` | loaded overrides defaults, missing default keys preserved, nested dict merge, non-dict-over-dict replacement. |
-| `settings.redact_value/redact_settings` | same | `challonge.api_key` redacted to `***` when set / `""` when empty; non-secret untouched; deep copy (no mutation of input). |
-| `statCalc.deriveBatting` | `utils/statCalc.test.js` | AVG/SLG/OBP/OPS/SO%, divide-by-zero → 0, rounding (`.toFixed(3)`). |
-| `statCalc.derivePitching` | same | ERA (27×ER/outs), K%, OPP AVG, IP `floor.mod` formatting, zero-outs → 0. |
+- **`mock_socket`** — `server.socketio.emit` becomes an `AsyncMock`, returned so
+  a test can assert the frames emitted.
+- **`isolate_user_data`** — every persisted path (state, settings, stream
+  labels, participants) is redirected into the test's `tmp_path`. **No test may
+  touch the real `user_data/`.**
+- **`reset_singletons`** — snapshots and restores the class-level state of every
+  singleton: `State`, `Settings`, `RioGameDataProvider`, `StatsTracker`,
+  `PoolManager`, the ongoing/completed game pools, `PostGame`,
+  `StatFileWatcher`, `GameEndWatcher`, `Automations`, `Announcements`,
+  `Participants` (+ books) and `StartGGProvider`. **A new singleton with mutable
+  class state is added here in the same change that introduces it** — a missing
+  one leaks across tests as an order-dependent failure.
 
-### Tier 2 — Stateful machines & async core (the regressions that bite)
+Opt-in helpers: `set_setting(key, value)` (bumps `Settings.revision` so cached
+consumers see it), `rig(*ids)` (the default rig is one board and bind routes
+404 anything outside it), `pin_player(rio_name, side)` (writes the address-book
+row the cascade's `pin` layer reads — a pin is `prefs.side` on a person, never a
+setting).
 
-| Target | File | What to lock |
-|--------|------|--------------|
-| **`provider._preserve_player_sides`** | `rio/test_side_preservation.py` | Full truth table — see [§5](#5-side-preservation-truth-table). This is the single most valuable test file. |
-| `provider._is_new_game` / `_swap_entrants` / `toggle_sides_swapped` | same | `prev None`→new, inning decrease→new; swap reverses entrants **and** scores; toggle sets `_user_overridden`. |
-| `State.SetBatch` + `Save` + `_compute_changes` | `test_state.py` | one batch → **one** emitted frame; `changed_keys` tracked; `Save` diffs only tracked keys; no change when value equal; `last_state` updated only for changed paths; snapshot-and-clear race (append during Save lands in next batch). |
-| `State.Set/Unset` emit shapes | same | `v1.state.set` payload `{key,value,sid}`, `v1.state.unset` `{key,sid}`, batch `{items,sid}`. |
-| `State.Export` (export enabled) | same | with `disable_export=False` + `tmp_path`, set→writes `.txt`, unset→removes, `None`→empty file; string-coerced flag (`"0"`,`"false"`). |
-| `Settings.Load` migrations | `test_settings_logic.py` | legacy `server.host` (non-loopback) → `allow_lan=True` then `host` popped; overlay `schema_version<2` strips promoted globals from per-layout dicts, sets v2. (Drive via `tmp_path` settings.json.) |
-| `apply_parsed_game_to_state` / `apply_completed_game_to_state` | `rio/test_provider_parse.py` | correct `score.{N}.*` keys, `home_team` 1-vs-2 under swap, completed-game clears live fields, captain in slot 0 + slots 1-8 cleared. |
-| `StatsTracker` merge | `rio/test_stats_tracker.py` | API-historical + HUD-current merge, indexed lookup correctness, formulas match `statCalc.js`, `reset_scoreboard`, sides-swapped mapping. |
-| `RotationManager` resume gate | `rio/test_rotation.py` | resume only if scoreboard active **and** source==`rotator` **and** `enabled` **and** non-empty `game_ids`; stale enabled flag cleared otherwise. (Mock the API client.) |
-| `game_pool._sanitize_row` / `apply_completed_game_dict` | `rio/test_game_pool.py` | pandas Timestamp→ISO, NaN handling, linescore `{"0":[],"1":[]}` split. |
+### Frontend: seed the stores, don't mock the data layer
 
-> **Cross-language invariant:** `statCalc.js` "mirrors `stats_tracker.py` formulas"
-> (per its own docstring). Add a shared fixture of raw counts → expected derived
-> values, asserted in **both** `test_stats_tracker.py` and `statCalc.test.js`, so
-> the two implementations can't silently drift.
+Zustand stores are the seam: a test seeds `useStateStore` / `useSettingsStore` /
+`useStagingStore` directly and renders the real component. Reset every store a
+component reads in `beforeEach` — they are module singletons.
 
-### Tier 3 — API surface (FastAPI TestClient, in-process)
-
-| Target | What to lock |
-|--------|--------------|
-| `GET /api/v1/state`, `GET/PUT /state/{key}` | round-trip a key; PUT updates State and emits. |
-| `GET /api/v1/layouts` | full variant matrix: scoreboard → 5 `?size=` entries; stats/roster/teamlogo/controller → 2 `?team=` entries; `supportedSettings` present when `<meta>` exists; bracket falls back to 1920×1080. Run against the **real** `public/layout/` tree so adding/breaking a layout is caught. |
-| `POST /rio/swap` | toggles `_sides_swapped`, re-applies to state. |
-| `GET/PUT /settings/{key}` | secret keys redacted on read; non-secret round-trips. |
-| `GET /logs/{name}` | path-traversal guard rejects `../`. |
-
-### Tier 4 — Frontend store & socket
-
-| Target | What to lock |
-|--------|--------------|
-| `context/store.jsx` | `v1.state.set` and `v1.state.set_batch` both update the store identically; shallow-merge semantics; unset removes keys. |
-| `context/socket.jsx` | RAF batching coalesces multiple frames into one store update; **echo filter** (self-`sid` ignored); reconnect requests full state. |
-| `routes/layouts/layouts.jsx` | `GLOBAL_DESIGN_DEFAULTS` completeness vs `GLOBAL_DESIGN_KEYS`; setting resolution precedence (per-layout override > global > default); `OVERRIDABLE_GLOBAL_KEYS` honored. |
-| A couple of components | `ScoreControls` swap button calls API; `PlayerSlot` renders side 1/2 from store. (Keep light.) |
-
-### Tier 5 — Overlay contract & smoke (optional, low volume)
-
-- `public/layout/lib/overlay-base.js` setting resolution mirrors `layouts.jsx`
-  (it's the OBS-side twin). Test with a jsdom harness feeding a fake state.
-- One end-to-end smoke: boot the app, hit `/api/v1/state`, load
-  `scoreboard.html?scoreboard=1`, push a state frame, assert DOM updates. Gate
-  behind a marker so it's opt-in (`pytest -m e2e`).
+`vi.mock` is for **boundaries** only. The suite has eight, and every one stands
+in for something the test is not about: two external clients
+(`socket.io-client`, `obs-websocket-js`), a third-party widget
+(`react-colorful`), the toast (×2), and three context modules' REST writers —
+partial mocks that keep the real store and replace only the call to the server.
 
 ---
 
-## 5. Side-preservation truth table
+## 4. Cross-runtime pins
 
-`_preserve_player_sides` is the highest-risk logic in the app. Drive it as a
-parametrized table. Setup per case: build a `parsed` dict with
-`entrants[0][0].rioName = A`, `entrants[1][0].rioName = B`, a given `inning`,
-the relevant `Settings`, and pre-set class flags; call; assert `_sides_swapped`,
-entrant order, and `_user_overridden`.
+Several rules must exist in Python and JavaScript. Where the two cannot share
+code, a test pins them together — each fails the moment one side changes alone.
 
-| # | Precondition | Pin | Event | Expected |
-|---|--------------|-----|-------|----------|
-| 1 | `prev_inning=None` | none | first game | no swap; `prev_sides={A:0,B:1}` |
-| 2 | new game | A→Team 1, A on side 0 | new | no swap |
-| 3 | new game | A→Team 2, A on side 0 | new | **swap** (pin lands A on right) |
-| 4 | new game | A→Team 1, A on side 1 | new | **swap** (pin lands A on left) |
-| 5 | new game, `prev_sides={A:1,B:0}` | none | new, A now side 0 | **swap** (back-to-back keeps A on right) |
-| 6 | new game, `prev_sides={A:0,B:1}` | none | new, same order | no swap |
-| 7 | new game | A→Team 1 (matches) | new | pin wins; back-to-back **not** consulted |
-| 8 | new game | both flags set from prev game | new | flags reset to `False` before applying |
-| 9 | mid-game (`inning` not < prev), `_user_overridden=True`, `_sides_swapped==pin_swap` | pin present | mid | `_user_overridden` cleared |
-| 10 | mid-game, `_user_overridden=True`, no pin | none | mid | sides held; no reset |
-| 11 | `toggle_sides_swapped()` | — | manual | flips `_sides_swapped`, sets `_user_overridden=True` |
+| Fact | Pinned by |
+|------|-----------|
+| Scoreboard sizes and canvases (`theme_contracts.CONTRACTS`) | `tests/unit/test_size_dims_parity.py` |
+| Which elements come in per-side pairs (`perSide` / `_TEAM_VARIANTS`) | `tests/unit/test_per_side_parity.py` |
+| Catalog display names | `tests/unit/test_catalog_names_parity.py` |
+| A board's lifecycle (`lifecycle_of` / `boardLifecycle`) | one case table, `tests/fixtures/board_lifecycle.json`, read by `test_board_lifecycle_parity.py` **and** `src/routes/production/board/board-lifecycle.test.js` — a behaviour, so parity is shared cases rather than parsing one language from the other |
+| A layout's `<meta>` whitelist vs `LAYOUT_SETTINGS` | `src/routes/production/stage/eventheader.test.jsx` and the layouts tests |
+| Theme slot and modifier grammar survives the Figma round trip | `tests/unit/test_figma_template.py` (slot counts per name; every `data-*` a mount reads is in `_MODIFIERS`) |
+| Every layout declares a sample bundle | `tests/overlay/overlay-sample.test.js` |
 
-These mirror the rules in CLAUDE.md (§ Player-Side Preservation) — keep the table
-and that doc in sync.
+Where one runtime can **import** the other's module, it does instead of pinning
+a copy: the console imports `container-members.js`, `spotlight-intent.js`,
+`match-format.js` and `scheduleRows` from the overlay runtime.
 
 ---
 
-## 6. CI integration
+## 5. The invariant layer
 
-Implemented as [`.github/workflows/test.yml`](.github/workflows/test.yml) — two
-parallel jobs (`backend` / `frontend`), separate from `build-release.yml`, on
-every PR and pushes to `main`.
+Every subsystem is unit-tested and correct alone; the bugs no module's tests can
+see are the rules **between** models — a projector and a feed sharing
+`score.{N}.player.{T}.*`, a container's feed and its roster, `schedule.queue`
+and the orders it projects. They are written once in `server/invariants.py` and
+run from three places off that one list: `tests/integration/test_invariants.py`,
+`GET /api/v1/invariants`, and `scripts/prsh-agent.py doctor --assert`.
 
-**Dependency install uses pip, not poetry.** `build-release.yml` already installs
-with `pip install .` (poetry-core reads `[tool.poetry.dependencies]` at build
-time), and `poetry.lock` is not consumed anywhere in CI. So the test job mirrors
-that: `pip install .` for the runtime deps + `pip install pytest pytest-asyncio
-pytest-cov` for the dev group. This sidesteps poetry-lock consistency entirely —
-adding the dev group to `pyproject.toml` does **not** require regenerating the
-lock for any workflow to pass.
+A workflow test drives the routes a producer's clicks go through, then asserts
+the invariants hold. Seed a live board through the provider (not a hand-written
+`SetBatch`), or the re-settle path silently no-ops and the test passes for the
+wrong reason. Each check has a test that watches it fail.
 
-Gotchas baked into the workflow:
+---
 
-> **`submodules: recursive` is mandatory.** pyrio lives at `server/rio/pyrio`; without
-> it `server.rio.pyrio` fails to import and every provider/stats test errors at
-> collection. This is the single most likely CI break for this repo.
->
-> `RioStatLib` (imported lazily inside `pyrio/stat_file_parser.py`) is **not** a
-> declared dependency and isn't installed — that's fine, no test path calls the
-> function that imports it. Don't "fix" it by adding it to `pyproject`.
+## 6. CI
+
+`.github/workflows/test.yml` runs two parallel jobs, separate from
+`build-release.yml`:
+
+- **Backend** — `pip install .` (the same install path the release build uses;
+  `poetry.lock` is not consumed in CI) plus `pytest pytest-asyncio pytest-cov`,
+  then `pytest --cov=server`.
+- **Frontend** — `npm ci`, lint, `vitest run`.
+
+Gotchas:
+
+- **`submodules: recursive` is mandatory.** pyrio lives at `server/rio/pyrio`;
+  without it every provider and stats test errors at collection.
+- **Push a submodule before the PRSH commit that pins it**, or CI dies in
+  `git submodule update` with `upload-pack: not our ref` (see CLAUDE.md → Git).
+- `RioStatLib` (imported lazily inside pyrio) is not a declared dependency and
+  no test path reaches it. Don't "fix" that by adding it to `pyproject`.
 
 ---
 
 ## 7. Conventions
 
-- **One behavior per test**, named `test_<unit>_<condition>_<expected>`.
-- **Parametrize** truth tables (`@pytest.mark.parametrize`, `it.each`) instead of
-  copy-pasting.
-- **Fixture data over inline blobs.** Real HUD/API JSON lives in `tests/data/`;
-  capture a real `decoded.hud.json` and a real `/games` row (scrubbed) once.
-- **Assert on outcomes** (State contents, emitted frame, returned dict), not on
-  internal call sequences, except where the *number* of emitted frames is itself
-  the contract (SetBatch = 1 frame).
-- **No real time/network/FS** in unit tiers. Mock `stats_api`, use `tmp_path`,
-  monkeypatch the HUD watcher.
-- When a test documents a known-correct edge case, add a one-line `# why` so a
-  future reader doesn't "fix" the assertion.
-
----
-
-## 8. Rollout
-
-| Phase | Deliverable | Outcome |
-|-------|-------------|---------|
-| **0** ✅ | Tooling: dev deps, `conftest.py` (singleton/socket fixtures), `vite.config` test block, `src/test/setup.js`, `npm`/`pytest` scripts. | `pytest` and `vitest` run green. |
-| **1** ✅ | Tier 1 (pure logic, both languages): `deep_dict`, `json`, `layouts`, settings merge/redaction, provider resolvers + `parse_game_data`, `statCalc.js`. | Fast, dependency-free regression net over the math and parsing. **88 py + 9 js tests.** |
-| **2** ✅ | Tier 2: `test_side_preservation.py` (table in §5), `test_state.py`, `test_settings_migrations.py`, `test_apply_to_state.py`, `test_stats_tracker.py`, `test_game_pool.py`, `test_rotation.py`. | Core stateful behavior locked. **+74 py tests (162 total).** |
-| **3** ✅ | Tier 3 API (`tests/integration/test_api.py`) + Tier 4 (`src/context/store.test.js`, `src/context/socket.test.jsx`, `src/routes/layouts/designConstants.test.js`). | Contracts and frontend wiring covered. **+13 py, +22 js.** |
-| **4** ✅ | CI workflow ([`.github/workflows/test.yml`](.github/workflows/test.yml), §6). | Every PR gated; "no backslide" enforced. |
-
-Phases 0–4 are **done** — the suite (**175 py + 31 js**) gates every PR. The only
-remaining item is the optional Tier 5 smoke (overlay-base.js resolution + one
-end-to-end boot), deferred as low-ROI for a single-maintainer project.
-
-> **Tier 4 note:** `layouts.jsx`'s design constants (`GLOBAL_DESIGN_KEYS`,
-> `GLOBAL_DESIGN_DEFAULTS`, `OVERRIDABLE_GLOBAL_KEYS`, `LAYOUT_SETTINGS`) were
-> extracted to [`src/routes/layouts/designConstants.js`](src/routes/layouts/designConstants.js)
-> so they're testable without importing the 2300-line Mantine component. Behavior
-> unchanged; verified with `npm run build`.
-
-### conftest.py fixtures (implemented)
-
-Three autouse fixtures make the singleton-heavy server testable:
-- **`mock_socket`** — replaces `server.socketio.emit` with an `AsyncMock`; returned
-  so tests assert emitted frames (e.g. SetBatch == 1 frame).
-- **`isolate_user_data`** — redirects `State`/`Settings` persisted paths into a
-  per-test `tmp_path`; no test touches the real `user_data/`.
-- **`reset_singletons`** — snapshots/restores class state for `State`, `Settings`,
-  `RioGameDataProvider`, `StatsTracker`, `RotationManager` around every test.
-
-Plus **`set_setting(key, value)`** for dotted-key settings overrides.
+- **One behavior per test**, named for the behavior. Where a test documents a
+  known-correct edge case, a one-line comment says why, so a later reader does
+  not "fix" the assertion.
+- **Parametrize truth tables** (`@pytest.mark.parametrize`, `it.each`) rather
+  than copy-pasting — the side cascade (`tests/unit/rio/test_side_preservation.py`)
+  is the model.
+- **Real captured data over inline blobs** — HUD frames in `tests/data/hud/`,
+  shared by the tests and `scripts/replay-hud.py`.
+- **Stub a browser measurement the way a browser answers it.** A detached SVG
+  node measures as zero rather than throwing; a stub that measured it anyway
+  would make a test that cannot fail (see the ticker mount's bind-after-append
+  test).
+- **A test that passes with the fix reverted is not a test of the fix** — check
+  that it fails first.

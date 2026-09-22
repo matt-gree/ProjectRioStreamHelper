@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import copy_metadata
+
 block_cipher = None
 
 # Freeze the app version into server/_version.py before bundling. This is
@@ -26,17 +28,55 @@ _freeze = Path('scripts/freeze-version.py')
 if _freeze.is_file():
     subprocess.run([sys.executable, str(_freeze)], check=True)
 
+# The same version, for the OS-level metadata below (Windows VERSIONINFO, macOS
+# Info.plist). Both used to be HARDCODED — the plist said 1.0.0 for the whole
+# of 2.x, so Finder, Get Info and Spotlight all reported a version the app had
+# not shipped in a year, while this script sat two lines above resolving the
+# real one. Read it back from the file we just wrote.
+# Loaded by PATH, not by import: the file is `freeze-version.py` and a hyphen
+# is not a legal module name. server/settings.py already reaches it this way.
+def _resolve_app_version() -> str:
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location(
+            '_freeze_version', str(_freeze.resolve()))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.resolve_version()
+    except Exception:
+        return '0.0.0'
+
+
+_app_version = _resolve_app_version() if _freeze.is_file() else '0.0.0'
+
+
+def _win_version_tuple(v: str) -> tuple:
+    """`2.0.0-prerelease.14` -> (2, 0, 0, 0).
+
+    A Windows VERSIONINFO block takes four INTEGERS and nothing else, so the
+    prerelease tail and the git suffix have to come off. The readable string
+    keeps the full version; only the numeric field is reduced.
+    """
+    core = v.lstrip('vV').split('-')[0].split('+')[0]
+    parts = []
+    for piece in core.split('.')[:4]:
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            break
+    while len(parts) < 4:
+        parts.append(0)
+    return tuple(parts[:4])
+
 # Freeze the bundled gc-overlay submodule into its own one-folder app before
-# we vendor it below. gc-overlay only functions on macOS, so it is built and
-# bundled in macOS builds only — Windows builds omit it entirely (UI + API
-# gate the feature off there too). Builds in an isolated venv (gc-overlay's
-# own deps stay out of PRSH's interpreter). Honors SKIP_GC_OVERLAY_BUILD=1.
+# we vendor it below. Built on every platform as of gc-overlay 1.1.0, which
+# carries a transport for each. Builds in an isolated venv (gc-overlay's own
+# deps stay out of PRSH's interpreter). Honors SKIP_GC_OVERLAY_BUILD=1.
 # See scripts/build-gc-overlay.py.
 _gc_overlay_dist = Path('gc-overlay/dist/gc-overlay')
-if platform.system() == 'Darwin':
-    _gc_build = Path('scripts/build-gc-overlay.py')
-    if _gc_build.is_file():
-        subprocess.run([sys.executable, str(_gc_build)], check=True)
+_gc_build = Path('scripts/build-gc-overlay.py')
+if _gc_build.is_file():
+    subprocess.run([sys.executable, str(_gc_build)], check=True)
 
 # PyInstaller on Windows silently drops files inside hidden (dot-prefixed)
 # directories, which strips dist/.vite/manifest.json from the bundle and
@@ -50,6 +90,23 @@ if _vite_src.is_file():
 # Platform-specific separator for --add-data paths
 SEP = ';' if platform.system() == 'Windows' else ':'
 
+def _public_game_assets() -> list:
+    """`public/game_assets` minus the user-supplied MSB pack.
+
+    Returns one (src, dest) per top-level entry so a new Rio logo is picked up
+    with no edit here, while `msb/` can never ride along. See the note at the
+    call site for why that distinction is load-bearing.
+    """
+    root = Path('public/game_assets')
+    out = []
+    for child in sorted(root.iterdir()) if root.is_dir() else []:
+        if child.name == 'msb':
+            continue
+        dest = str(root) if child.is_file() else str(root / child.name)
+        out.append((str(child), dest))
+    return out
+
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -62,9 +119,19 @@ a = Analysis(
         *([('dist/vite_manifest.json', 'dist')] if _vite_staged.is_file() else []),
         ('dist/index.html', 'dist'),
 
-        # Public directory (game assets, layouts, favicon, tray logo)
-        ('public/game_assets', 'public/game_assets'),
+        # Public directory (game assets, layouts, design packages, favicon, tray logo)
+        #
+        # game_assets is enumerated rather than copied wholesale, to keep
+        # `public/game_assets/msb/` OUT of the bundle. That folder is
+        # .gitignored (it is the developer's own copy of the MSB image pack,
+        # which PRSH does not ship — Nintendo IP, user-supplied at runtime
+        # under user_data/). A blanket copy meant the artifact's size and its
+        # CONTENTS depended on whose machine built it: CI produced ~30kB of Rio
+        # logos, while a local build silently baked in 75MB of game rips and
+        # shipped them. Non-reproducible, and the wrong thing to hand someone.
+        *_public_game_assets(),
         ('public/layout', 'public/layout'),
+        ('public/design', 'public/design'),
         ('public/favicon.png', 'public'),
         ('public/logo.png', 'public'),
         ('public/logo.ico', 'public'),
@@ -72,22 +139,62 @@ a = Analysis(
         ('public/logo_tray.png', 'public'),
         ('public/logo_tray.icns', 'public'),
 
-        # pyrio submodule data
+        # pyrio submodule data. The hit simulator (Character Spotlight per-AB
+        # trajectories) reads these off disk via __file__-relative paths, so
+        # they must be copied into the bundle — PyInstaller only bundles .py
+        # modules by default. Missing them makes simulate_contacts raise
+        # FileNotFoundError, which server/postgame/capture.py swallows into an empty spotlight.
         ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
+        ('server/rio/pyrio/constants/character_attributes.csv', 'server/rio/pyrio/constants'),
+        ('server/rio/pyrio/constants/stadiums', 'server/rio/pyrio/constants/stadiums'),
 
-        # Bundled gc-overlay (frozen one-folder app, built above) — macOS
-        # only. PRSH launches the nested binary as a managed subprocess. Lands
-        # under the bundle root at gc-overlay/ — see controller_overlay.py.
+        # RioVisualizer submodule: pure-Python `rio_visualizer` package
+        # (server/rio/hit_visualizer.py imports rio_visualizer.api). Lives
+        # outside server/, so PyInstaller's import analysis never traces it —
+        # server/paths.py::ensure_rio_visualizer_on_path() instead adds
+        # sys._MEIPASS/rio-visualizer to sys.path at runtime and expects a
+        # plain `import rio_visualizer` to find it there, same as the
+        # dev-mode checkout layout. Bundled as loose source, not analyzed.
+        *([('rio-visualizer/rio_visualizer', 'rio-visualizer/rio_visualizer')]
+          if Path('rio-visualizer/rio_visualizer').is_dir() else []),
+
+        # RioVisualizer's web assets (renderer.js, themes.js, etc.) — served
+        # at /rio-visualizer by server/server.py for the Character Spotlight
+        # fed element on the Callout Stage. Same submodule, separate subtree
+        # from the Python package above; PyInstaller has no reason to trace
+        # static JS, so it must be listed explicitly too.
+        *([('rio-visualizer/web', 'rio-visualizer/web')]
+          if Path('rio-visualizer/web').is_dir() else []),
+
+        # Bundled gc-overlay (frozen one-folder app, built above). PRSH
+        # launches the nested binary as a managed subprocess. Lands under the
+        # bundle root at gc-overlay/ — see controller_overlay.py.
         *([('gc-overlay/dist/gc-overlay', 'gc-overlay')]
-          if platform.system() == 'Darwin' and _gc_overlay_dist.is_dir() else []),
+          if _gc_overlay_dist.is_dir() else []),
 
         # Frozen version stamp (generated above by scripts/freeze-version.py).
         # Read at runtime by Config.Load() since `git describe` isn't
         # available inside a packaged .app/.exe.
         *([('server/_version.py', 'server')] if Path('server/_version.py').is_file() else []),
 
-        # Default user_data game config (only if directory exists)
-        *([('user_data/games', 'user_data/games')] if os.path.isdir('user_data/games') else []),
+        # A PACKAGE THAT READS ITS OWN VERSION AT IMPORT TIME NEEDS ITS
+        # .dist-info IN THE BUNDLE. PyInstaller bundles modules, not
+        # distribution metadata, so `importlib.metadata` finds nothing at
+        # runtime and the import raises PackageNotFoundError — which, from
+        # main.py's module-level `from server.state import State`, means the
+        # app dies before it reaches a single line of its own code (the
+        # frozen-build face of that is a PyInstaller "Unhandled exception in
+        # script" dialog, no log file, no server).
+        #
+        # Two links of the aiopath chain do this today and neither ships a
+        # PyInstaller hook: caio (`Distribution.from_name("caio").version`,
+        # since 0.9.26) and aiofile (`importlib.metadata.metadata("aiofile")`).
+        # The versions are unpinned, so `pip install .` on a build runner
+        # picks them up whenever upstream adds the call — which is exactly how
+        # this shipped broken on every platform at once. Collect the whole
+        # chain recursively rather than the two known readers, so the next
+        # link that grows a metadata lookup is already covered.
+        *copy_metadata('aiopath', recursive=True),
     ],
     hiddenimports=[
         # FastAPI + ASGI
@@ -117,7 +224,9 @@ a = Analysis(
         'watchfiles',
         'httpx',
         'aiopath',
-        'pillow',
+        # 'PIL' only — `pillow` is the DISTRIBUTION name, not an importable
+        # module, so listing it made PyInstaller log
+        # "ERROR: Hidden import 'pillow' not found" on every single build.
         'PIL',
         'pystray',
         'pystray._darwin',   # macOS tray backend
@@ -161,13 +270,33 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=['hooks/runtime_hook_chdir.py'],
+    runtime_hooks=['installer/runtime_hook_chdir.py'],
     excludes=[
-        # Exclude dev-only packages to reduce size
+        # Dev-only, and pyrio-only. pyrio is a general-purpose library and PRSH
+        # imports a slice of it: game_summary, draw/draw_stadium and
+        # hit_simulator/hit_sim_visualizer are the matplotlib users and nothing
+        # here reaches them, so the plotting stack is pure weight.
         'matplotlib',
         'scipy',
         'pytest',
         'setuptools',
+
+        # THE CRYPTOGRAPHY CHAIN, pulled in by nothing PRSH calls.
+        #
+        # pyrio talks to the Rio API through `requests`, and requests reaches
+        # `urllib3.contrib.pyopenssl` — a legacy shim for injecting pyOpenSSL
+        # as the TLS backend, deprecated in urllib3 2.x and inert unless a
+        # caller explicitly runs inject_into_urllib3(). Nothing does. But
+        # PyInstaller's analysis follows the import statically, which dragged
+        # in `cryptography` and its OpenSSL bindings: ~9MB of the bundle to
+        # support a code path that cannot execute. Ordinary HTTPS is unaffected
+        # — that goes through Python's own `ssl`/`_ssl`, which is untouched
+        # here. If a future dependency genuinely needs pyOpenSSL, this is the
+        # line that will tell you why it vanished.
+        'cryptography',
+        'OpenSSL',
+        'urllib3.contrib.pyopenssl',
+        'urllib3.contrib.securetransport',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -178,6 +307,41 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 _exe_icon = 'public/logo.ico' if platform.system() == 'Windows' else 'public/logo.icns'
+
+# ── Windows VERSIONINFO ───────────────────────────────────────────────────
+#
+# Without this, PRSH.exe → right-click → Properties → Details is BLANK: no
+# product name, no version, no company. That reads as "somebody's script" to a
+# user, and it is also one of the signals SmartScreen and AV engines weigh —
+# which matters more here than it would elsewhere, because these builds are
+# unsigned. It costs a generated file and nothing at runtime.
+_version_file = None
+if platform.system() == 'Windows':
+    _vt = _win_version_tuple(_app_version)
+    _version_file = Path('build') / 'win_version_info.txt'
+    _version_file.parent.mkdir(parents=True, exist_ok=True)
+    _version_file.write_text(f"""VSVersionInfo(
+  ffi=FixedFileInfo(filevers={_vt}, prodvers={_vt}, mask=0x3f, flags=0x0,
+                    OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([
+      StringTable('040904B0', [
+        StringStruct('CompanyName', 'Project Rio'),
+        StringStruct('FileDescription', 'ProjectRioStreamHelper'),
+        StringStruct('FileVersion', {_app_version!r}),
+        StringStruct('InternalName', 'PRSH'),
+        StringStruct('LegalCopyright',
+                     'Copyright (c) 2024 Joao Ribeiro Bezerra; '
+                     '(c) 2026 Matt Greene. MIT License.'),
+        StringStruct('OriginalFilename', 'PRSH.exe'),
+        StringStruct('ProductName', 'ProjectRioStreamHelper'),
+        StringStruct('ProductVersion', {_app_version!r}),
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
+""", encoding='utf-8')
 
 exe = EXE(
     pyz,
@@ -196,6 +360,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=_exe_icon,
+    version=str(_version_file) if _version_file else None,
 )
 
 coll = COLLECT(
@@ -218,9 +383,19 @@ if platform.system() == 'Darwin':
         name='PRSH.app',
         icon='public/logo.icns',
         bundle_identifier='com.projectrio.streamhelper',
+        # CFBundleShortVersionString was HARDCODED at '1.0.0' through the
+        # whole of 2.x, so Finder, Get Info and Spotlight reported a version
+        # the app had not shipped in a year. CFBundleVersion (the build
+        # string) was absent entirely, which macOS expects alongside it.
         info_plist={
-            'CFBundleShortVersionString': '1.0.0',
+            'CFBundleShortVersionString': '.'.join(
+                str(n) for n in _win_version_tuple(_app_version)[:3]),
+            'CFBundleVersion': _app_version,
             'CFBundleName': 'ProjectRioStreamHelper',
+            'CFBundleDisplayName': 'PRSH',
+            'NSHumanReadableCopyright':
+                'Copyright (c) 2024 João Ribeiro Bezerra; '
+                '(c) 2026 Matt Greene. MIT License.',
             'NSHighResolutionCapable': True,
         },
     )

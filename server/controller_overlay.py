@@ -8,7 +8,6 @@ WebSocket + HTML overlay that OBS can capture as a browser source.
 import asyncio
 import os
 import platform
-import signal
 import socket
 import subprocess
 import sys
@@ -18,10 +17,38 @@ from loguru import logger
 
 from server.settings import Settings
 
-# gc-overlay only functions on macOS (its Dolphin MemoryWatcher reader uses
-# AF_UNIX sockets and macOS-only config paths). PRSH gates the whole feature
-# — UI, API, and build bundling — on this. See CLAUDE.md "Controller Overlay".
-PLATFORM_SUPPORTED = platform.system() == "Darwin"
+# There is no platform gate. gc-overlay carries two peer transports as of
+# 1.1.0 — MemoryWatcher (AF_UNIX; macOS, Linux) and a process-memory poll
+# (Windows, Linux) — so every platform PRSH runs on can read a controller.
+# What varies is whether gc-overlay is actually PRESENT, which _find_gc_overlay
+# already answers; "supported" was standing in for "found" and hid the feature
+# on the one platform that needed to be able to test it.
+
+
+# A PRSH frozen build is windowed (PRSH.spec: console=False) and gc-overlay is
+# a console app (gc-overlay.spec: console=True — PRSH drains its stdout, and a
+# windowed PyInstaller exe has no stdout to drain). On Windows a console child
+# of a windowed parent has no console to inherit, so it ALLOCATES one: an empty
+# black terminal window appears beside the overlay and stays for the session.
+# CREATE_NO_WINDOW suppresses the allocation without touching the pipes, which
+# is why this is the fix rather than flipping the child to console=False.
+# No-op everywhere else: the flag only exists on Windows.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+
+def _child_env() -> dict:
+    """Environment for the gc-overlay child.
+
+    PYTHONUNBUFFERED because we hand the child a PIPE, and CPython
+    block-buffers stdout onto a pipe — so gc-overlay's transport diagnostics
+    ("Waiting for Dolphin/Project Rio to start...", the hooked/elevation
+    messages) sit in an 8 KB buffer and reach `_drain_output` long after the
+    producer needed them, or never. Honoured by a frozen build too: the
+    bootloader runs an ordinary CPython, which reads this at init.
+    """
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    return env
 
 
 def _port_free(port: int) -> bool:
@@ -107,6 +134,7 @@ def _read_gc_version(gc_dir: Path | None) -> str | None:
             text=True,
             timeout=15,
             cwd=str(gc_dir),
+            creationflags=_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -123,12 +151,7 @@ def _find_gc_overlay() -> Path | None:
     2. In-repo submodule: ./gc-overlay (PRSH vendors it as a submodule).
     3. Sibling directory: ../gc-overlay (dev convenience).
 
-    A custom override (settings controller_overlay.path) is applied by the
-    caller, not here.
     """
-    if not PLATFORM_SUPPORTED:
-        return None
-
     candidates: list[Path] = []
 
     if getattr(sys, "frozen", False):
@@ -151,7 +174,6 @@ class ControllerOverlay:
     _process: asyncio.subprocess.Process | None = None
     _task: asyncio.Task | None = None
     _port: int = 8069
-    _controller: int = 1
     _gc_overlay_path: Path | None = None
     _version: str | None = None
     _running: bool = False
@@ -160,23 +182,12 @@ class ControllerOverlay:
     @classmethod
     async def Start(cls):
         """Initialize and optionally auto-start the overlay."""
-        if not PLATFORM_SUPPORTED:
-            logger.debug("[controller_overlay] unsupported platform — feature disabled")
-            cls._gc_overlay_path = None
-            cls._version = None
-            return
-
+        # Detection only. There is no path override: gc-overlay ships inside
+        # every build and the submodule covers a source checkout, so a stored
+        # path could only ever point somewhere stale.
         cls._gc_overlay_path = _find_gc_overlay()
 
-        # Check for custom path in settings
-        custom_path = Settings.Get("controller_overlay.path", "")
-        if custom_path:
-            p = Path(custom_path)
-            if _is_gc_overlay_dir(p):
-                cls._gc_overlay_path = p
-
         cls._port = Settings.Get("controller_overlay.port", 8069)
-        cls._controller = Settings.Get("controller_overlay.controller", 1)
         cls._auto_start = Settings.Get("controller_overlay.auto_start", False)
         cls._version = _read_gc_version(cls._gc_overlay_path)
 
@@ -200,13 +211,6 @@ class ControllerOverlay:
     @classmethod
     async def Launch(cls) -> dict:
         """Launch the gc-overlay subprocess."""
-        if not PLATFORM_SUPPORTED:
-            return {
-                "success": False,
-                "reason": "unsupported_platform",
-                "error": "The controller overlay is only supported on macOS.",
-            }
-
         if cls._running and cls._process and cls._process.returncode is None:
             return {"success": True, "already_running": True, "port": cls._port}
 
@@ -252,6 +256,8 @@ class ControllerOverlay:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
                 cwd=str(cls._gc_overlay_path),
+                creationflags=_NO_WINDOW,
+                env=_child_env(),
             )
 
             cls._running = True
@@ -290,13 +296,12 @@ class ControllerOverlay:
         """Get current status of the overlay."""
         running = cls._running and cls._process is not None and cls._process.returncode is None
         return {
-            "supported": PLATFORM_SUPPORTED,
+            "supported": True,  # kept for API compatibility; always true now
             "available": cls._gc_overlay_path is not None,
             "path": str(cls._gc_overlay_path) if cls._gc_overlay_path else None,
             "version": cls._version,
             "running": running,
             "port": cls._port,
-            "controller": cls._controller,
             "pid": cls._process.pid if cls._process and running else None,
             "url": f"http://localhost:{cls._port}" if running else None,
         }
@@ -306,29 +311,6 @@ class ControllerOverlay:
         """Update the port (requires restart to take effect)."""
         cls._port = port
         await Settings.Set("controller_overlay.port", port)
-
-    @classmethod
-    async def SetController(cls, controller: int):
-        """Update the controller port (1-4). Requires restart."""
-        if 1 <= controller <= 4:
-            cls._controller = controller
-            await Settings.Set("controller_overlay.controller", controller)
-
-    @classmethod
-    async def SetPath(cls, path: str):
-        """Update the gc-overlay path and re-detect."""
-        await Settings.Set("controller_overlay.path", path)
-        if path:
-            p = Path(path)
-            if _is_gc_overlay_dir(p):
-                cls._gc_overlay_path = p
-                cls._version = _read_gc_version(p)
-                return {"success": True, "path": str(p), "available": True, "version": cls._version}
-            return {"success": False, "error": f"No gc-overlay binary or main.py at {path}"}
-        # Clear custom path and re-run auto-detection
-        cls._gc_overlay_path = _find_gc_overlay()
-        cls._version = _read_gc_version(cls._gc_overlay_path)
-        return {"success": True, "path": str(cls._gc_overlay_path) if cls._gc_overlay_path else None, "available": cls._gc_overlay_path is not None, "version": cls._version}
 
     @classmethod
     async def _kill_process(cls):
@@ -388,7 +370,17 @@ class ControllerOverlay:
 
     @classmethod
     async def _drain_output(cls):
-        """Continuously read and log stdout from the subprocess."""
+        """Continuously read and log stdout from the subprocess.
+
+        INFO, not DEBUG. main.py registers its file sinks at INFO/ERROR, so a
+        debug line reaches the dev console and never the `prsh_info.txt` a
+        producer actually sends you — and gc-overlay's stdout is the only
+        account of WHY an overlay is sitting on "Waiting for controller
+        data...". It is not chatty: every print site fires on startup or on a
+        transport status CHANGE (`_report_status` dedupes), and aiohttp's
+        access log is off (`run_app(print=None)`), so this is a handful of
+        lines per session rather than anything per-tick.
+        """
         try:
             while cls._process and cls._process.stdout:
                 line = await cls._process.stdout.readline()
@@ -396,7 +388,7 @@ class ControllerOverlay:
                     break
                 text = line.decode(errors="replace").rstrip()
                 if text:
-                    logger.debug("[gc-overlay] {}", text)
+                    logger.info("[gc-overlay] {}", text)
         except asyncio.CancelledError:
             pass
         except Exception:

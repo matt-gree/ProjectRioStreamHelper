@@ -1,0 +1,193 @@
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { TooltipProvider } from '../../components/ui/tooltip';
+import { useSettingsStore } from '../../context/store';
+import { useObsStore } from '../../context/obs';
+import { ELEMENTS, isPinnable, quickFaceFor } from './elements';
+import { RAIL_SEED, seededRail } from './rack';
+import { Rail } from './rail';
+import { withContainers } from '../../test/containers';
+
+const SB = 'http://x/layout/scoreboard1/scoreboard.html';
+// For the tests that read a card's source-toggle row: the Scorecard has the
+// scoreboard's pin grammar (board + scene) and, unlike the resident
+// scoreboard, still carries the toggle on its card.
+const SC = 'http://x/layout/scorecard/scorecard.html';
+const item = (id, sourceName, url, enabled = false) =>
+    ({ id, sourceName, url, enabled, inputKind: 'browser_source', isGroup: false, isPrsh: true });
+
+// An OBS mirror. The rail resolves a pin against real placements, exactly as
+// the rack does, so its tests need scenes to resolve into.
+const obs = (sceneItems, extra = {}) => useObsStore.setState({
+    status: 'connected',
+    programScene: Object.keys(sceneItems)[0] ?? null,
+    scenes: Object.keys(sceneItems),
+    mirroredScenes: Object.keys(sceneItems),
+    sceneItems,
+    ...extra,
+});
+
+beforeEach(() => useSettingsStore.setState({ scoreboards: {}, production: withContainers() }));
+afterEach(() => {
+    cleanup();
+    useObsStore.setState({
+        status: 'disconnected', studioMode: false, programScene: null,
+        previewScene: null, sceneItems: {}, scenes: [], mirroredScenes: [],
+    });
+});
+
+const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
+
+describe('rail seeding', () => {
+    it('seeds a never-touched rail and leaves a deliberately emptied one empty', () => {
+        expect(seededRail(null)).toEqual(RAIL_SEED);
+        expect(seededRail([])).toEqual([]);
+        expect(seededRail(['statsbar'])).toEqual(['statsbar']);
+    });
+
+    it('only seeds elements that are actually pinnable', () => {
+        for (const id of RAIL_SEED) {
+            const el = ELEMENTS.find(e => e.id === id);
+            expect(el, `seed names a real element: ${id}`).toBeTruthy();
+            expect(isPinnable(el), `seeded element is pinnable: ${id}`).toBe(true);
+            expect(quickFaceFor(el).rows.length).toBeLessThanOrEqual(2);
+        }
+    });
+});
+
+describe('Rail', () => {
+    const noop = () => {};
+
+    it('explains how to fill an empty rail instead of showing a blank column', () => {
+        ui(<Rail pins={[]} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(screen.getByText(/Nothing pinned/)).toBeInTheDocument();
+    });
+
+    it('renders a card per pin, in the producer’s order, and never re-sorts', () => {
+        const pins = ['statsbar', 'scoreboard'];
+        ui(<Rail pins={pins} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        const titles = [...document.querySelectorAll('header')]
+            .map(h => h.querySelector('button').textContent);
+        // A bare pin names the ELEMENT, and the card names the placement it
+        // resolves to. The Stat Bar has no variant-less row — a side has no default —
+        // so `stats` answers with side 1, which is what the seeded rail gets.
+        expect(titles).toEqual(['Stat Bar · Side 1', 'Scoreboard · Large']);
+    });
+
+    it('drops a pin naming an element that no longer exists', () => {
+        ui(<Rail pins={['scoreboard', 'gone-in-a-later-build']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(document.querySelectorAll('header').length).toBe(1);
+    });
+
+    /*
+     * The rail is the surface built for flying the broadcast, and it was
+     * reorderable only by HTML5 drag — which needs a mouse: it does not fire from
+     * a keyboard, and it does not fire on touch at all, on a page this project
+     * documents as also being driven from a tablet at the venue. The buttons are
+     * the real control (see MoveButtons in ./controls); drag stays as an
+     * accelerator on top.
+     */
+    it('reorders from the card header, so the rail is not mouse-only', () => {
+        const onReorder = vi.fn();
+        ui(<Rail pins={['statsbar', 'scoreboard']} onReorder={onReorder} onUnpin={noop} onOpen={noop} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard · Large up' }));
+        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'statsbar']);
+    });
+
+    it('disables the move that would run off the end of the rail', () => {
+        ui(<Rail pins={['statsbar', 'scoreboard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(screen.getByRole('button', { name: 'Move Stat Bar · Side 1 up' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move Scoreboard · Large down' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Move Stat Bar · Side 1 down' })).toBeEnabled();
+    });
+
+    /*
+     * `entries` drops pins that no longer resolve, so its indices stop matching
+     * `pins` the moment one goes stale. Reordering by rendered index moved
+     * whichever pin happened to sit at that index — here the dead one — and left
+     * the card the producer actually pressed exactly where it was.
+     */
+    it('reorders the card the producer pressed even when a stale pin sits between', () => {
+        const onReorder = vi.fn();
+        ui(
+            <Rail
+                pins={['statsbar', 'gone-in-a-later-build', 'scoreboard']}
+                onReorder={onReorder} onUnpin={noop} onOpen={noop}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Move Scoreboard · Large up' }));
+        expect(onReorder).toHaveBeenCalledWith(['scoreboard', 'statsbar', 'gone-in-a-later-build']);
+    });
+
+    it('opens a card on the stage and unpins from its header', () => {
+        const onOpen = vi.fn();
+        const onUnpin = vi.fn();
+        ui(<Rail pins={['scoreboard']} onReorder={noop} onUnpin={onUnpin} onOpen={onOpen} />);
+        fireEvent.click(screen.getByText('Scoreboard · Large'));
+        // Acted on as STORED, not as resolved: reorder and unpin address the
+        // producer's array, so a pin written before instances existed must not
+        // become un-removable the moment it renders as scoreboard:1.
+        expect(onOpen).toHaveBeenCalledWith('scoreboard');
+        fireEvent.click(screen.getByRole('button', { name: 'Unpin from quick rail' }));
+        expect(onUnpin).toHaveBeenCalledWith('scoreboard');
+    });
+
+    /*
+     * A pin carries a board AND a scene now; the card's chip, its quick face and
+     * the rack row it came from are all one placement. A card flying the Game
+     * scene's copy while showing the Break scene's state would be one card
+     * disagreeing with itself.
+     */
+    it('titles a card by its board once there is more than one to tell apart', () => {
+        obs({ Game: [item(1, 'A', `${SB}?scoreboard=1`), item(2, 'B', `${SB}?scoreboard=2`)] });
+        ui(<Rail pins={['scoreboard:2@Game']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        // An unnamed board contributes its number, not the default alias that
+        // repeats the element name beside it (see useBoardTag).
+        expect(screen.getByText('Scoreboard · B2')).toBeInTheDocument();
+    });
+
+    it('flies the scene the pin names, not whichever copy comes first', () => {
+        obs({ Game: [item(1, 'Game SC', SC, true)], Break: [item(9, 'Break SC', SC, false)] },
+            { mirroredScenes: ['Game', 'Break'] });
+        ui(<Rail pins={['scorecard@Break']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        // Off-air scene: the chip is OFF and the row names the scene, so the
+        // producer can see it is staging Break rather than driving air.
+        expect(document.querySelector('[data-chip-state]').getAttribute('data-chip-state')).toBe('off');
+        // The card's eye names the scene it flies — a rail card sits under no
+        // scene header.
+        expect(screen.getByRole('button', { name: 'Show in Break' })).toBeInTheDocument();
+    });
+
+    it('resolves a pin written before scenes were the axis to the copy nearest air', () => {
+        obs({ Game: [item(1, 'SC', SC, true)] });
+        ui(<Rail pins={['scorecard']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(screen.getByRole('button', { name: 'Hide in Game' })).toBeInTheDocument();
+    });
+
+    /*
+     * The alternative is a card silently vanishing from the rail mid-event
+     * because someone deleted a source. The pin is the producer's, so it degrades
+     * to a sourceless card that states what we actually know.
+     */
+    it('keeps a card for a pin with no source rather than dropping it', () => {
+        // OBS connected, so the source really is nowhere we can see.
+        obs({ Game: [] });
+        ui(<Rail pins={['scorecard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(document.querySelectorAll('header').length).toBe(1);
+        expect(screen.getByText('NO SOURCE')).toBeInTheDocument();
+        expect(screen.getByTitle(/Not in any scene we can see/)).toBeInTheDocument();
+    });
+
+    /*
+     * WITH OBS CLOSED THE CARD SAYS NOTHING. Every card is sourceless then, so
+     * the old line was printed once per pin down a column whose whole job is to
+     * be scanned — restating what the app's own banner says once, at the top of
+     * the page. The card itself, its chip and its subject are what remain.
+     */
+    it('says nothing about the connection when OBS is what is missing', () => {
+        ui(<Rail pins={['scoreboard:9@Nowhere']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        expect(document.querySelectorAll('header').length).toBe(1);
+        expect(screen.queryByText(/OBS not connected/)).not.toBeInTheDocument();
+        expect(screen.queryByText('NO SOURCE')).not.toBeInTheDocument();
+    });
+});

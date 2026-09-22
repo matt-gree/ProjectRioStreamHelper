@@ -2,7 +2,8 @@ from loguru import logger
 from server.utils.router import method
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import ORJSONResponse
-from server.rio.game_pool import OngoingGamePool, CompletedGamePool, _pinned_swap_needed
+from server.rio.game_pool import OngoingGamePool, CompletedGamePool
+from server.rio.provider import pin_swap
 from server.rio.stats_tracker import StatsTracker
 from server.rio.provider import RioGameDataProvider
 from server.rio.stats_api import get_last_completed_fetch_info
@@ -32,25 +33,6 @@ async def refresh_ongoing_games(session_id: str | None = None) -> ORJSONResponse
     """Force an immediate re-poll of ongoing games."""
     await OngoingGamePool._fetch_games()
     return ORJSONResponse({"success": True, "count": len(OngoingGamePool.games)})
-
-
-@method(
-    router.post, "/game-pool/ongoing/auto-poll",
-    version="1", id="game_pool.ongoing.auto_poll",
-    response_class=ORJSONResponse
-)
-async def set_ongoing_auto_poll(
-    enabled: bool = False,
-    interval: float | None = None,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Enable or disable auto-polling for ongoing games."""
-    await OngoingGamePool.set_auto_poll(enabled, interval)
-    return ORJSONResponse({
-        "success": True,
-        "auto_poll": enabled,
-        "interval": interval or OngoingGamePool._poll_interval,
-    })
 
 
 # --- Completed games ---
@@ -141,25 +123,23 @@ async def assign_game(
     session_id: str | None = None,
 ) -> ORJSONResponse:
     """Assign a game (ongoing or completed) to a scoreboard."""
-    # Authoritative server-side guard: only honor assigns when the
-    # scoreboard's current source can legitimately receive a pool game.
-    # Without this, a stale client (other tab, OBS browser source, in-flight
-    # poll fired before a source-change settings update arrived) can
-    # overwrite manual edits or a different source's data.
-    source_type = Settings.Get(
-        f"scoreboards.sources.{scoreboard_number}.type"
-    )
-    if source_type not in ("live_game", "rotator"):
+    # Authoritative server-side guard: a HUD-transport board (board 1 with
+    # hud_enabled) has the local game as its exclusive writer and is never
+    # pool-assignable. Without this, a stale client (other tab, OBS browser
+    # source, in-flight poll) could overwrite the HUD-driven data. Every other
+    # board — single (live/completed picker) or set (feed) — is assignable.
+    from server.bindings import transport
+    if transport(scoreboard_number) == "hud":
         raise HTTPException(
             status_code=409,
-            detail=f"scoreboard {scoreboard_number} source is {source_type!r}, not assignable",
+            detail=f"scoreboard {scoreboard_number} is HUD-bound, not assignable",
         )
 
     # Detect whether this assignment is a *new* game for this scoreboard,
     # so live-game auto-poll re-applies (which fire on every poll cycle to
     # refresh score/state) don't trigger a stats refetch each tick.
     prev_game_id = Settings.Get(
-        f"scoreboards.sources.{scoreboard_number}.api_game_id"
+        f"scoreboards.binding.{scoreboard_number}.playback.gameId"
     )
     is_new_game = prev_game_id != game_id
 
@@ -174,7 +154,7 @@ async def assign_game(
             entrants = parsed.get("entrants", [[{}], [{}]])
             p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
             p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
-            sides_swapped = _pinned_swap_needed(p0, p1) is True
+            sides_swapped = pin_swap(p0, p1) is True
 
             if is_new_game:
                 # New live game on this scoreboard — sync the per-scoreboard
@@ -187,16 +167,20 @@ async def assign_game(
                 # stats_tag rather than leaving the previous game's tag in place
                 # — otherwise stats fetches run with the wrong tag for the game.
                 game_mode_name = game.get("game_mode_name", "")
-                if game_mode_name and not game_mode_name.startswith("ID:"):
-                    await Settings.Set(
-                        f"scoreboards.sources.{scoreboard_number}.stats_tag",
-                        game_mode_name,
-                    )
-                else:
-                    await Settings.Set(
-                        f"scoreboards.sources.{scoreboard_number}.stats_tag",
-                        "",
-                    )
+                if not game_mode_name or game_mode_name.startswith("ID:"):
+                    # The ongoing pool bakes game_mode_name from the game-modes
+                    # cache, which may have been cold when the pool was built —
+                    # re-resolve from the raw tag_set id now that a fetch has had
+                    # a chance to warm it.
+                    from server.rio import stats_api
+                    resolved = await stats_api.resolve_tag_set_name(game.get("tag_set"))
+                    if resolved:
+                        game_mode_name = resolved
+                # One writer, one rule: it clears an unknown mode rather than
+                # leaving the last game's, and it leaves a producer's PICK alone
+                # (server/bindings.py sync_stats_tag).
+                from server.bindings import sync_stats_tag
+                await sync_stats_tag(scoreboard_number, game_mode_name)
 
                 # Initialize the slot + historical API stats on first load.
                 await StatsTracker.on_new_game(
@@ -218,15 +202,3 @@ async def assign_game(
         raise HTTPException(status_code=404, detail="Game not found in any pool")
 
     return ORJSONResponse({"success": success})
-
-
-# --- Backward compatibility: /game-pool still lists ongoing ---
-
-@method(
-    router.get, "/game-pool",
-    version="1", id="game_pool.list",
-    response_class=ORJSONResponse
-)
-async def list_games_compat(session_id: str | None = None) -> ORJSONResponse:
-    """List ongoing games (backward compatibility)."""
-    return ORJSONResponse(OngoingGamePool.list_games())

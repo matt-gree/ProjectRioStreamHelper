@@ -1,16 +1,51 @@
-import platform
 import re
 from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import ORJSONResponse
 
+from server.paths import app_root
+from server.settings import Settings
+
 router = APIRouter()
 
-_layout_dir = Path("./public/layout")
+_layout_dir = app_root() / "public" / "layout"
 
-# The controller browser-source wraps gc-overlay, which only runs on macOS.
-# Hide that layout group from the catalog on other platforms.
-_CONTROLLER_SUPPORTED = platform.system() == "Darwin"
+# Shared containers are PRODUCER-BUILT, so they are not files to enumerate.
+# One generic shell renders every one of them (?container={id}), and the
+# catalog rows come from `production.container_defs` instead — which is what
+# gives each row the container's own name and native size. The folder is
+# skipped wholesale: the shell alone is not a container, and would row as one.
+_CONTAINER_GROUP = "shared"
+_CONTAINER_SHELL = "/layout/shared/container.html"
+
+
+def layout_url(base: str, rel) -> str:
+    """The browser-source URL for a layout file, from its path under _layout_dir.
+
+    `as_posix`, never `str(rel)`. A Path renders with the NATIVE separator, so on
+    Windows this produced `…/layout/scoreboard1\\roster.html`. Browsers forgive
+    that (the URL spec folds "\\" to "/" for http), which is exactly why it would
+    survive a smoke test — but the element registry does not: every `match` in
+    src/routes/production/elements.js is a regex over the raw URL, and the ones
+    without a bare-filename fallback (roster, schedule, bracket, ticker) simply
+    stop matching. The console then files a known element as a generic layout,
+    which costs it its stage panel, preview and style settings.
+    """
+    return f"{base}/layout/{rel.as_posix()}"
+
+# Layout groups NOT OFFERED right now, though the files still serve.
+#
+# Shelving is a catalog decision, not a deletion: a browser source already
+# pointing at one of these keeps rendering, and the console still recognises it
+# (`hidden` in src/routes/production/elements.js is the same idea on that side —
+# not offered, still understood). What goes away is the Add picker's row.
+#
+# `bracket` — the whole start.gg-drawn group (index + the winners/losers
+# redirects + player_schedule). Shelved 2026-08-22 while the bracket work is
+# parked; the element is still registered, its stage panel still resolves, and
+# `bracket.*` state is still what the lower third's bracket slot reads. Delete
+# this entry to bring it back — nothing else has to change.
+_SHELVED_GROUPS = {"bracket"}
 
 _body_w_re = re.compile(r"body\s*\{[^}]*width:\s*(\d+)px", re.DOTALL)
 _body_h_re = re.compile(r"body\s*\{[^}]*height:\s*(\d+)px", re.DOTALL)
@@ -39,21 +74,32 @@ def _parse_html_meta(path: Path) -> tuple[int | None, int | None, list[str] | No
 
 
 # Size variants for layouts that support ?size= param.
-# Each: (size_code, label, width, height)
+# Each: (size_code, label, width, height). Dims are the theme SVG's native
+# canvas (viewBox) — the recommended OBS browser-source size — and come from
+# theme_contracts.CONTRACTS, the single Python source of truth (the JS copies
+# in scoreboard-mount.js / layouts.jsx / elements.js are pinned to it by
+# tests/unit/test_size_dims_parity.py). RETIRED variants are not listed here
+# and the mount treats every unknown/legacy size as "l", so a source that still
+# carries one keeps rendering: xl went with the SVG conversion, m (600x200) on
+# 2026-08-29 for sitting between the compact board and the full one.
+def _scoreboard_canvas(size: str) -> tuple[int, int]:
+    from server.theme_contracts import CONTRACTS
+
+    return CONTRACTS[f"scoreboard-{size}"].canvas
+
+
 _SIZE_VARIANTS = {
     "scoreboard": [
-        ("xs", "Extra Small", 400, 50),
-        ("s",  "Small",       500, 80),
-        ("m",  "Medium",      600, 200),
-        ("l",  "Large",       800, 400),
-        ("xl", "Extra Large", 1000, 500),
+        ("s",  "Small",  *_scoreboard_canvas("s")),
+        ("l",  "Large",  *_scoreboard_canvas("l")),
     ],
 }
 
 # Team variants for layouts that support ?team= param.
 # Each: (team_num, label)
 _TEAM_VARIANTS = {
-    "stats":       [(1, "Team 1"), (2, "Team 2")],
+    "statsbar":    [(1, "Team 1"), (2, "Team 2")],
+    "statscard":   [(1, "Team 1"), (2, "Team 2")],
     "roster":      [(1, "Team 1"), (2, "Team 2")],
     "teamlogo":    [(1, "Team 1"), (2, "Team 2")],
     "controller":  [(1, "Team 1"), (2, "Team 2")],
@@ -62,7 +108,13 @@ _TEAM_VARIANTS = {
 
 # Human-readable display names for layout types shown in the UI
 _DISPLAY_NAMES = {
-    "stats":       "Stats",
+    # "Stat Bar", not "Stats" — named by shape against the 2x2 Stat Card, which
+    # is the same data in the other canvas. Kept in step with the registry by
+    # tests/unit/test_catalog_names_parity.py.
+    "statsbar":    "Stat Bar",
+    # The 2x2 card, against the wide bar above it. Also a container member —
+    # same element, same settings namespace, two places it can be drawn.
+    "statscard":   "Stat Card",
     "roster":      "Roster",
     "teamlogo":    "Team Logo",
     "controller":  "Controller",
@@ -81,6 +133,41 @@ _DEFAULT_DIMS = {
 # (single-variant standalone layouts that aren't size or team variants).
 _STANDALONE_DISPLAY_NAMES = {
     "rotator/ticker": "Results Ticker",
+    # Talent — registry-bound person overlays.
+    "commentary/commentary": "Commentary",
+    # Two-player name/sub-plate band (both L/R, or one player at left/center/
+    # right), fed from a match or manual names (playerplates.*).
+    "playerplates/playerplates": "Player Plates",
+    # Break — re-themable SVG lower-third band: five producer-picked slots
+    # (logo · match · scorebox · merch · clock · message · bracket).
+    "lowerthird/lowerthird": "Lower Third",
+    # The producer's ordered match queue (schedule.queue → match.{M}).
+    "schedule/schedule": "Upcoming Schedule",
+    # Head-to-head band: all-time series summary + last-5 game cards for a
+    # match's two participants, fetched from the Project Rio API (matchup.*).
+    "matchup/matchup": "Matchup History",
+    # Vertical Scorecard: a tall re-themable SVG scoreboard whose eight design
+    # elements each toggle/animate independently (overlays.scorecard.*).
+    "scorecard/scorecard": "Vertical Scorecard",
+    # The 3D hit overlay. Its own group of one, which is why it needs an entry
+    # here at all: with no size or team variants the catch-all branch names a
+    # row from the filename stem, and this one read "hitvisualizer" in the Add
+    # picker while the rack row for the same source read "Hit Visualizer".
+    "hitvisualizer/hitvisualizer": "Hit Visualizer",
+    # Post-game callouts — each one's OWN full-canvas source. Both are also
+    # container MEMBERS: a producer who wants them mutually exclusive puts both
+    # on one container's roster instead, and that container is a catalog row of
+    # its own (see _container_layouts). The two paths are the same elements,
+    # not two spellings of one — which is why these files are listed even
+    # though the Callout Stage container usually holds them.
+    "postgame/spotlight": "Character Spotlight",
+    "postgame/summary": "Game Summary",
+    # Event Header: a centered two-row tournament banner (1263px). Top row =
+    # Competition / Location / Dates from tournamentInfo; bottom row = Message /
+    # Event / Phase / Round — the message is the element's own copy
+    # (overlays.eventheader.message), the rest tournamentInfo and the bound
+    # match. Blank fields drop out and the rest re-center.
+    "eventheader/eventheader": "Event Header",
 }
 
 
@@ -94,11 +181,7 @@ def _derive_type(stem: str, group: str = "") -> str:
         teamlogo                -> "teamlogo"
         index (group=bracket)   -> "bracket"
         winners_only (bracket)  -> "bracket"
-        gameplay (group=scenes) -> "scene"
     """
-    # For scenes folder, all files are scene type
-    if group == "scenes":
-        return "scene"
     # For bracket folder, all files are bracket type
     if group == "bracket":
         return "bracket"
@@ -107,24 +190,62 @@ def _derive_type(stem: str, group: str = "") -> str:
     return base if base else stem
 
 
+def _container_layouts(base: str) -> list[dict]:
+    """Catalog rows for the producer's shared containers, one per definition.
+
+    A container is config, not a file: `production.container_defs.{id}` carries
+    its display name, its native size (the largest member's, since smaller
+    members center and never scale) and its member roster. Every one of them is
+    rendered by the same generic shell, told which definition to be.
+    """
+    defs = Settings.Get("production.container_defs", {}) or {}
+    shell = _layout_dir / "shared" / "container.html"
+    _, _, supported = _parse_html_meta(shell)
+
+    rows = []
+    for cid, cdef in sorted(defs.items()):
+        if not isinstance(cdef, dict):
+            continue
+        entry = {
+            "group": _CONTAINER_GROUP,
+            "name": cdef.get("name") or cid,
+            "type": "container",
+            "url": f"{base}{_CONTAINER_SHELL}?container={cid}",
+            "container": cid,
+            "members": list(cdef.get("members") or []),
+        }
+        w, h = cdef.get("width"), cdef.get("height")
+        if isinstance(w, int) and isinstance(h, int):
+            entry["width"] = w
+            entry["height"] = h
+        if supported is not None:
+            entry["supportedSettings"] = supported
+        rows.append(entry)
+    return rows
+
+
 @router.get("/layouts", response_class=ORJSONResponse)
 async def list_layouts(request: Request):
     """Return all available OBS layout HTML files grouped by folder path."""
     host = request.headers.get("host", "localhost:5260")
     base = f"http://{host}"
-    layouts = []
+    layouts = _container_layouts(base)
 
     if _layout_dir.is_dir():
         for f in sorted(_layout_dir.rglob("*.html")):
             rel = f.relative_to(_layout_dir)
             group = str(rel.parent) if rel.parent != Path(".") else "ungrouped"
 
-            # gc-overlay is macOS-only; omit its browser source elsewhere.
-            if not _CONTROLLER_SUPPORTED and group == "controller":
+            # Containers come from the definitions above, not from the folder.
+            if group == _CONTAINER_GROUP:
+                continue
+
+            # Parked for now — see _SHELVED_GROUPS.
+            if group in _SHELVED_GROUPS:
                 continue
 
             layout_type = _derive_type(f.stem, group)
-            base_url = f"{base}/layout/{rel}"
+            base_url = layout_url(base, rel)
 
             # If this layout type has size variants, expand into multiple entries
             w, h, supported = _parse_html_meta(f)

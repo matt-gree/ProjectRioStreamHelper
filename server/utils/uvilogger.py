@@ -30,7 +30,6 @@ def format_record(record: dict) -> str:
     return format_string
 
 def setup_logger():
-    global intercept_handler
     loggers = (
         logging.getLogger(name)
         for name in logging.root.manager.loggerDict

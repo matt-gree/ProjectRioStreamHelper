@@ -1,0 +1,129 @@
+{
+  "state": {
+    "matchup": {
+      "present": true,
+      "matchId": 1,
+      "fetchedAt": "2026-08-26T01:05:07+00:00",
+      "totalGames": 145,
+      "side1": {
+        "rioName": "MattGree",
+        "wins": 84,
+        "tag": "MattGree"
+      },
+      "side2": {
+        "rioName": "Baltor33",
+        "wins": 58,
+        "tag": "Baltor33"
+      },
+      "games": [
+        {
+          "gameId": 3482474154,
+          "date": "2026-08-25T21:05:07",
+          "side1Score": 9,
+          "side2Score": 8,
+          "winnerSide": 1,
+          "side1Captain": "Yoshi",
+          "side2Captain": "Birdo",
+          "side1Team": "Yoshi Eggs",
+          "side2Team": "Birdo Beauties",
+          "gameMode": "The Rivalry: Stars Off",
+          "stadium": "DK Jungle",
+          "awaySide": 2
+        },
+        {
+          "gameId": 3549940225,
+          "date": "2026-08-25T20:39:08",
+          "side1Score": 6,
+          "side2Score": 3,
+          "winnerSide": 1,
+          "side1Captain": "Yoshi",
+          "side2Captain": "Birdo",
+          "side1Team": "Yoshi Eggs",
+          "side2Team": "Birdo Beauties",
+          "gameMode": "The Rivalry: Stars Off",
+          "stadium": "Mario Stadium",
+          "awaySide": 1
+        },
+        {
+          "gameId": 3070957860,
+          "date": "2026-06-17T20:33:06",
+          "side1Score": 5,
+          "side2Score": 4,
+          "winnerSide": 1,
+          "side1Captain": "Daisy",
+          "side2Captain": "Birdo",
+          "side1Team": "Daisy Lillies",
+          "side2Team": "Birdo Beauties",
+          "gameMode": "The Rivalry: Stars On",
+          "stadium": "DK Jungle",
+          "awaySide": 2
+        },
+        {
+          "gameId": 3557413034,
+          "date": "2026-06-17T20:11:27",
+          "side1Score": 6,
+          "side2Score": 4,
+          "winnerSide": 1,
+          "side1Captain": "Daisy",
+          "side2Captain": "Diddy",
+          "side1Team": "Daisy Lillies",
+          "side2Team": "Diddy Survivors",
+          "gameMode": "S14 Big Balla",
+          "stadium": "Wario Palace",
+          "awaySide": 1
+        },
+        {
+          "gameId": 2308045525,
+          "date": "2026-05-26T20:19:07",
+          "side1Score": 11,
+          "side2Score": 1,
+          "winnerSide": 1,
+          "side1Captain": "DK",
+          "side2Captain": "Mario",
+          "side1Team": "DK Explorers",
+          "side2Team": "Mario Heroes",
+          "gameMode": "The Rivalry: Classics",
+          "stadium": "Wario Palace",
+          "awaySide": 1
+        }
+      ]
+    },
+    "match": {
+      "1": {
+        "label": "Winners Final",
+        "stage": "draft",
+        "format": {
+          "bestOf": 5
+        },
+        "series": {
+          "1": 0,
+          "2": 0
+        },
+        "gameMode": "The Rivalry: Stars Off",
+        "player": {
+          "1": {
+            "participantId": "p1",
+            "rioName": "MattGree",
+            "captain": "Yoshi",
+            "port": 0,
+            "seed": 1
+          },
+          "2": {
+            "participantId": "p2",
+            "rioName": "Baltor33",
+            "captain": "Birdo",
+            "port": 1,
+            "seed": 4
+          }
+        }
+      }
+    },
+    "tournamentInfo": {
+      "name": "Slice 2026",
+      "event_name": "MSB Singles",
+      "location": "Online",
+      "date": "",
+      "entrants": "32"
+    }
+  }
+}

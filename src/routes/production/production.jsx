@@ -1,0 +1,479 @@
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { Link } from 'react-router-dom';
+import { Radio, PlugZap, ArrowLeftRight, CircleDot, X } from 'lucide-react';
+import { useObsStore } from '../../context/obs';
+import { useSettingsStore } from '../../context/store';
+import { settingOn } from '../design/designConstants';
+import {
+    useStagingStore, commitPending, eventMatchesHotkey,
+} from '../../context/staging';
+import { Stack, Group, Text } from '../../components/ui/primitives';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Switch } from '../../components/ui/switch';
+import { cn } from '../../lib/utils';
+import { runObs } from './controls';
+import { Rack, seededRail, useRackSelection, useRailPins } from './rack';
+import {
+    togglePin as togglePinIn, useConsolePlacements, useConsoleScenes,
+} from './sources/placements';
+import { AddSourceDialog } from './sources/addsource';
+import { SampleModeSwitch } from './sample';
+import { Stage } from './stage';
+import { Rail } from './rail';
+import MatchDesk from './match/desk';
+import BoardDesk from './board/desk';
+import { boardDeskId, setBoardAlias, useActiveBoards, useBoardLabel } from './board/boards';
+
+/*
+ * Production console — the producer's broadcast control board. Three surfaces
+ * (design locked; see the production-console-contract skill):
+ *
+ * Top bar : scene control (program / studio + Take) + OBS pill.
+ * Rack    : scene-grouped monitor + selector for every source and desk (./rack).
+ * Stage   : the ONE selected item's full controls (./stage).
+ * Rail    : the producer's pinned quick cards, in their own order (./rail).
+ *
+ * Confirm-to-live: when settings.production.confirm.enabled is on, element
+ * mutations here (visibility, feeds, content) are STAGED via stageOrRun()
+ * (src/context/staging.js) and only executed when the producer commits — the
+ * configured hotkey or the Go Live button on the pending bar. Momentary
+ * "fire now" actions (scene switches, Take, replay, spotlight, clock
+ * start/pause, post-game capture) always run immediately.
+ *
+ * Rows come from the SCENES themselves (./sources/placements): every PRSH source in
+ * every scene the console can see, grouped under the scene it lives in. There
+ * is no phase selector — OBS's scene list is the producer stating the shape of
+ * their show, where "phase" was PRSH guessing at it.
+ */
+
+const STATUS_META = {
+    connected:    { dot: 'bg-emerald-500',             label: 'OBS connected' },
+    connecting:   { dot: 'bg-amber-400 animate-pulse', label: 'Connecting to OBS…' },
+    error:        { dot: 'bg-destructive',             label: 'OBS connection error' },
+    disconnected: { dot: 'bg-muted-foreground/50',     label: 'OBS not connected' },
+};
+
+/*
+ * A FAILURE BEFORE THE FIRST SUCCESS IS NOT AN ERROR — it is a machine nobody
+ * has set up yet, and this is the first thing a new user reads.
+ *
+ * OBS ships with its websocket server off and PRSH auto-connects at launch, so
+ * a first run is GUARANTEED to fail one and land on 'error': red dot, "OBS
+ * connection error", Retry. The neutral face this app already has for exactly
+ * that situation ('disconnected' — grey, "not connected", Connect) was
+ * therefore unreachable on the one run where it was the truth.
+ *
+ * Presentation only. The status stays 'error', so backoff, useConsoleOffline
+ * and the catalog tier are untouched — what changes is the word, the colour and
+ * the verb, which now point at setup rather than at a retry that will fail the
+ * same way until somebody opens OBS.
+ */
+const NOT_SET_UP = { dot: 'bg-muted-foreground/50', label: 'OBS not set up' };
+
+const ConnectionPill = memo(function ConnectionPill() {
+    const { status, error, obsVersion } = useObsStore(useShallow(s => ({
+        status: s.status, error: s.error, obsVersion: s.obsVersion,
+    })));
+    const connect = useObsStore(s => s.connect);
+    // settingOn, not `=== true`: the REST settings route is string-typed, so
+    // this can legitimately arrive as the string "true".
+    const everConnected = settingOn(useSettingsStore(s => s?.obs?.ever_connected), false);
+    const unconfigured = !everConnected && (status === 'error' || status === 'disconnected');
+    const meta = unconfigured ? NOT_SET_UP : (STATUS_META[status] ?? STATUS_META.disconnected);
+
+    return (
+        <Group gap="sm" className="min-w-0 items-center">
+            {/* The readout IS the way to its own settings — the one
+                destination it could ever point at. It carried a separate
+                "Connections tab" link beside the error text, which spent a
+                second control on a place the thing it sat next to already
+                named. Clickable in every state: a connected producer changing
+                the address wants the same page. */}
+            <Link
+                to="/connections"
+                title="OBS connection — open the Connections tab"
+                className="flex shrink-0 flex-row items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 transition-colors hover:border-muted-foreground/60 hover:bg-card/80"
+            >
+                <span className={cn('size-2 rounded-full', meta.dot)} />
+                <Text size="sm" className="text-foreground">{meta.label}</Text>
+                {status === 'connected' && obsVersion && (
+                    <Badge className="ml-1 bg-emerald-500/15 text-emerald-300 text-[10px]">v{obsVersion}</Badge>
+                )}
+            </Link>
+            {(status === 'disconnected' || status === 'error') && (
+                unconfigured ? (
+                    // Retry is the wrong verb before the first success: nothing
+                    // about pressing it again changes whether OBS is listening.
+                    // The press that does is on the Connections tab.
+                    <Button asChild size="sm" variant="secondary">
+                        <Link to="/connections">
+                            <PlugZap size={14} className="mr-1" />
+                            Set up OBS
+                        </Link>
+                    </Button>
+                ) : (
+                    <Button size="sm" variant="secondary" onClick={() => connect()}>
+                        <PlugZap size={14} className="mr-1" />
+                        {status === 'error' ? 'Retry' : 'Connect'}
+                    </Button>
+                )
+            )}
+            {/* What the pill can't say: which address, or which rejection
+                (see friendlyError in context/obs). */}
+            {status === 'error' && error && !unconfigured && (
+                <Text size="xs" className="text-destructive">{error}</Text>
+            )}
+        </Group>
+    );
+});
+
+// Compact, labelled scene dropdown for the top bar.
+const SceneSelect = memo(function SceneSelect({ label, value, scenes, onChange }) {
+    return (
+        <label className="flex items-center gap-1.5">
+            <Text size="xs" className="text-muted-foreground">{label}</Text>
+            <select
+                value={value || ''}
+                onChange={(e) => onChange(e.target.value)}
+                className="max-w-[180px] rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+            >
+                {!value && <option value="" disabled>—</option>}
+                {scenes.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+        </label>
+    );
+});
+
+// Scene switching + Studio Mode, in the top bar. Studio off: the Program
+// dropdown cuts live. Studio on: stage in Preview, then Take to Program.
+// Always immediate — scene transport is the producer's manual "fire" surface,
+// never staged.
+const TopBarSceneControls = memo(function TopBarSceneControls() {
+    const { status, scenes, programScene, previewScene, studioMode } = useObsStore(useShallow(s => ({
+        status: s.status,
+        scenes: s.scenes,
+        programScene: s.programScene,
+        previewScene: s.previewScene,
+        studioMode: s.studioMode,
+    })));
+    const setProgramScene = useObsStore(s => s.setProgramScene);
+    const setPreviewScene = useObsStore(s => s.setPreviewScene);
+    const setStudioMode = useObsStore(s => s.setStudioMode);
+    const triggerTransition = useObsStore(s => s.triggerTransition);
+
+    if (status !== 'connected') return null;
+
+    return (
+        <Group gap="sm" className="items-center">
+            <label className="flex items-center gap-1.5">
+                <Text size="xs" className="text-muted-foreground">Studio</Text>
+                <Switch checked={studioMode} onCheckedChange={(v) => runObs(() => setStudioMode(v))} />
+            </label>
+            {studioMode ? (
+                <>
+                    <SceneSelect
+                        label="Preview" value={previewScene} scenes={scenes}
+                        onChange={(name) => runObs(() => setPreviewScene(name))}
+                    />
+                    <Button size="sm" onClick={() => runObs(() => triggerTransition())} disabled={!previewScene}>
+                        <ArrowLeftRight size={14} className="mr-1" />
+                        Take
+                    </Button>
+                    <Text size="xs" className="text-muted-foreground">
+                        On air: <span className="text-emerald-300">{programScene || '—'}</span>
+                    </Text>
+                </>
+            ) : (
+                <SceneSelect
+                    label="Program" value={programScene} scenes={scenes}
+                    onChange={(name) => runObs(() => setProgramScene(name))}
+                />
+            )}
+        </Group>
+    );
+});
+
+// The confirm-to-live surface: a sticky bar listing every staged change, with
+// Go Live (also bound to the configured hotkey while this page is mounted) and
+// Discard all. Hidden entirely when confirm mode is off — unless changes are
+// still pending from before it was turned off, so nothing staged can strand.
+export const PendingBar = memo(function PendingBar() {
+    const enabled = useSettingsStore(s => s?.production?.confirm?.enabled) === true;
+    const hotkey = useSettingsStore(s => s?.production?.confirm?.hotkey) || 'F9';
+    const { pending, order } = useStagingStore(useShallow(s => ({ pending: s.pending, order: s.order })));
+    const discard = useStagingStore(s => s.discard);
+    const discardAll = useStagingStore(s => s.discardAll);
+    const count = order.length;
+
+    useEffect(() => {
+        if (!enabled) return undefined;
+        const onKey = (e) => {
+            if (eventMatchesHotkey(e, hotkey)) {
+                e.preventDefault();
+                commitPending();
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [enabled, hotkey]);
+
+    if (!enabled && count === 0) return null;
+
+    return (
+        <div className={cn(
+            'sticky bottom-2 z-20 flex flex-wrap items-center gap-2 rounded-lg border bg-card/95 px-3 py-2 backdrop-blur',
+            count > 0 ? 'border-amber-500/50' : 'border-border',
+        )}>
+            <CircleDot size={14} className={count > 0 ? 'text-amber-400' : 'text-muted-foreground'} />
+            {count === 0 ? (
+                <Text size="xs" className="text-muted-foreground">
+                    Confirm mode on — element changes stage here until you go live ({hotkey}).
+                </Text>
+            ) : (
+                <>
+                    <Text size="sm" className="font-medium text-foreground">
+                        {count} staged change{count === 1 ? '' : 's'}
+                    </Text>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                        {order.map((key) => (
+                            <span
+                                key={key}
+                                className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200"
+                            >
+                                <span className="max-w-[24ch] truncate">{pending[key]?.label || key}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => discard(key)}
+                                    className="text-amber-300/70 hover:text-amber-100"
+                                    aria-label={`Discard ${pending[key]?.label || key}`}
+                                >
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={discardAll}>Discard all</Button>
+                    <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => commitPending()}>
+                        <Radio size={14} className="mr-1" /> Go Live · {hotkey}
+                    </Button>
+                </>
+            )}
+        </div>
+    );
+});
+
+/*
+ * Desk bodies, keyed by the ids the rack lists in DESKS. Module-level so the
+ * three desk registries — rows (rack.jsx), bodies (here) and quick faces
+ * (quickface.jsx) — can be checked against each other rather than drifting
+ * apart silently.
+ *
+ * Match has no quick face that fits the rail's two-row cap (dense fixture
+ * authoring), so it is deliberately not pinnable — and it is the only fixed
+ * desk left, the boards below being the rest of the tier.
+ */
+export const DESK_BODIES = {
+    'desk:match': { title: 'Match', body: <MatchDesk />, pinnable: false },
+};
+
+/*
+ * Board bodies are built from the rig rather than declared, because the rig is
+ * what says how many there are. Pure, so `rack.test.jsx` can check the full set
+ * of rows against the full set of bodies without a store.
+ */
+export function deskBodiesFor(boards, label = (sb) => `Scoreboard ${sb}`, rename = () => null) {
+    const out = { ...DESK_BODIES };
+    for (const sb of boards) {
+        out[boardDeskId(sb)] = {
+            title: label(sb),
+            /*
+             * A BOARD IS RENAMED WHERE IT IS NAMED — in the panel's own title
+             * (`PanelShell onRename`), not in a `Name` field at the foot of a
+             * body four regions long. `rename` is null for every other desk,
+             * because every other stage title is DERIVED and offering to type
+             * over one would promise a name the thing does not have.
+             */
+            rename: rename(sb),
+            body: <BoardDesk board={sb} />,
+        };
+    }
+    return out;
+}
+
+function useDeskBodies() {
+    const boards = useActiveBoards();
+    const label = useBoardLabel();
+    const aliases = useSettingsStore(s => s?.scoreboards?.aliases);
+    /*
+     * The STORED alias, not the resolved label: the title field holds what the
+     * producer typed and shows `Scoreboard {N}` as its placeholder, so emptying
+     * it reads as "back to the default" rather than as a field they have to
+     * clear before they can see one.
+     */
+    const rename = useCallback((sb) => ({
+        value: aliases?.[sb] ?? aliases?.[String(sb)] ?? '',
+        placeholder: `Scoreboard ${sb}`,
+        onChange: (next) => setBoardAlias(sb, next),
+    }), [aliases]);
+    return useMemo(() => deskBodiesFor(boards, label, rename), [boards, label, rename]);
+}
+
+/*
+ * HOW TALL A SIDE COLUMN MAY BE — measured, because CSS cannot ask.
+ *
+ * The rack and the rail are sticky viewport-tall boxes, and a sticky box is
+ * still in flow: sized `100vh - 2rem` while starting ~146px down the document,
+ * each one made the document 150px taller than the window whatever was on the
+ * stage. The console had a scrollbar at rest, on a page with nothing below the
+ * fold — and the rack, being the tallest thing in the grid, is what the grid
+ * then sized itself to, so no amount of `1fr`/`stretch`/`min-h-0` moves it.
+ * (Measured: the grid stayed 968px with every one of those applied.)
+ *
+ * The number a column actually wants is the distance from its own top to the
+ * bottom of the window, and nothing in CSS can name that. So measure it once
+ * and publish it as `--console-h` on the grid, which both columns inherit.
+ *
+ * The trade, stated: the height is the AT-REST one, so once the stage is long
+ * enough to scroll and a column pins at `top-4`, it ends short of the window
+ * bottom by however much chrome sits above the grid. That is the right way
+ * round — a column that is occasionally short costs a little of its own list,
+ * where a column that is always too tall costs the whole page a scrollbar it
+ * never needed.
+ *
+ * `document.body` is the observed element on purpose: the chrome above the grid
+ * is not just the console band (the OBS bar and the announcement card come and
+ * go above the page entirely), so anything narrower would miss a move. The
+ * write-guard is what keeps that from looping — setting the height changes the
+ * body's size and fires the observer again, which then measures the same top
+ * and writes nothing.
+ */
+function useConsoleColumnHeight(ref) {
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return undefined;
+        let last = null;
+        const measure = () => {
+            // Document-relative, so it is the same number at any scroll offset.
+            const top = el.getBoundingClientRect().top + window.scrollY;
+            // The shell's own bottom padding (p-5), or the column would end
+            // flush with the window and the page would scroll by that much.
+            const h = Math.max(0, Math.round(window.innerHeight - top - 20));
+            if (h === last) return;
+            last = h;
+            el.style.setProperty('--console-h', `${h}px`);
+        };
+        // Measure FIRST and unconditionally: a column with no height at all is
+        // worse than one that stops tracking, so the observer is the optional
+        // half, never the gate.
+        measure();
+        window.addEventListener('resize', measure);
+        const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+        ro?.observe(document.body);
+        return () => {
+            ro?.disconnect();
+            window.removeEventListener('resize', measure);
+        };
+    }, [ref]);
+}
+
+export default function Production() {
+    // Selection + rail pins live here so the rack and the stage read one copy
+    // (usePersistentState is per-hook, not a shared store).
+    const grid = useRef(null);
+    useConsoleColumnHeight(grid);
+    const [selection, setSelection] = useRackSelection();
+    const deskBodies = useDeskBodies();
+    const [rail, setRail] = useRailPins();
+    /*
+     * The Add picker's target: `{ scene }` while open, null while closed.
+     *
+     * Wrapped rather than held as a bare scene string, because "open with no
+     * scene" is a real state — the catalog tier's + (no OBS, so no scenes) opens
+     * the picker for its Copy URL and its container builder, both of which need
+     * nothing from OBS. A bare string can't tell that from closed.
+     */
+    const [add, setAdd] = useState(null);
+    // A never-touched rail (null) seeds its first-run cards; an emptied one ([])
+    // stays empty. Toggling always writes an explicit array, so the seed is
+    // adopted the moment the producer edits it rather than resurrecting later.
+    const pins = useMemo(() => seededRail(rail), [rail]);
+    // Pins are matched by the placement they resolve to, not by stored string —
+    // so unpinning removes the card the producer is looking at even when it is
+    // stored in a pre-scene or pre-instance form, and pinning can't produce two
+    // cards for one source. See ./sources/placements.
+    const scenes = useConsoleScenes();
+    const placements = useConsolePlacements(scenes);
+    const togglePin = (id) => setRail(prev => togglePinIn(seededRail(prev), id, placements));
+
+    return (
+        <Stack gap="md">
+            {/* The console band. Everything used to be pushed to the right,
+                which left the left two-thirds empty with no surface, no rule
+                and no baseline — a hole between the tabs above and the bounded
+                columns below rather than a bar.
+
+                OBS connectivity anchors the left because it is the one fact
+                that is true of the WHOLE console: the rack, the stage and the
+                rail each change shape when it goes, and each was left saying so
+                for itself. Scene transport and the demo switch stay right —
+                they are things you do, and a producer reaches for them, not for
+                the readout. The hairline gives the band a floor so the space
+                between the two is a gap on purpose. */}
+            <Group className="flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-3">
+                <ConnectionPill />
+                <Group gap="md" className="min-w-0 flex-wrap items-center">
+                    <TopBarSceneControls />
+                    <SampleModeSwitch />
+                </Group>
+            </Group>
+
+            {/* The stage gets a floor and the two side columns yield to it.
+                With plain `280px 1fr 252px` the fixed tracks are satisfied
+                first, so on a window that is merely wide enough to earn three
+                columns the WORK SURFACE ends up the narrowest of the three —
+                measured at 990px of grid, the stage got 402px while the rack
+                and rail took 532 between them, and the preview inside it
+                rendered its 1920×1080 source at 21%. A min on the middle track
+                inverts that: the rack and rail give up their last ~90px each
+                before the thing the producer is actually looking at does.
+
+                `lg:grid-rows-[auto_minmax(0,1fr)]`: between lg and xl the rack
+                spans both rows of its column and the rail sits under the stage
+                (../rack, ../rail). The rack is the tall one, so its height has
+                to go somewhere — plain `auto` rows split it evenly and opened a
+                135px gap between the stage and the rail; this hands all of it to
+                the rail's row. The `minmax(0,` is not decoration: a bare `1fr`
+                has an `auto` MINIMUM, and against an indefinite grid height that
+                minimum resolved the row to 816px for a 161px rail — 417px of
+                page scroll, measured, on a console whose columns now fit.
+
+                `xl:grid-rows-none` puts it back to one row, because at xl the
+                rail has its own column and nothing else is in row 2 — an empty
+                track costs nothing but the GAP above it, and that 16px was the
+                whole of the page's remaining scrollbar once the columns stopped
+                over-reaching (see `useConsoleColumnHeight`). */}
+            <div ref={grid} className="grid grid-cols-1 items-start gap-4 lg:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:grid-rows-none xl:grid-cols-[minmax(0,280px)_minmax(560px,1fr)_minmax(0,252px)]">
+                <Rack
+                    selection={selection} onSelect={setSelection}
+                    pins={pins} onPinToggle={togglePin}
+                    onAdd={(scene) => setAdd({ scene: scene ?? null })}
+                />
+                <Stage
+                    selection={selection} deskBodies={deskBodies} onSelect={setSelection}
+                    pins={pins} onPinToggle={togglePin}
+                />
+                <Rail
+                    pins={pins} onReorder={setRail}
+                    onUnpin={togglePin} onOpen={setSelection}
+                />
+            </div>
+
+            <PendingBar />
+            <AddSourceDialog
+                open={!!add} scene={add?.scene ?? null} onClose={() => setAdd(null)}
+            />
+        </Stack>
+    );
+}

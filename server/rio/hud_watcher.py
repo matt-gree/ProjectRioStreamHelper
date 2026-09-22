@@ -6,7 +6,6 @@ from typing import Callable, Awaitable
 from loguru import logger
 from watchfiles import awatch, Change
 from server.rio.pyrio.stat_file_parser import HudObj
-from server.utils import json
 
 
 def _norm_hand(val) -> int:
@@ -50,10 +49,6 @@ class HudWatcher:
             except asyncio.CancelledError:
                 pass
         logger.info("[HudWatcher] Stopped")
-
-    def update_hud_file(self, new_hud_file: Path):
-        self.hud_file = new_hud_file
-        logger.info(f"[HudWatcher] Updated path to {self.hud_file}")
 
     async def reload(self) -> dict | None:
         """One-shot read of the HUD file. Returns the game dict or None.
@@ -102,12 +97,99 @@ class HudWatcher:
             logger.error(f"[HudWatcher] Watch loop fatal error: {e}")
 
     def _read_and_parse(self) -> dict | None:
-        """Read the HUD file and convert to flat game dict. Runs in thread."""
-        with open(self.hud_file, "r") as f:
+        """Read the HUD file and convert to flat game dict. Runs in thread.
+
+        Read as BYTES, never text. Project Rio writes this file as UTF-8, but a
+        text-mode open decodes with the locale codec — UTF-8 on macOS, the ANSI
+        code page on Windows — so a player whose Rio name is not pure ASCII made
+        every read raise UnicodeDecodeError there, and the board stayed frozen
+        for the whole game. orjson takes bytes and assumes UTF-8 per the JSON
+        spec, which is both correct and one decode cheaper.
+        """
+        with open(self.hud_file, "rb") as f:
             data = orjson.loads(f.read())
 
         hud = HudObj(data)
         return self._convert_hud_data_format(hud)
+
+    @staticmethod
+    def _game_over(hud_data: HudObj) -> bool:
+        """Whether this frame is the last one of the game (pyrio's rule).
+
+        MSB's HUD has no end-of-game event — the frame recording the final out
+        or the winning run is simply the last one written — so this is a
+        predicate over ONE frame with no history. That is what makes it survive
+        a restart: PRSH's initial read (``RioGameDataProvider.Start``) re-derives
+        it from whatever is on disk, which is the only way to know that a board
+        coming up on a fresh boot is holding last night's finished game. Every
+        file-watching signal we have misses that case by construction, because
+        nothing changes.
+
+        Two guards, both resolving to False, because the wrong answer in the
+        other direction goes out on air as a live game called Final:
+
+        * an older pinned pyrio has no ``game_over``, and a submodule pin that
+          lags the code is a normal state mid-change, not a crash;
+        * a malformed frame must not take the HUD path down with it.
+        """
+        fn = getattr(hud_data, "game_over", None)
+        if fn is None:
+            return False
+        try:
+            return bool(fn())
+        except Exception:
+            logger.exception("[HUD] game_over check failed; treating as not over")
+            return False
+
+    @staticmethod
+    def _extract_contact(hud_json: dict) -> dict | None:
+        """Pull the last completed contact (inputs + measured outputs).
+
+        Lives at ``Previous Event -> Pitch -> Contact``; the batter is identified
+        by ``Runner Batter`` (roster loc) + the contact's own ``Pitcher Team Id``,
+        which is robust to the current at-bat having already advanced. Values are
+        left raw (HUD stores many numbers as strings); hit_visualizer coerces.
+        Returns None when there is no batted-ball contact.
+        """
+        pe = hud_json.get("Previous Event")
+        if not isinstance(pe, dict):
+            return None
+        pitch = pe.get("Pitch")
+        if not isinstance(pitch, dict):
+            return None
+        con = pitch.get("Contact")
+        if not isinstance(con, dict):
+            return None
+        if con.get("Ball Power") in (None, ""):
+            return None  # swing-and-miss / take / walk — no flight
+
+        rb = hud_json.get("Runner Batter") or {}
+        return {
+            "pitcher_team_id": pitch.get("Pitcher Team Id"),
+            "pitcher_char": pitch.get("Pitcher Char Id"),
+            "batter_roster_loc": rb.get("Runner Roster Loc"),
+            "batter_char": rb.get("Runner Char Id"),
+            "type_of_swing": pitch.get("Type of Swing"),
+            "ball_x": con.get("Ball Contact Pos - X"),
+            "ball_z": con.get("Ball Contact Pos - Z"),
+            "charge_up": con.get("Charge Power Up"),
+            "charge_down": con.get("Charge Power Down"),
+            "frame": con.get("Frame of Swing Upon Contact"),
+            "rng": [con.get("RNG1"), con.get("RNG2"), con.get("RNG3")],
+            "vert_angle": con.get("Vert Angle"),
+            "horiz_angle": con.get("Horiz Angle"),
+            "ball_power": con.get("Ball Power"),
+            "landing": [
+                con.get("Ball Landing Position - X"),
+                con.get("Ball Landing Position - Y"),
+                con.get("Ball Landing Position - Z"),
+            ],
+            "max_height": con.get("Ball Max Height"),
+            "hang_time": con.get("Ball Hang Time"),
+            "result_primary": con.get("Contact Result - Primary"),
+            "result_secondary": con.get("Contact Result - Secondary"),
+            "result_of_ab": pe.get("Result of AB"),
+        }
 
     @staticmethod
     def _convert_hud_data_format(hud_data: HudObj) -> dict:
@@ -158,6 +240,10 @@ class HudWatcher:
             "balls": hud_data.balls(),
             "strikes": hud_data.strikes(),
             "event_num": hud_data.event_number,
+            # Last completed contact (for the hit visualizer), or None.
+            "contact": HudWatcher._extract_contact(hud_data.hud_json),
+            # Whether this frame is the last one of the game. See _game_over.
+            "game_over": HudWatcher._game_over(hud_data),
         }
 
         # Roster data using pyrio's RosterObj

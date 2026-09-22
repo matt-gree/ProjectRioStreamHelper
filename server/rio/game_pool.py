@@ -1,19 +1,23 @@
 import asyncio
+import hashlib
 import math
 
 import numpy as np
 import pandas as pd
 from loguru import logger
 from server import socketio
-from server.rio.provider import (
-    RioGameDataProvider,
-    apply_parsed_game_to_state,
-    apply_completed_game_to_state,
-)
+from server.rio.provider import RioGameDataProvider, pin_swap
+from server.rio.apply import apply_parsed_game_to_state, apply_completed_game_to_state
 from server.rio import stats_api
 from server.rio.stats_api import get_last_completed_fetch_info
 from server.rio.pyrio.lookup import LookupDicts
+from server.match import Match
+from server.rio.game_end import GameEndWatcher
 from server.settings import Settings
+
+# Polls a followed live game may be absent from the ongoing feed before we treat
+# it as ended (~2 poll intervals of grace against a flickering feed).
+END_MISS_TOLERANCE = 2
 
 
 def _sanitize_row(d: dict) -> dict:
@@ -37,23 +41,31 @@ def _sanitize_row(d: dict) -> dict:
     return out
 
 
-def _pinned_swap_needed(player0: str, player1: str) -> bool | None:
-    """Check if the pinned player setting requires swapping sides.
+def _stable_ongoing_game_id(away_player: str, home_player: str, start_time) -> int:
+    """Deterministic synthetic id for an ongoing game (the API provides none).
 
-    Returns True if swap needed, False if no swap needed, None if
-    pinned player is not in this game.
+    Must be stable across process restarts because `playback.gameId` is
+    persisted in Settings and looked up later — built-in `hash()` is
+    PYTHONHASHSEED-randomized per process and would break that lookup.
     """
-    pinned_player = Settings.Get("project_rio.pinned_player", "").strip()
-    if not pinned_player:
-        return None
-    pinned_side = Settings.Get("project_rio.pinned_side", "Team 1")
-    pinned_index = 0 if pinned_side == "Team 1" else 1
+    digest = hashlib.sha1(f"{away_player}|{home_player}|{start_time}".encode()).digest()
+    return int.from_bytes(digest[:4], "big") % (2 ** 31)
 
-    if player0 == pinned_player:
-        return pinned_index == 1
-    elif player1 == pinned_player:
-        return pinned_index == 0
-    return None
+
+def _orient_pin_match(left: str, right: str, sb: int) -> tuple[bool, str]:
+    """Side orientation for an API game as (swap, reason).
+
+    The API pools have no HUD manual-swap / back-to-back state machine, so the
+    cascade is just pin > match (matching the global precedence). `reason` names
+    the deciding layer (or "" for raw order) and is mirrored to side_reason.
+    """
+    pin = pin_swap(left, right)
+    if pin is not None:
+        return pin, "pin"
+    mo = Match.orientation_for_sides(sb, left, right)
+    if mo is not None:
+        return mo, "match"
+    return False, ""
 
 
 class OngoingGamePool:
@@ -67,20 +79,33 @@ class OngoingGamePool:
     games: dict = {}  # game_id -> parsed game dict
     _poll_task: asyncio.Task | None = None
     _poll_interval: float = 10.0
-    _auto_poll: bool = False
+    # Per-board live-follow lifecycle. A single-mode board following a live game
+    # is a "live consumer" (keeps the ongoing poll running) only until that game
+    # leaves the feed. `_follow_misses` counts consecutive polls the followed
+    # game has been absent; once it crosses END_MISS_TOLERANCE, `_ended_follow`
+    # records {sb_id: game_id} so the poll loop stops fetching for a game that's
+    # over. Both are cleared when the followed game reappears or a new one loads.
+    _follow_misses: dict = {}
+    _ended_follow: dict = {}
 
     @classmethod
     async def Start(cls):
-        cls._auto_poll = False
         cls._poll_interval = Settings.Get("ongoing_games.poll_interval", 10.0)
-        # Always start with auto-poll off regardless of previous session state
-        await Settings.Set("ongoing_games.auto_poll", False)
-        logger.info("[OngoingGamePool] Initialized (auto_poll=False)")
+        GameEndWatcher.reset()
+        # Polling is demand-driven: the loop always runs but only hits the API
+        # on ticks where a board actually needs live data (see
+        # _live_consumers_exist). This replaces the old user-facing on/off
+        # toggle, which was a process-wide setting disguised as a per-scoreboard
+        # control and left loaded live games silently frozen when off.
+        cls._start_polling()
+        logger.info("[OngoingGamePool] Initialized (demand-driven polling, interval={}s)", cls._poll_interval)
 
     @classmethod
     async def Stop(cls):
         cls._stop_polling()
         cls.games = {}
+        cls._follow_misses = {}
+        cls._ended_follow = {}
         logger.info("[OngoingGamePool] Stopped")
 
     @classmethod
@@ -96,26 +121,43 @@ class OngoingGamePool:
         cls._poll_task = None
 
     @classmethod
-    async def set_auto_poll(cls, enabled: bool, interval: float | None = None):
-        """Enable or disable auto-polling."""
-        cls._auto_poll = enabled
-        await Settings.Set("ongoing_games.auto_poll", enabled)
-        if interval is not None:
-            cls._poll_interval = interval
-            await Settings.Set("ongoing_games.poll_interval", interval)
+    def _live_consumers_exist(cls) -> bool:
+        """True if any board needs the ongoing feed kept fresh: a single-mode
+        board currently following a live (not completed) game, or a running
+        rotation whose scope includes live games. HUD board 1 is excluded — the
+        local HUD writer owns it. Reads State/Settings directly (cheap) so the
+        poll loop can gate each tick without an API call when nothing needs it.
+        """
+        from server.bindings import transport, get_binding
+        from server.state import State
+        from server.utils.deep_dict import deep_get
 
-        cls._stop_polling()
-        if enabled:
-            cls._start_polling()
-            logger.info("[OngoingGamePool] Auto-poll enabled (interval={}s)", cls._poll_interval)
-        else:
-            logger.info("[OngoingGamePool] Auto-poll disabled")
+        for sb_id in Settings.Get("scoreboards.active", [1]):
+            if transport(sb_id) == "hud":
+                continue
+            binding = get_binding(sb_id)
+            playback = binding.get("playback", {})
+            if playback.get("mode") == "rotate":
+                if playback.get("running") and binding.get("pool", {}).get("scope", "both") in ("live", "both"):
+                    return True
+                continue
+            # single mode — is a live game loaded on this board?
+            game_id = playback.get("gameId")
+            if game_id is None:
+                continue
+            # A followed game that already left the feed is done — stop polling.
+            if cls._ended_follow.get(sb_id) == game_id:
+                continue
+            if deep_get(State.state, f"score.{sb_id}.game_completed", None) is False:
+                return True
+        return False
 
     @classmethod
     async def _poll_loop(cls):
         while True:
             try:
-                await cls._fetch_games()
+                if cls._live_consumers_exist():
+                    await cls._fetch_games()
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -152,7 +194,7 @@ class OngoingGamePool:
             start_time = g.get("start_time", 0)
 
             # Generate a stable synthetic game_id (the API does not provide one)
-            game_id = abs(hash((away_player, home_player, start_time))) % (2 ** 31)
+            game_id = _stable_ongoing_game_id(away_player, home_player, start_time)
 
             # Resolve integer captain indices to character names for display
             away_cap_idx = g.get("away_captain", 0)
@@ -179,8 +221,97 @@ class OngoingGamePool:
 
             new_games[game_id] = game
 
+        prev_games = cls.games
         cls.games = new_games
+        # Phase C: a followed match-game dropping out of ongoing is the signal to
+        # resolve its winner and credit the series (see server/rio/game_end.py).
+        try:
+            GameEndWatcher.on_ongoing_poll(prev_games, new_games)
+        except Exception:
+            logger.exception("[OngoingGamePool] game-end hook error")
+        # Keep single-mode boards that are following a live game fresh — without
+        # this, a loaded live game is a one-shot snapshot that never updates.
+        try:
+            await cls._reapply_single_live()
+        except Exception:
+            logger.exception("[OngoingGamePool] single-live re-apply error")
         await socketio.emit("v1.game_pool.ongoing_update", cls.list_games())
+
+    @classmethod
+    async def _reapply_single_live(cls):
+        """Re-push the current live game to every single-mode board following
+        one, so its score/state tracks the ongoing feed. Rotating boards drive
+        their own applies; HUD board 1 is owned by the HUD writer."""
+        from server.bindings import get_binding, transport
+        from server.rio.stats_tracker import StatsTracker
+
+        for sb_id in Settings.Get("scoreboards.active", [1]):
+            if transport(sb_id) == "hud":
+                continue
+            playback = get_binding(sb_id)["playback"]
+            if playback.get("mode") != "single":
+                continue
+            game_id = playback.get("gameId")
+            if game_id is None:
+                continue
+            game = cls.get_game(game_id)
+            if not game:
+                # The followed live game is no longer in the ongoing feed. Give
+                # it a couple of polls of grace (a flickering feed shouldn't end
+                # a live game), then mark the follow ended so
+                # _live_consumers_exist stops counting it — the app stops
+                # pinging for a game that's over. Cleared when a new game loads.
+                misses = cls._follow_misses.get(sb_id, 0) + 1
+                cls._follow_misses[sb_id] = misses
+                if misses >= END_MISS_TOLERANCE:
+                    cls._ended_follow[sb_id] = game_id
+                    cls._follow_misses.pop(sb_id, None)
+                    await cls._set_following(sb_id, False)
+                    logger.info(
+                        "[OngoingGamePool] sb {} live game {} left the feed; "
+                        "stopping live polling for it", sb_id, game_id,
+                    )
+                continue
+            cls._follow_misses.pop(sb_id, None)
+            cls._ended_follow.pop(sb_id, None)
+
+            await cls.apply_game_to_scoreboard(game_id, sb_id)
+
+            # Refresh the live per-character stats slot the same way the assign
+            # endpoint does on a same-game re-apply (no new-game re-init).
+            parsed = RioGameDataProvider.parse_game_data(game)
+            entrants = parsed.get("entrants", [[{}], [{}]])
+            p0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
+            p1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
+            sides_swapped = pin_swap(p0, p1) is True
+            StatsTracker.on_live_game_update(game, sb_id)
+            await StatsTracker.push_stats_to_state(sb_id, sides_swapped)
+
+    @classmethod
+    async def _set_following(cls, sb_id: int, following: bool) -> None:
+        """Mirror whether this board's game is still being polled for.
+
+        `_live_consumers_exist` stops counting a follow once the game has left the
+        ongoing feed, so from that moment the board holds a live game that will
+        never update again — and from the client's side that is indistinguishable
+        from one that will: `game_completed` stays False, and the poll's own
+        `v1.game_pool.ongoing_update` is emitted for the WHOLE app, so another
+        board's rotation keeps firing it. The console's live-refresh countdown
+        would sit there promising a refresh that is never coming. Same instinct as
+        `side_reason`: the server knows, so the server says.
+
+        Written only on CHANGE. `State.Set` emits unconditionally and this sits in
+        the poll loop, so writing it every tick would put an extra SocketIO frame
+        on the wire every `poll_interval` per board, for a value that flips twice
+        a game.
+        """
+        from server.state import State
+        from server.utils.deep_dict import deep_get
+
+        key = f"score.{sb_id}.live_following"
+        if deep_get(State.state, key, None) is following:
+            return
+        await State.Set(key, following)
 
     @classmethod
     def get_game(cls, game_id) -> dict | None:
@@ -201,11 +332,11 @@ class OngoingGamePool:
         parsed = RioGameDataProvider.parse_game_data(game)
         parsed["game_id"] = game_id
 
-        # Check if pinned player requires a side swap
+        # Side orientation: pin > match (see _orient_pin_match).
         entrants = parsed.get("entrants", [[{}], [{}]])
         player0 = entrants[0][0].get("rioName", "") if entrants[0] else ""
         player1 = entrants[1][0].get("rioName", "") if entrants[1] else ""
-        swap = _pinned_swap_needed(player0, player1)
+        swap, reason = _orient_pin_match(player0, player1, scoreboard_number)
 
         if swap:
             parsed["entrants"] = list(reversed(parsed["entrants"]))
@@ -214,35 +345,49 @@ class OngoingGamePool:
         else:
             home_team = 2
 
-        await apply_parsed_game_to_state(parsed, scoreboard_number, home_team=home_team)
-
-        # Update the current api_game_id for this scoreboard. Leave `type`
-        # alone — it was set by the user via the source dropdown, and a
-        # rotator tick must not overwrite it (would turn the scoreboard into
-        # a live_game source on every advance). Likewise, do NOT auto-set
-        # stats_tag from the game's mode: that would (a) override the user's
-        # selected game mode and (b) trigger a stats refetch on every poll
-        # via the frontend's tag-change effect.
-        await Settings.Set(
-            f"scoreboards.sources.{scoreboard_number}.api_game_id", game_id
+        await apply_parsed_game_to_state(
+            parsed, scoreboard_number, home_team=home_team, side_reason=reason
         )
 
+        # Record the game currently applied to this scoreboard (used for
+        # is-new-game detection on the next apply). Leave `playback.mode`
+        # alone — a rotating board ticking through its pool must not flip
+        # back to single. Likewise, do NOT auto-set stats_tag from the game's
+        # mode here: that would (a) override the user's selected game mode
+        # and (b) trigger a stats refetch on every poll via the frontend's
+        # tag-change effect.
+        await _record_game_id(scoreboard_number, game_id)
+        # A game from the ongoing feed is on this board, so the feed is worth
+        # polling for it — the flag the console's countdown renders on.
+        await cls._set_following(scoreboard_number, True)
+
         return True
+
+
+async def _record_game_id(scoreboard_number: int, game_id) -> None:
+    """Persist the game a board is showing — on CHANGE only. A followed live
+    game is re-applied on every poll, and a settings write is a disk write, a
+    `v1.settings.set` frame and a pass through every settings watcher; doing it
+    each tick for a value that has not moved is the same waste `_set_following`
+    avoids."""
+    key = f"scoreboards.binding.{scoreboard_number}.playback.gameId"
+    if Settings.Get(key) != game_id:
+        await Settings.Set(key, game_id)
 
 
 async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
     """Apply a completed-game dict to a scoreboard.
 
     Used by both the manual browser (CompletedGamePool.apply_game_to_scoreboard)
-    and rotations (RotationState, which holds its own per-rotation game cache).
-    Performs the pinned-player side swap and persists api_game_id.
+    and pool rotations (PoolState, which holds its own per-pool game cache).
+    Performs the pinned-player side swap and persists the applied gameId.
     """
     if not game:
         return False
 
     away_user = game.get("away_user", "")
     home_user = game.get("home_user", "")
-    swap = _pinned_swap_needed(away_user, home_user)
+    swap, reason = _orient_pin_match(away_user, home_user, scoreboard_number)
 
     if swap:
         game = dict(game)
@@ -250,24 +395,26 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
         game["away_score"], game["home_score"] = game.get("home_score", 0), game.get("away_score", 0)
         game["away_captain"], game["home_captain"] = game.get("home_captain", ""), game.get("away_captain", "")
 
-    await apply_completed_game_to_state(game, scoreboard_number)
-    await Settings.Set(
-        f"scoreboards.sources.{scoreboard_number}.api_game_id", game.get("game_id")
-    )
+    await apply_completed_game_to_state(game, scoreboard_number, side_reason=reason)
+    await _record_game_id(scoreboard_number, game.get("game_id"))
+    # A completed game never updates again, so nothing is following anything —
+    # and a board moving from a live game to a completed one has to clear the
+    # flag, or it keeps the last live game's countdown running under it.
+    await OngoingGamePool._set_following(scoreboard_number, False)
     return True
 
 
 class CompletedGamePool:
     """One-shot completed-game search helper for the manual browser UI.
 
-    Rotations no longer use this — each RotationState holds its own filters
-    and game cache (server.rio.rotation.RotationState). What remains here is
-    a thin convenience layer for the Game Pool Manager modal: a single
+    Pool rotations no longer use this — each PoolState holds its own filters
+    and game cache (server.rio.rotation.PoolState). What remains here is
+    a thin convenience layer for the board desk's completed-game search: a single
     `fetch(filters)` call that runs a query, caches the latest result so
     `assign_game` can resolve it by id, and emits a SocketIO update for the
-    modal table.
+    search table.
 
-    There is no auto-poll loop and no persisted filter set. The modal calls
+    There is no auto-poll loop and no persisted filter set. The search calls
     fetch on user action; the cache is purely a transient memo of the most
     recent search.
     """
@@ -289,7 +436,7 @@ class CompletedGamePool:
 
         Updates `cls.games` with the result (so the manual browser's `assign`
         endpoint can resolve game_ids back to dicts) and emits an update
-        event for the modal. Returns the {game_id: game} dict; callers that
+        event for the search table. Returns the {game_id: game} dict; callers that
         own their own cache (rotations) should use this return value rather
         than relying on the class-level cache.
         """
@@ -328,6 +475,3 @@ class CompletedGamePool:
         """Apply a cached completed game (by id) to a scoreboard."""
         return await apply_completed_game_dict(cls.get_game(game_id), scoreboard_number)
 
-
-# Backward-compatible alias for imports that reference the old name
-RioGamePool = OngoingGamePool

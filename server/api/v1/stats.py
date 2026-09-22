@@ -1,50 +1,10 @@
 from server.utils.router import method
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 from server.rio.stats_tracker import StatsTracker
 from server.rio import stats_api
 
 router = APIRouter()
-
-
-@method(
-    router.get, "/rio/stats",
-    version="1", id="rio.stats",
-    response_class=ORJSONResponse
-)
-async def rio_stats(
-    scoreboard: int | None = None,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Get all merged character stats for the active game on a scoreboard."""
-    return ORJSONResponse(StatsTracker.get_all_stats(scoreboard_number=scoreboard))
-
-
-@method(
-    router.get, "/rio/stats/character",
-    version="1", id="rio.stats.character",
-    response_class=ORJSONResponse
-)
-async def rio_stats_character(
-    team: int = 1,
-    roster_index: int = 0,
-    scoreboard: int | None = None,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Get merged stats for a single character by team and roster index."""
-    all_stats = StatsTracker.get_all_stats(scoreboard_number=scoreboard)
-    team_key = f"team_{team}"
-    team_data = all_stats.get(team_key, {})
-    characters = team_data.get("characters", {})
-
-    char_data = characters.get(roster_index)
-    if char_data:
-        return ORJSONResponse({
-            "team": team,
-            **char_data,
-        })
-
-    raise HTTPException(status_code=404, detail=f"No character at team {team}, roster index {roster_index}")
 
 
 @method(
@@ -85,40 +45,25 @@ async def rio_stats_diagnostics(
 
 
 @method(
-    router.get, "/rio/key/status",
-    version="1", id="rio.key.status",
-    response_class=ORJSONResponse
-)
-async def rio_key_status(session_id: str | None = None) -> ORJSONResponse:
-    """Check whether a Rio API key is configured (never exposes the key)."""
-    return ORJSONResponse({"configured": stats_api.load_rio_key() is not None})
-
-
-@method(
-    router.put, "/rio/key",
-    version="1", id="rio.key.set",
-    response_class=ORJSONResponse
-)
-async def rio_key_set(request: Request, session_id: str | None = None) -> ORJSONResponse:
-    """Save a Rio API key to user_data/.env and reset the API client."""
-    body = await request.json()
-    key = body.get("key", "").strip()
-    if not key:
-        raise HTTPException(status_code=400, detail="key is required")
-    stats_api.save_rio_key(key)
-    stats_api.reset_client()
-    return ORJSONResponse({"success": True})
-
-
-@method(
     router.get, "/rio/game-modes",
     version="1", id="rio.game_modes.get",
     response_class=ORJSONResponse
 )
-async def rio_game_modes(session_id: str | None = None) -> ORJSONResponse:
-    """Get cached active game modes (name -> id)."""
-    modes = await stats_api.fetch_game_modes()
-    return ORJSONResponse(modes)
+async def rio_game_modes(
+    scope: str = "active", session_id: str | None = None
+) -> ORJSONResponse:
+    """Game modes as {name: id}.
+
+    `scope=active` (the default, and what every existing caller gets) is the
+    list a producer picks from TODAY. `scope=all` is the whole catalogue,
+    ended seasons included — what a console picker needs to be able to SAY the
+    mode a completed game was played in, and what the pool's mode filter needs
+    to be able to search one. Same shape either way, so a caller that wants both
+    tiers asks twice and takes the difference.
+    """
+    if scope == "all":
+        return ORJSONResponse(await stats_api.fetch_all_game_modes())
+    return ORJSONResponse(await stats_api.fetch_game_modes())
 
 
 @method(

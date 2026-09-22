@@ -9,6 +9,20 @@
 (function () {
   'use strict';
 
+  // ── Bundled Inter ──
+  // Load the locally-packaged Inter face as early as possible (before render),
+  // so every overlay has Inter available offline — both as the app's baseline
+  // typeface and as the guaranteed fallback for any user-chosen font that fails
+  // to load. Injected once; idempotent across overlays that also link it
+  // statically. See /layout/lib/fonts/inter.css.
+  if (!document.getElementById('bundled-inter-font')) {
+    const interLink = document.createElement('link');
+    interLink.id = 'bundled-inter-font';
+    interLink.rel = 'stylesheet';
+    interLink.href = '/layout/lib/fonts/inter.css';
+    (document.head || document.documentElement).appendChild(interLink);
+  }
+
   // ── Resolve server URL ──
   const BASE_URL = (window.location.protocol === 'file:')
     ? 'http://localhost:5260'
@@ -46,29 +60,285 @@
     if (cur != null && typeof cur === 'object') delete cur[keys[keys.length - 1]];
   }
 
+  // ── Character/team asset ids ──
+  // Character (and captain) art is keyed by the canonical HUD character id
+  // (0-53), not by name — mirrors pyrio's LookupDicts.CHAR_NAME. Team logos
+  // have no HUD-native id, so they're keyed by their own 0-47 enumeration —
+  // mirrors pyrio's in_game_team_names_list index order. See
+  // server/rio/pyrio/assets.py for the canonical source.
+  const CHAR_IDS = {
+    "Mario": 0, "Luigi": 1, "DK": 2, "Diddy": 3, "Peach": 4, "Daisy": 5,
+    "Yoshi": 6, "Baby Mario": 7, "Baby Luigi": 8, "Bowser": 9, "Wario": 10,
+    "Waluigi": 11, "Koopa(G)": 12, "Toad(R)": 13, "Boo": 14, "Toadette": 15,
+    "Shy Guy(R)": 16, "Birdo": 17, "Monty": 18, "Bowser Jr": 19,
+    "Paratroopa(R)": 20, "Pianta(B)": 21, "Pianta(R)": 22, "Pianta(Y)": 23,
+    "Noki(B)": 24, "Noki(R)": 25, "Noki(G)": 26, "Bro(H)": 27,
+    "Toadsworth": 28, "Toad(B)": 29, "Toad(Y)": 30, "Toad(G)": 31,
+    "Toad(P)": 32, "Magikoopa(B)": 33, "Magikoopa(R)": 34, "Magikoopa(G)": 35,
+    "Magikoopa(Y)": 36, "King Boo": 37, "Petey": 38, "Dixie": 39,
+    "Goomba": 40, "Paragoomba": 41, "Koopa(R)": 42, "Paratroopa(G)": 43,
+    "Shy Guy(B)": 44, "Shy Guy(Y)": 45, "Shy Guy(G)": 46, "Shy Guy(Bk)": 47,
+    "Dry Bones(Gy)": 48, "Dry Bones(G)": 49, "Dry Bones(R)": 50,
+    "Dry Bones(B)": 51, "Bro(F)": 52, "Bro(B)": 53,
+  };
+
+  const TEAM_IDS = {
+    "Mario Heroes": 0, "Mario Fireballs": 1, "Mario Sunshines": 2, "Mario All Stars": 3,
+    "Luigi Gentlemen": 4, "Luigi Vacuums": 5, "Luigi Mansioneers": 6, "Luigi Leapers": 7,
+    "Peach Roses": 8, "Peach Dynasties": 9, "Peach Monarchs": 10, "Peach Princesses": 11,
+    "Daisy Lillies": 12, "Daisy Cupids": 13, "Daisy Queen Bees": 14, "Daisy Petals": 15,
+    "Yoshi Eggs": 16, "Yoshi Speed Stars": 17, "Yoshi Islanders": 18, "Yoshi Flutters": 19,
+    "Birdo Beauties": 20, "Birdo Models": 21, "Birdo Bows": 22, "Birdo Fans": 23,
+    "Wario Garlics": 24, "Wario Steakheads": 25, "Wario Greats": 26, "Wario Beasts": 27,
+    "Waluigi Mystiques": 28, "Waluigi Smart Alecks": 29, "Waluigi Flankers": 30, "Waluigi Mashers": 31,
+    "DK Explorers": 32, "DK Wild Ones": 33, "DK Kongs": 34, "DK Animals": 35,
+    "Diddy Survivors": 36, "Diddy Ninjas": 37, "Diddy Tails": 38, "Diddy Red Caps": 39,
+    "Bowser Flames": 40, "Bowser Blue Shells": 41, "Bowser Monsters": 42, "Bowser Black Stars": 43,
+    "Jr Fangs": 44, "Jr Bombers": 45, "Jr Pixies": 46, "Jr Rookies": 47,
+  };
+
+  function charId(name) { return CHAR_IDS[name]; }
+  function teamId(teamName) { return TEAM_IDS[teamName]; }
+
   // ── Image helpers ──
   function charImg(name, cls, size) {
-    if (!name) return '';
+    const id = charId(name);
+    if (id === undefined) return '';
     const s = size ? `width:${size}px;height:${size}px;` : '';
-    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/characterIcons/${encodeURIComponent(name)}.png" style="${s}" onerror="this.style.display='none'" />`;
+    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/characterIcons/${id}.png" style="${s}" onerror="this.style.display='none'" />`;
   }
 
   function logoImg(teamName, cls) {
-    if (!teamName) return '';
-    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/teamLogos/${encodeURIComponent(teamName)}.png" onerror="this.style.display='none'" />`;
+    const id = teamId(teamName);
+    if (id === undefined) return '';
+    return `<img class="${cls}" src="${BASE_URL}/game_assets/msb/teamLogos/${id}.png" onerror="this.style.display='none'" />`;
   }
 
-  // ── State & settings stores ──
+  /*
+   * ── Preview-mode flags (read from URL params) ──
+   *
+   * ?preview=1               — running inside a preview iframe rather than an
+   *                            OBS source. Turns on preview CHROME: blank-reason
+   *                            notes (setBlank), instant reveals instead of
+   *                            animations, scale-to-fit. Says nothing about
+   *                            where the data comes from.
+   * ?sample=1                — render this layout's canned sample bundle INSTEAD
+   *                            of live state. For a catalog gallery or an Add
+   *                            picker, which has to show a representative
+   *                            overlay on a machine with no game in progress.
+   * ?preview_globals_only=1  — ignore per-layout style overrides; show what
+   *                            the Design tab globals look like in isolation
+   *
+   * The first two were one flag, and it made the Production console's stage
+   * preview a mockup: every element showed the sample game and live state was
+   * never even fetched. A producer previewing what is about to go on air was
+   * looking at a fixture. The gallery wants sample; the console wants the truth
+   * — so they are separate params, and the SAMPLE half is opt-in.
+   */
+  const previewParams = new URLSearchParams(window.location.search);
+  const PREVIEW_MODE = previewParams.get('preview') === '1';
+  const SAMPLE_MODE = previewParams.get('sample') === '1';
+  const PREVIEW_GLOBALS_ONLY = previewParams.get('preview_globals_only') === '1';
+
+  /*
+   * ── State & settings stores, and the sample bundle beside them ──────────
+   *
+   * `state` and `settings` are the SAME OBJECTS for the life of the page. That
+   * identity is load-bearing: a dozen layouts destructure them once at module
+   * scope (`const { deepGet, state } = OverlayBase`), and the socket's own
+   * full-state refresh already clears-and-repopulates rather than reassigning.
+   * Swapping in a different object — or hiding them behind a getter — silently
+   * strands every one of those layouts on whichever bundle was current when the
+   * script ran.
+   *
+   * So the sample doesn't replace the store, it takes it over. Two switches turn
+   * it on:
+   *   ?sample=1                     — this page only (gallery / picker preview)
+   *   state `production.sample`     — app-wide DEMO MODE, so a producer can lay
+   *                                   out an OBS scene against representative
+   *                                   content with no game running.
+   *
+   * On the way in, the live contents are PARKED in `liveBuffer` and the store is
+   * refilled from the sample; live socket writes redirect to the buffer and keep
+   * flowing. On the way out the buffer goes back. Demo mode therefore ends with
+   * the CURRENT game on screen in the next frame — not the one that was playing
+   * when it started, and with no reload. Off is the common case and costs
+   * nothing: with demo off the live write target IS the exported store.
+   *
+   * A layout that declares no sample ignores both switches and stays live —
+   * better than blanking a working source.
+   */
+  const SAMPLE_STATE_KEY = 'production.sample';
+
   const state = {};
   const settings = {};
 
-  // ── Preview-mode flags (read from URL params) ──
-  // ?preview=1               — running in the Layouts-tab preview iframe
-  // ?preview_globals_only=1  — ignore per-layout style overrides; show what
-  //                            the Design tab globals look like in isolation
-  const previewParams = new URLSearchParams(window.location.search);
-  const PREVIEW_MODE = previewParams.get('preview') === '1';
-  const PREVIEW_GLOBALS_ONLY = previewParams.get('preview_globals_only') === '1';
+  let sampleState = null;     // null until a bundle is loaded — "no sample"
+  let sampleSettings = null;  // flat key→value seeds, or null
+  let liveBuffer = null;      // live state parked here while demo is on
+  let seededKeys = [];        // settings keys the seed actually filled
+  let demoOn = false;
+  // Bumped each time the page finishes loading a font face — see init().
+  let fontGeneration = 0;
+
+  // Where live state writes land: the exported store normally, the parking
+  // buffer while the sample is on screen.
+  function liveTarget() { return demoOn ? liveBuffer : state; }
+
+  function refill(target, source) {
+    for (const k of Object.keys(target)) delete target[k];
+    Object.assign(target, source);
+  }
+
+  /*
+   * Sample settings SEED, they don't override. A bundle names content-ish keys
+   * (a stats tag, a card title) so a bar doesn't collapse in a sample render —
+   * but a producer laying out a scene in demo mode has their own title set, and
+   * replacing it would make their alignment work show the wrong text. Anything
+   * the producer has set wins; the seed only fills a hole, and only the holes it
+   * filled are cleared again on the way out.
+   *
+   * Design settings are never seeded at all: designing against sample content is
+   * the point of demo mode.
+   */
+  function applySeeds() {
+    seededKeys = [];
+    if (!sampleSettings) return;
+    for (const [k, v] of Object.entries(sampleSettings)) {
+      if (deepGet(settings, k, null) == null) { deepSet(settings, k, v); seededKeys.push(k); }
+    }
+  }
+
+  function clearSeeds() {
+    for (const k of seededKeys) deepUnset(settings, k);
+    seededKeys = [];
+  }
+
+  // The producer just set a key we had seeded — it's theirs now, so leaving demo
+  // mode must not unset it back out from under them.
+  function forgetSeed(key) {
+    if (seededKeys.length) seededKeys = seededKeys.filter((k) => k !== key);
+  }
+
+  // `{sb}` / `{team}` in a sample bundle's keys resolve against this page's own
+  // URL, so one bundle serves every board and side variant of a layout.
+  function sampleTokens() {
+    return {
+      sb: parseInt(previewParams.get('scoreboard')) || 1,
+      team: parseInt(previewParams.get('team')) || 1,
+    };
+  }
+
+  function resolveKey(key, tokens) {
+    return key.replace(/\{(\w+)\}/g, (m, k) => (k in tokens ? tokens[k] : m));
+  }
+
+  // State fragments are merged into a nested bundle (mounts read them with
+  // deepGet); settings fragments stay a FLAT key→value map, because they are
+  // applied one key at a time against whatever the producer already has set.
+  function applyFragment(target, frag, tokens) {
+    if (!frag) return;
+    for (const [key, value] of Object.entries(frag)) deepSet(target, resolveKey(key, tokens), value);
+  }
+
+  function collectFragment(target, frag, tokens) {
+    if (!frag) return;
+    for (const [key, value] of Object.entries(frag)) target[resolveKey(key, tokens)] = value;
+  }
+
+  /**
+   * Load this layout's sample bundle. `spec` is either a file stem
+   * ('scoreboard' → /layout/preview/scoreboard_sample.json) or
+   * `{ file, state, settings }`, where the inline fragments are merged on top of
+   * the file's — that's for the handful of shells whose sample depends on their
+   * own URL params (which container occupant to draw, say).
+   *
+   * A bundle is a flat map of state key → value, so a sample IS a state
+   * fragment. Nothing has to translate between "sample shape" and "state shape",
+   * which is what let the per-shell fetch blocks drift apart.
+   */
+  async function loadSample(spec) {
+    const cfg = (typeof spec === 'string') ? { file: spec } : (spec || {});
+    const tokens = sampleTokens();
+    const st = {};
+    const se = {};
+
+    if (cfg.file) {
+      try {
+        const r = await fetch(`${BASE_URL}/layout/preview/${cfg.file}_sample.json`);
+        const doc = r.ok ? await r.json() : null;
+        if (doc) {
+          applyFragment(st, doc.state, tokens);
+          collectFragment(se, doc.settings, tokens);
+        }
+      } catch (e) {
+        console.warn(`[OverlayBase] sample "${cfg.file}" failed to load:`, e.message);
+      }
+    }
+    applyFragment(st, typeof cfg.state === 'function' ? cfg.state() : cfg.state, tokens);
+    collectFragment(se, typeof cfg.settings === 'function' ? cfg.settings() : cfg.settings, tokens);
+
+    sampleState = st;
+    sampleSettings = Object.keys(se).length ? se : null;
+  }
+
+  /*
+   * The demo switch is read STRICTLY: only a real `true` (or the string "true"
+   * / "1") turns it on. `PUT /api/v1/state` is str-typed, so setting it off over
+   * REST stores the string "false" — which is truthy in JS, and would leave
+   * every overlay stuck showing a fixture with no way back short of a reload.
+   * Anything that isn't recognisably on is off; the failure direction has to be
+   * "shows the real game".
+   */
+  function demoSwitchOn() {
+    const v = deepGet(liveTarget(), SAMPLE_STATE_KEY, false);
+    return v === true || v === 'true' || v === 1 || v === '1';
+  }
+
+  /**
+   * Recompute whether the sample is in force, swapping the store over if it
+   * changed. Returns true on a change, so callers render exactly once.
+   */
+  function syncDemo() {
+    const want = !!sampleState && (SAMPLE_MODE || demoSwitchOn());
+    if (want === demoOn) return false;
+
+    if (want) {
+      liveBuffer = {};
+      Object.assign(liveBuffer, state);
+      // Deep-clone in: the store is the page's mutable scratch space, and a
+      // stray write must not corrupt the bundle we have to restore from.
+      refill(state, JSON.parse(JSON.stringify(sampleState)));
+      demoOn = true;
+      applySeeds();
+    } else {
+      clearSeeds();
+      refill(state, liveBuffer || {});
+      liveBuffer = null;
+      demoOn = false;
+    }
+    document.documentElement.setAttribute('data-prsh-sample', demoOn ? 'on' : 'off');
+    return true;
+  }
+
+  /*
+   * A preview showing live state when the producer asked for sample data reads
+   * as "this element is broken" — it is usually blank, because there is no game.
+   * Say so instead. Preview chrome only: never painted onto a browser source.
+   */
+  function noteMissingSample() {
+    if (!PREVIEW_MODE || !SAMPLE_MODE || sampleState) return;
+    const note = document.createElement('div');
+    note.setAttribute('data-prsh-no-sample', '');
+    note.textContent = 'no sample data — showing live state';
+    note.style.cssText = [
+      'position:fixed', 'left:8px', 'bottom:8px', 'padding:4px 8px',
+      'font:500 11px/1.3 Inter,system-ui,sans-serif', 'color:rgba(255,255,255,0.78)',
+      'background:rgba(10,10,16,0.72)', 'border:1px dashed rgba(255,255,255,0.22)',
+      'border-radius:6px', 'z-index:2147483646', 'pointer-events:none',
+    ].join(';');
+    (document.body || document.documentElement).appendChild(note);
+  }
 
   // ── Bootstrap ──
   /**
@@ -78,59 +348,147 @@
    * @param {Function} [opts.shouldRender]   - (key) => bool — filter state keys (default: always true)
    * @param {Function} [opts.shouldRenderSettings] - (key) => bool — filter settings keys
    * @param {boolean}  [opts.fetchSettings]  - Whether to fetch & subscribe to settings (default: false)
+   * @param {string|Object} [opts.sample]    - This layout's sample bundle: a file
+   *        stem under /layout/preview/, or `{ file, state, settings }`. Declaring
+   *        it is all a layout does to support `?sample=1` and demo mode.
    */
   async function init(opts) {
     const {
-      render,
+      render: renderCb,
       shouldRender = () => true,
       shouldRenderSettings = () => false,
       fetchSettings = false,
-      // When true, skip all state fetches and state socket events. Used by
-      // preview-mode overlays that prime `state` themselves from a static
-      // sample JSON and don't want server state racing in over the top.
-      skipState = false,
+      sample = null,
     } = opts;
 
-    // Initial REST fetch
+    // Serialize renders. Load alone fires render() up to three times in quick
+    // succession (REST fetch, socket state.get, socket settings.get), and most
+    // mounts' update() is async (theme SVG fetch, GSAP load) — letting those
+    // interleave double-injects themes and double-plays reveal animations (the
+    // on-load appear/vanish/reappear stutter). One render runs at a time; calls
+    // that arrive mid-render coalesce into a single follow-up pass (state is
+    // already mutated by the time render is called, so one pass catches up).
+    let rendering = false, renderAgain = false;
+    async function render() {
+      if (rendering) { renderAgain = true; return; }
+      rendering = true;
+      try {
+        do { renderAgain = false; await renderCb(); } while (renderAgain);
+      } catch (e) {
+        console.warn('[OverlayBase] render failed:', e);
+      } finally {
+        rendering = false;
+      }
+    }
+
+    // The sample bundle loads BEFORE the first render, so a preview draws its
+    // fixture on the first paint rather than flashing empty and filling in.
+    if (sample) await loadSample(sample);
+    noteMissingSample();
+
+    // Initial REST fetch. State is fetched even in sample mode — the sample is a
+    // view over live data, not a replacement for fetching it.
     try {
-      const fetches = [];
-      if (!skipState) fetches.push(fetch(`${BASE_URL}/api/v1/state`));
+      const fetches = [fetch(`${BASE_URL}/api/v1/state`)];
       if (fetchSettings) fetches.push(fetch(`${BASE_URL}/api/v1/settings`));
 
       const responses = await Promise.all(fetches);
-      let i = 0;
-      if (!skipState) {
-        if (responses[i]?.ok) Object.assign(state, await responses[i].json());
-        i++;
-      }
-      if (fetchSettings && responses[i]?.ok) Object.assign(settings, await responses[i].json());
-      render();
+      if (responses[0]?.ok) Object.assign(liveTarget(), await responses[0].json());
+      if (fetchSettings && responses[1]?.ok) Object.assign(settings, await responses[1].json());
     } catch (e) {
       console.warn('[OverlayBase] Initial fetch failed:', e.message);
+    }
+    syncDemo();
+    // Always stamp it, even when nothing changed — anything inspecting the
+    // document (a preview pane, a screenshot check) should be able to tell
+    // "live" from "attribute never written".
+    document.documentElement.setAttribute('data-prsh-sample', demoOn ? 'on' : 'off');
+    render();
+
+    /*
+     * A FACE THAT LANDS AFTER A RENDER MAKES EVERY MEASUREMENT IN IT WRONG.
+     * Every mount auto-fits against the text's measured width, and measures
+     * whatever face is on the page at that instant — so when a producer picks a
+     * new font, the render that applies it measures the FALLBACK (the Google
+     * stylesheet hasn't arrived yet), and nothing measures again when the real
+     * face lands. The mounts' own `document.fonts.ready.then(refit)` cannot see
+     * it: `ready` was already resolved when the render ran, because the load
+     * starts only once the new stylesheet parses. So a name that fitted in
+     * Rajdhani ran straight over the score in a wider face until the source was
+     * reloaded.
+     *
+     * `fontGeneration` is what a fit cache keys on (svg-theme-engine's
+     * refitText), bumped BEFORE the render in the same listener so the order
+     * cannot race.
+     */
+    if (document.fonts && document.fonts.addEventListener) {
+      document.fonts.addEventListener('loadingdone', () => {
+        fontGeneration += 1;
+        render();
+      });
     }
 
     // SocketIO connection
     const socket = io(BASE_URL, { transports: ['websocket', 'polling'] });
 
+    /*
+     * The snapshot is a ROUND TRIP, and PRSH pushes throughout it. `refill`
+     * clears the target and repopulates it from a response that was assembled
+     * before those pushes happened, so anything arriving in that window is
+     * erased by the very reply that was supposed to bring us up to date. Buffer
+     * those events and replay them on top of the snapshot.
+     *
+     * This is not a launch-only edge: the OBS animation contract gives every
+     * animated source `shutdown`, so a source RELOADS each time it is shown,
+     * and a reconnect after a network blip runs `connect` again. A score key
+     * heals on the next HUD frame; a match binding, a container feed or a name
+     * override just stays wrong.
+     */
+    let statePending = false;
+    let stateBuffer = [];
+    let settingsPending = false;
+    let settingsBuffer = [];
+
+    function applyStateOp(op) {
+      if (op.kind === 'set') deepSet(liveTarget(), op.key, op.value);
+      else deepUnset(liveTarget(), op.key);
+    }
+
+    function applySettingsOp(op) {
+      if (op.kind === 'set') deepSet(settings, op.key, op.value);
+      else deepUnset(settings, op.key);
+      forgetSeed(op.key);
+    }
+
     socket.on('connect', () => {
       console.log('[OverlayBase] SocketIO connected');
 
-      if (!skipState) {
-        socket.emit('v1.state.get', {}, (fullState) => {
-          if (fullState && !fullState.error) {
-            // Clear and repopulate (preserves object reference)
-            for (const k of Object.keys(state)) delete state[k];
-            Object.assign(state, fullState);
-            render();
-          }
-        });
-      }
+      statePending = true;
+      stateBuffer = [];
+      socket.emit('v1.state.get', {}, (fullState) => {
+        statePending = false;
+        const buffered = stateBuffer;
+        stateBuffer = [];
+        if (fullState && !fullState.error) {
+          // Clear and repopulate (preserves object reference)
+          refill(liveTarget(), fullState);
+          for (const op of buffered) applyStateOp(op);
+          syncDemo();
+          render();
+        }
+      });
 
       if (fetchSettings) {
+        settingsPending = true;
+        settingsBuffer = [];
         socket.emit('v1.settings.get', {}, (fullSettings) => {
+          settingsPending = false;
+          const buffered = settingsBuffer;
+          settingsBuffer = [];
           if (fullSettings && !fullSettings.error) {
-            for (const k of Object.keys(settings)) delete settings[k];
-            Object.assign(settings, fullSettings);
+            refill(settings, fullSettings);
+            applySeeds();
+            for (const op of buffered) applySettingsOp(op);
             render();
           }
         });
@@ -141,45 +499,107 @@
       console.warn('[OverlayBase] SocketIO connect error:', err.message);
     });
 
-    // State events (suppressed in skipState mode)
-    if (!skipState) {
-      socket.on('v1.state.set', (msg) => {
-        if (msg.sid === socket.id) return;
-        deepSet(state, msg.key, msg.value);
-        if (shouldRender(msg.key)) render();
-      });
-
-      socket.on('v1.state.set_batch', (msg) => {
-        if (msg.sid === socket.id) return;
-        let needs = false;
-        for (const item of msg.items) {
-          deepSet(state, item.key, item.value);
-          if (shouldRender(item.key)) needs = true;
-        }
-        if (needs) render();
-      });
-
-      socket.on('v1.state.unset', (msg) => {
-        if (msg.sid === socket.id) return;
-        deepUnset(state, msg.key);
-        if (shouldRender(msg.key)) render();
-      });
+    /*
+     * A live state key changed. The live bundle is updated either way — that is
+     * what makes leaving demo mode instant. Whether it is worth a RENDER is a
+     * different question: the demo switch always is, and everything else only
+     * when the live bundle is the one on screen. Repainting a sample overlay on
+     * every HUD tick would restart reveal animations against data that never
+     * moved.
+     */
+    function liveKeyChanged(key) {
+      if (touchesSampleKey(key)) return syncDemo();
+      return !demoOn && shouldRender(key);
     }
 
-    // Settings events (opt-in)
+    socket.on('v1.state.set', (msg) => {
+      if (msg.sid === socket.id) return;
+      const op = { kind: 'set', key: msg.key, value: msg.value };
+      if (statePending) stateBuffer.push(op);
+      applyStateOp(op);
+      if (liveKeyChanged(msg.key)) render();
+    });
+
+    // `augmented` is what a server write-path hook decided off this write
+    // (server/state.py `_augment`) — carried separately from `items` so a client
+    // suppressing its OWN echo still gets it. An overlay never writes state, so
+    // the sid guard never fires here; it still has to read both lists, or a
+    // hook-added key would simply never arrive.
+    socket.on('v1.state.set_batch', (msg) => {
+      if (msg.sid === socket.id) return;
+      let needs = false;
+      for (const item of [...(msg.items || []), ...(msg.augmented || [])]) {
+        const op = { kind: 'set', key: item.key, value: item.value };
+        if (statePending) stateBuffer.push(op);
+        applyStateOp(op);
+        if (liveKeyChanged(item.key)) needs = true;
+      }
+      if (needs) render();
+    });
+
+    socket.on('v1.state.unset', (msg) => {
+      if (msg.sid === socket.id) return;
+      const op = { kind: 'unset', key: msg.key };
+      if (statePending) stateBuffer.push(op);
+      applyStateOp(op);
+      if (liveKeyChanged(msg.key)) render();
+    });
+
+    // Batched unset — the mirror of set_batch. The store's deleteItems() emits
+    // this; without handling it, clears (e.g. clearing production.feed.split)
+    // never reach overlays and the old value lingers.
+    socket.on('v1.state.unset_batch', (msg) => {
+      if (msg.sid === socket.id) return;
+      let needs = false;
+      for (const item of msg.items) {
+        const op = { kind: 'unset', key: item.key };
+        if (statePending) stateBuffer.push(op);
+        applyStateOp(op);
+        if (liveKeyChanged(item.key)) needs = true;
+      }
+      if (needs) render();
+    });
+
+    // Universal action bus — ephemeral one-shot cues, never stored in state.
+    // overlay.conceal: the app is about to disable this browser source in OBS.
+    // Snap transparent NOW, while OBS is still compositing our frames, so the
+    // texture it retains for the hidden source holds a transparent frame (see
+    // onObsShown). Re-broadcast as a window event so consumers wired before
+    // this socket existed still hear it.
+    socket.on('v1.action', (msg) => {
+      if (!msg || !msg.action) return;
+      if (msg.action === 'overlay.conceal' && urlAddressesSelf(msg.payload && msg.payload.url)) {
+        window.dispatchEvent(new CustomEvent('prshConceal'));
+      }
+    });
+
+    // Settings events (opt-in). These render even under demo mode — designing
+    // and aligning against sample content is exactly what demo mode is for.
     if (fetchSettings) {
       socket.on('v1.settings.set', (msg) => {
         if (msg.sid === socket.id) return;
-        deepSet(settings, msg.key, msg.value);
+        const op = { kind: 'set', key: msg.key, value: msg.value };
+        if (settingsPending) settingsBuffer.push(op);
+        applySettingsOp(op);
         if (shouldRenderSettings(msg.key)) render();
       });
 
       socket.on('v1.settings.unset', (msg) => {
         if (msg.sid === socket.id) return;
-        deepUnset(settings, msg.key);
+        const op = { kind: 'unset', key: msg.key };
+        if (settingsPending) settingsBuffer.push(op);
+        applySettingsOp(op);
         if (shouldRenderSettings(msg.key)) render();
       });
     }
+  }
+
+  // Does `key` reach the demo switch? True for the key itself, anything under
+  // it, and any ancestor written wholesale (a batch that replaces `production`).
+  function touchesSampleKey(key) {
+    return key === SAMPLE_STATE_KEY
+      || key.startsWith(SAMPLE_STATE_KEY + '.')
+      || SAMPLE_STATE_KEY.startsWith(key + '.');
   }
 
   // ── Hex → RGB helper ──
@@ -198,13 +618,173 @@
    * Fallback chain for colors: per-layout → global → hardcoded default.
    *
    * Sets: --accent, --accent-rgb, --card-bg, --text-primary, --border-radius,
-   *       --border-color, --font-family, and per-overlay specific vars.
+   *       --border-color, --font-display/--font-body/--font-mono, --text-stroke-*, and per-overlay
+   *       specific vars.
    */
-  function applyDesignSettings(layoutType) {
+  // ── Per-layout element overrides: overlays.{type}.{key} → CSS var ──
+  // Declarative so applyDesignSettings below and DESIGN_SETTING_PROPS stay in
+  // sync automatically. Mirrors the UI-side registries in
+  // src/routes/design/designConstants.js (OVERRIDABLE_GLOBAL_KEYS /
+  // LAYOUT_SETTINGS) — a knob added there needs a row here to reach the DOM.
+  // `px: true` appends units (and accepts 0); `dedicated: true` marks a var no
+  // global section sets, so it is REMOVED when the setting is unset (an
+  // override of a global var is instead left alone — the global value written
+  // earlier in applyDesignSettings still applies).
+  const CARD_OVERRIDE_VARS = {
+    cardBg:       { prop: '--card-bg' },
+    borderColor:  { prop: '--border-color' },
+    borderWidth:  { prop: '--border-width',  px: true },
+  };
+  const STATS_VARS = {
+    ...CARD_OVERRIDE_VARS,
+    statValueColor: { prop: '--stat-value-color',   dedicated: true },
+    subtextColor:   { prop: '--stat-subtext-color', dedicated: true },
+  };
+  const LAYOUT_VAR_MAP = {
+    scoreboard: { ...CARD_OVERRIDE_VARS, textColor: { prop: '--text-primary' } },
+    // KEYED BY THE LAYOUT TYPE THE MOUNT PASSES, which for the stat pair is
+    // `statsbar` / `statscard` — never the `stats` this was keyed on until
+    // 2026-09-12. That id was renamed across five layers on 2026-08-23 (element
+    // id, overlays.* namespace, layout file, layouts-API type, theme element)
+    // and this was the sixth, so the lookup simply stopped matching: under an
+    // app-vars theme the Stat Value Color and Subtext Color controls, and the
+    // four per-element card overrides beside them, wrote settings nothing read.
+    // It failed the way a missing var always does — the card rendered, in the
+    // theme's own authored fallback, so the only symptom was a colour picker
+    // that did nothing.
+    //
+    // BOTH halves of the pair, and that is the point of the shared object: they
+    // are one element at two aspects sharing one mount, so a var reaching the
+    // bar and not the card is the same disagreement the theme files are held to.
+    statsbar: STATS_VARS,
+    statscard: STATS_VARS,
+    bracket: {
+      connectorColor: { prop: '--connector-color', dedicated: true },
+      activeColor:    { prop: '--active-color',    dedicated: true },
+    },
+    playername: { textColor: { prop: '--text-primary' } },
+    // The band background is a CARD SURFACE — the same plate every other
+    // overlay draws behind text — so it takes the palette's card colour rather
+    // than a hard-coded black of its own, and a pin here repaints it for this
+    // element alone. Only cardBg: the bands have no border, and their corner is
+    // a function of the type size (eventheader-mount.js), so the other three
+    // CARD_OVERRIDE_VARS would be knobs that move nothing.
+    eventheader: { cardBg: { prop: '--card-bg' } },
+  };
+
+  /*
+   * A stored boolean setting, resolved the way BOTH runtimes must resolve it.
+   *
+   * Three rules were in use for four keys: this function read truthiness, while
+   * the Design tab read `!== false` for the default-on switches and `=== true`
+   * for the default-off one. That only diverges on a value that is not a
+   * boolean — but settings.json is hand-editable and `PUT /api/v1/settings`
+   * takes its value as a STRING, so `"true"` is a shape that really occurs, and
+   * on it the Design tab drew its switch OFF while every overlay drew the
+   * shadow: the control that is supposed to explain the broadcast said the
+   * opposite of what the broadcast was doing.
+   *
+   * Mirrored by `settingOn` in src/routes/design/designConstants.js. This file
+   * is a classic script and cannot import a module, so the two are pinned
+   * against one truth table in designConstants.test.js.
+   */
+  function settingOn(value, fallback) {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return fallback;
+  }
+
+  // `nsKey` optionally overrides the settings sub-namespace the per-layout
+  // override reads use (defaults to layoutType). The Scorecard passes
+  // `scorecard.{N}` so each scoreboard's card keeps an independent set of
+  // style-override pins; the type-specific branches below still key on the
+  // plain layoutType (none of them is the scorecard).
+  /*
+   * THE THREE TYPE ROLES.
+   *
+   * `rio-theme/tokens.css` splits broadcast type three ways and every theme SVG
+   * paints from those vars; these are the producer's end of the same three.
+   * Each role resolves per-element-pin -> global -> the token layer's own face,
+   * and the fallback stack after the chosen name is what the role means when
+   * the face has not loaded (or the name is a typo), so a display role never
+   * degrades into a monospace and vice versa.
+   *
+   * THIS RUNS ON EVERY PACKAGE, INCLUDING FIXED-PALETTE ONES. That is the one
+   * place type deliberately parts company with colour: a package that brings
+   * its own palette is making a decision about the SHOW's look, while the face
+   * a name is set in is a decision about the ORGANISATION running it — and a
+   * producer with a house font wants it on the lower third whether or not the
+   * lower third's artwork is theirs. It is also what the old single-font knob
+   * could not do: `clearDesignSettings` stripped it on every default-package
+   * element, so it reached four layouts out of eighteen and setting it split
+   * the broadcast in half.
+   */
+  const TYPE_ROLES = [
+    { key: 'displayFont', prop: '--font-display', face: 'Rajdhani',   stack: `'Arial Narrow', sans-serif` },
+    { key: 'bodyFont',    prop: '--font-body',    face: 'Inter',      stack: `system-ui, -apple-system, sans-serif` },
+    { key: 'monoFont',    prop: '--font-mono',    face: 'Chivo Mono', stack: `ui-monospace, 'SF Mono', monospace` },
+  ];
+
+  /*
+   * Faces already on the page without a fetch: Inter is bundled locally and
+   * injected at startup, and Rajdhani + Chivo Mono arrive with
+   * rio-theme/tokens.css, which every element shell links. Anything else the
+   * producer names has to be fetched — including on the shells that DON'T host
+   * a theme SVG, which is why they link the token layer too.
+   */
+  const RESIDENT_FACES = new Set(['Inter', 'Rajdhani', 'Chivo Mono']);
+
+  function applyTypeRoles(overrideNs) {
+    const root = document.documentElement.style;
+    const g = (key, def) => deepGet(settings, key, def);
+    const fetchNames = [];
+    for (const role of TYPE_ROLES) {
+      const pinned = overrideNs ? g(`overlays.${overrideNs}.${role.key}`, null) : null;
+      const chosen = pinned || g(`overlays.global.${role.key}`, null) || role.face;
+      root.setProperty(role.prop, `'${chosen}', ${role.stack}`);
+      if (!RESIDENT_FACES.has(chosen)) fetchNames.push(chosen);
+    }
+    loadFonts(fetchNames);
+  }
+
+  /*
+   * One <link> for every producer-chosen face, rebuilt as a set rather than
+   * appended to: three roles can name three fonts, and a role changed back to a
+   * default has to stop being fetched or the link grows monotonically across a
+   * session of trying things out.
+   *
+   * `wght@400;700` and not a wider ladder: css2 rejects the WHOLE request with a
+   * 400 if any listed weight is missing from any listed family, so asking for
+   * the 500/600/800 the themes actually draw would break every family that has
+   * only the two. The browser synthesises the rest, which is the same bargain
+   * this made when it loaded one font.
+   */
+  function loadFonts(names) {
+    const unique = [...new Set(names.filter(Boolean))].sort();
+    let link = document.getElementById('dynamic-font-link');
+    if (!unique.length) {
+      if (link) link.remove();
+      return;
+    }
+    const href = 'https://fonts.googleapis.com/css2?'
+      + unique.map((n) => `family=${n.replace(/ /g, '+')}:wght@400;700`).join('&')
+      + '&display=swap';
+    if (!link) {
+      link = document.createElement('link');
+      link.id = 'dynamic-font-link';
+      link.rel = 'stylesheet';
+      document.head.appendChild(link);
+    }
+    if (link.href !== href) link.href = href;
+  }
+
+  function applyDesignSettings(layoutType, nsKey) {
     const root = document.documentElement.style;
     // In globals-only preview mode, suppress per-layout reads so the iframe
     // shows what the Design tab settings produce in isolation.
     const effectiveLayoutType = PREVIEW_GLOBALS_ONLY ? null : layoutType;
+    const overrideNs = PREVIEW_GLOBALS_ONLY ? null : (nsKey || layoutType);
     const g = (key, def) => deepGet(settings, key, def);
 
     // ── Global defaults ──
@@ -213,10 +793,9 @@
     const globalText = g('overlays.global.textColor', '#ffffff');
     const globalRadius = g('overlays.global.borderRadius', 16);
     const globalBorder = g('overlays.global.borderColor', 'rgba(255, 255, 255, 0.08)');
-    const globalFont = g('overlays.global.fontFamily', 'Inter');
 
     // ── Per-layout accent override (kept for advanced "Add override" feature) ──
-    const perAccent = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.accentColor`, null) : null;
+    const perAccent = overrideNs ? g(`overlays.${overrideNs}.accentColor`, null) : null;
     const accent = perAccent || globalAccent;
 
     root.setProperty('--accent', accent);
@@ -227,38 +806,25 @@
     root.setProperty('--border-radius', globalRadius + 'px');
     root.setProperty('--border-width', globalBorderWidth + 'px');
     root.setProperty('--border-color', globalBorder);
-    root.setProperty('--font-family', `'${globalFont}', sans-serif`);
+    applyTypeRoles(overrideNs);
 
     // ── Promoted-to-global "final badge" color, with optional per-layout override ──
     const globalBadge = g('overlays.global.finalBadgeColor', null);
-    const perBadge = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.finalBadgeColor`, null) : null;
+    const perBadge = overrideNs ? g(`overlays.${overrideNs}.finalBadgeColor`, null) : null;
     const effBadge = perBadge || globalBadge;
     if (effBadge) root.setProperty('--final-badge-color', effBadge);
     else root.removeProperty('--final-badge-color');
 
-    // Dynamically load the selected font from Google Fonts (Inter is already in the static @import)
-    if (globalFont && globalFont !== 'Inter') {
-      const href = `https://fonts.googleapis.com/css2?family=${globalFont.replace(/ /g, '+')}:wght@400;700&display=swap`;
-      let link = document.getElementById('dynamic-font-link');
-      if (!link) {
-        link = document.createElement('link');
-        link.id = 'dynamic-font-link';
-        link.rel = 'stylesheet';
-        document.head.appendChild(link);
-      }
-      if (link.href !== href) link.href = href;
-    }
-
     // ── Shadow CSS vars (computed once, with per-layout blur override) ──
-    const showShadow        = g('overlays.global.showShadow',        true);
+    const showShadow        = settingOn(g('overlays.global.showShadow', null),        true);
     const cardShadowBlur    = g('overlays.global.cardShadowBlur',    16);
     const cardShadowColor   = g('overlays.global.cardShadowColor',   'rgba(0, 0, 0, 0.5)');
-    const textShadowEnabled = g('overlays.global.textShadowEnabled', false);
+    const textShadowEnabled = settingOn(g('overlays.global.textShadowEnabled', null), false);
     const textShadowBlur    = g('overlays.global.textShadowBlur',    4);
     const textShadowColor   = g('overlays.global.textShadowColor',   'rgba(0, 0, 0, 0.8)');
 
-    const perCardBlur = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.cardShadowBlur`, null) : null;
-    const perTextBlur = effectiveLayoutType ? g(`overlays.${effectiveLayoutType}.textShadowBlur`, null) : null;
+    const perCardBlur = overrideNs ? g(`overlays.${overrideNs}.cardShadowBlur`, null) : null;
+    const perTextBlur = overrideNs ? g(`overlays.${overrideNs}.textShadowBlur`, null) : null;
     const effCardBlur = perCardBlur != null ? perCardBlur : cardShadowBlur;
     const effTextBlur = perTextBlur != null ? perTextBlur : textShadowBlur;
 
@@ -266,56 +832,85 @@
       showShadow ? `drop-shadow(0 4px ${effCardBlur}px ${cardShadowColor})` : 'none');
     root.setProperty('--card-box-shadow',
       showShadow ? `0 4px ${effCardBlur}px ${cardShadowColor}` : 'none');
+    // The shadow's COLOUR takes a per-element override too, the same shape as
+    // its blur and as both halves of the font border below — a colour and the
+    // size of what it paints are one setting, and the console pins them as one
+    // row (OVERRIDABLE_GLOBAL_KEYS `colorKey`).
+    const perShadowColor = overrideNs ? g(`overlays.${overrideNs}.textShadowColor`, null) : null;
+    const effShadowColor = perShadowColor || textShadowColor;
     root.setProperty('--text-shadow',
-      textShadowEnabled ? `0px 0px ${effTextBlur}px ${textShadowColor}` : 'none');
+      textShadowEnabled ? `0px 0px ${effTextBlur}px ${effShadowColor}` : 'none');
+    // The same shadow, in PARTS. A mount that scales its own type has to scale
+    // the blur with it, and a composed string cannot be multiplied — so the two
+    // halves are published beside the whole rather than left to each caller to
+    // re-derive `effTextBlur` from the global and its per-element override.
+    // Disabled is published as a transparent zero blur, so a `0 0 var() var()`
+    // shadow composes to nothing without a second switch to read.
+    root.setProperty('--text-shadow-blur', textShadowEnabled ? `${effTextBlur}px` : '0px');
+    root.setProperty('--text-shadow-color', textShadowEnabled ? effShadowColor : 'transparent');
 
-    // ── Per-overlay specific vars ──
+    // ── Font border (text stroke), with per-layout overrides on BOTH halves ──
+    // No enable switch: a width of 0 IS no border, and a second flag would be a
+    // state that can disagree with the number under it. That also makes the
+    // per-element pin the point of the feature rather than a modifier of a
+    // global the producer had to turn on first — pin a width on one element and
+    // it is the only element with an outline.
+    // The colour is overridable too, because a border pinned on one element is
+    // usually pinned to sit on ONE background; the global underneath answers
+    // for everyone else.
+    const strokeWidth = g('overlays.global.textStrokeWidth', 0);
+    const strokeColor = g('overlays.global.textStrokeColor', 'rgba(0, 0, 0, 1)');
+    const perStrokeWidth = overrideNs ? g(`overlays.${overrideNs}.textStrokeWidth`, null) : null;
+    const perStrokeColor = overrideNs ? g(`overlays.${overrideNs}.textStrokeColor`, null) : null;
+    const effStrokeWidth = perStrokeWidth != null ? perStrokeWidth : strokeWidth;
+    root.setProperty('--text-stroke-width', `${effStrokeWidth}px`);
+    root.setProperty('--text-stroke-color', perStrokeColor || strokeColor);
+
+    // ── Per-overlay specific vars (driven by LAYOUT_VAR_MAP above) ──
     // All per-layout reads gated by effectiveLayoutType so globals-only
     // preview mode shows the design system in isolation.
-    if (effectiveLayoutType === 'scoreboard') {
-      const cardBg       = g('overlays.scoreboard.cardBg',       null);
-      const borderColor  = g('overlays.scoreboard.borderColor',  null);
-      const borderRadius = g('overlays.scoreboard.borderRadius', null);
-      const borderWidth  = g('overlays.scoreboard.borderWidth',  null);
-      const textColor    = g('overlays.scoreboard.textColor',    null);
-      if (cardBg)             root.setProperty('--card-bg',        cardBg);
-      if (borderColor)        root.setProperty('--border-color',   borderColor);
-      if (borderRadius != null) root.setProperty('--border-radius', borderRadius + 'px');
-      if (borderWidth  != null) root.setProperty('--border-width',  borderWidth  + 'px');
-      if (textColor)          root.setProperty('--text-primary',   textColor);
-    }
-    if (effectiveLayoutType === 'stats') {
-      const cardBg        = g('overlays.stats.cardBg',        null);
-      const borderColor   = g('overlays.stats.borderColor',   null);
-      const borderRadius  = g('overlays.stats.borderRadius',  null);
-      const borderWidth   = g('overlays.stats.borderWidth',   null);
-      const statValueColor = g('overlays.stats.statValueColor', null);
-      const subtextColor   = g('overlays.stats.subtextColor',   null);
-      if (cardBg)             root.setProperty('--card-bg',       cardBg);
-      if (borderColor)        root.setProperty('--border-color',  borderColor);
-      if (borderRadius != null) root.setProperty('--border-radius', borderRadius + 'px');
-      if (borderWidth  != null) root.setProperty('--border-width',  borderWidth  + 'px');
-      if (statValueColor) root.setProperty('--stat-value-color',  statValueColor);
-      else root.removeProperty('--stat-value-color');
-      if (subtextColor)   root.setProperty('--stat-subtext-color', subtextColor);
-      else root.removeProperty('--stat-subtext-color');
-    }
-    if (effectiveLayoutType === 'bracket') {
-      const connColor = g('overlays.bracket.connectorColor', null);
-      const activeColor = g('overlays.bracket.activeColor', null);
-      if (connColor) root.setProperty('--connector-color', connColor);
-      else root.removeProperty('--connector-color');
-      if (activeColor) root.setProperty('--active-color', activeColor);
-      else root.removeProperty('--active-color');
-    }
-    if (effectiveLayoutType === 'playername') {
-      const textColor = g('overlays.playername.textColor', null);
-      if (textColor) root.setProperty('--text-primary', textColor);
+    const layoutVars = LAYOUT_VAR_MAP[effectiveLayoutType];
+    if (layoutVars) {
+      for (const [key, spec] of Object.entries(layoutVars)) {
+        const v = g(`overlays.${effectiveLayoutType}.${key}`, null);
+        if (spec.px ? v != null : v) root.setProperty(spec.prop, spec.px ? v + 'px' : v);
+        else if (spec.dedicated) root.removeProperty(spec.prop);
+      }
     }
   }
 
+  // Every inline :root property applyDesignSettings may set: the globals it
+  // always writes, plus every per-layout var derived from LAYOUT_VAR_MAP.
+  const DESIGN_SETTING_PROPS = [...new Set([
+    '--accent', '--accent-rgb', '--card-bg', '--text-primary', '--border-radius',
+    '--border-width', '--border-color', '--final-badge-color',
+    '--card-shadow-filter', '--card-box-shadow', '--text-shadow',
+    '--text-shadow-blur', '--text-shadow-color',
+    '--text-stroke-width', '--text-stroke-color',
+    ...Object.values(LAYOUT_VAR_MAP).flatMap((m) => Object.values(m).map((s) => s.prop)),
+  ])];
+
+  /**
+   * Remove everything applyDesignSettings set on :root. Design-package themes
+   * that bring a fixed palette (no data-design-vars="app" on their root <svg>)
+   * call this via their mount so a leftover app-design accent from a previously
+   * active theme can never repaint them — stylesheet values (e.g. the Rio
+   * tokens.css brand vars) resolve again.
+   */
+  function clearDesignSettings(layoutType, nsKey) {
+    const root = document.documentElement.style;
+    for (const p of DESIGN_SETTING_PROPS) root.removeProperty(p);
+    // TYPE IS NOT PALETTE, so it survives the clear — see applyTypeRoles. The
+    // three role vars are therefore absent from DESIGN_SETTING_PROPS: they are
+    // re-applied here rather than removed, so a fixed-palette theme keeps its
+    // authored colours and takes the producer's faces. Honouring the per-element
+    // pin needs the namespace, which is why this takes the same two arguments
+    // applyDesignSettings does.
+    applyTypeRoles(PREVIEW_GLOBALS_ONLY ? null : (nsKey || layoutType || null));
+  }
+
   // ── Backward-compatible alias ──
-  function applyAccentColor(layoutType, fallback) {
+  function applyAccentColor(layoutType, _fallback) {
     applyDesignSettings(layoutType);
   }
 
@@ -338,24 +933,253 @@
    * Overlays can call this in render() to conditionally display the logo.
    */
   function brandingLogoUrl() {
-    return `${BASE_URL}/branding/tournament_logo.png`;
+    // The file is replaced in place, so its URL never changes — the revision
+    // the server bumps on every upload, removal and look apply is what makes an
+    // <image> already on air fetch the new one (server/api/v1/branding.py).
+    const rev = deepGet(settings, 'overlays.global.logoRev', 0);
+    return `${BASE_URL}/branding/tournament_logo.png${rev ? `?v=${rev}` : ''}`;
+  }
+
+  /**
+   * Does `url` address THIS page? Host-agnostic (OBS may load us via
+   * localhost while the app knows us as 127.0.0.1 or a LAN address): compares
+   * path plus query, params order-insensitively.
+   */
+  function urlAddressesSelf(url) {
+    if (!url) return false;
+    try {
+      const u = new URL(url, window.location.href);
+      if (u.pathname !== window.location.pathname) return false;
+      const norm = (sp) => [...sp.entries()].sort().map(([k, v]) => `${k}=${v}`).join('&');
+      return norm(u.searchParams) === norm(new URLSearchParams(window.location.search));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Combined OBS on-screen signal. Two independent OBS events decide whether a
+   * browser source is actually on screen: a scene cut fires
+   * `obsSourceActiveChanged`, toggling the source's own eye icon fires
+   * `obsSourceVisibleChanged`. Overlays that animate on show must honour BOTH —
+   * listening only to `active` is how an eye-toggle-off left stale full-alpha
+   * frames to flash on the next show. Each signal is tri-state (undefined until
+   * OBS first dispatches it); the source counts as shown unless a signal says
+   * otherwise, so a plain browser (no OBS, no events) stays shown.
+   *
+   * A third input is PRSH's own `overlay.conceal` cue (init's v1.action
+   * handler → the `prshConceal` window event): the app fires it right before
+   * disabling this browser source, because OBS stops the source's frame
+   * production the instant the eye goes off — a hide that waits for
+   * obsSourceVisibleChanged(false) never gets its dark frame painted, and the
+   * retained full-alpha texture flashes on the next show. Concealing counts as
+   * not-shown; the handshake ends at the next real visibleChanged dispatch,
+   * with a failsafe re-emit so a failed OBS call can't strand the overlay
+   * dark on air.
+   *
+   * cb(shown) fires on every dispatch, including redundant ones — consumers
+   * (reveal-gate.js, commentary's setActive) dedupe themselves.
+   */
+  function onObsShown(cb) {
+    let active, visible, concealed = false, concealTimer = null;
+    const emit = () => cb(!concealed && active !== false && visible !== false);
+    window.addEventListener('obsSourceActiveChanged', (e) => {
+      active = !!(e.detail && e.detail.active); emit();
+    });
+    window.addEventListener('obsSourceVisibleChanged', (e) => {
+      visible = !!(e.detail && e.detail.visible);
+      // The eye actually toggled — the conceal handshake (if any) is done.
+      concealed = false;
+      if (concealTimer) { clearTimeout(concealTimer); concealTimer = null; }
+      emit();
+    });
+    window.addEventListener('prshConceal', () => {
+      concealed = true;
+      emit();
+      if (concealTimer) clearTimeout(concealTimer);
+      concealTimer = setTimeout(() => {
+        concealTimer = null;
+        if (concealed) { concealed = false; emit(); }
+      }, 2000);
+    });
+  }
+
+  /*
+   * ── Why is this overlay blank? ──────────────────────────────────────────
+   *
+   * An overlay with nothing to draw hides itself, which is correct on air and
+   * indistinguishable from a broken one everywhere else: a blank browser source
+   * looks the same whether the layout 404'd, the theme failed to load, or there
+   * is simply no game. `setBlank(reason)` makes the mount say which.
+   *
+   * NEVER paints the reason onto the broadcast. A producer would rather have an
+   * empty corner than an error card composited into a live stream, so the
+   * visible note renders in PREVIEW_MODE only. On air the reason still goes to:
+   *   - `console.info`, readable in the browser source's own dev tools, and
+   *   - `data-prsh-blank` on <html>, which anything inspecting the document
+   *     (a future preview pane, a screenshot check) can read without guessing.
+   *
+   * Logged only when the reason CHANGES — mounts call this on every render, and
+   * a HUD feed at 30fps would otherwise bury the console.
+   */
+  let lastBlankReason = null;
+  let blankNote = null;
+
+  function setBlank(reason, label) {
+    const changed = reason !== lastBlankReason;
+    lastBlankReason = reason;
+
+    if (reason) document.documentElement.setAttribute('data-prsh-blank', reason);
+    else document.documentElement.removeAttribute('data-prsh-blank');
+
+    if (changed) {
+      const who = label ? `[${label}] ` : '';
+      if (reason) console.info(`${who}nothing to draw — ${reason}`);
+      else console.info(`${who}drawing`);
+    }
+
+    if (!PREVIEW_MODE) return;
+    if (!reason) {
+      if (blankNote) { blankNote.remove(); blankNote = null; }
+      return;
+    }
+    if (!blankNote) {
+      blankNote = document.createElement('div');
+      blankNote.setAttribute('data-prsh-blank-note', '');
+      blankNote.style.cssText = [
+        'position:fixed', 'inset:0', 'display:flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center', 'gap:6px',
+        'padding:16px', 'box-sizing:border-box',
+        'font:500 13px/1.45 Inter,system-ui,sans-serif', 'text-align:center',
+        'color:rgba(255,255,255,0.82)', 'background:rgba(10,10,16,0.55)',
+        'border:1px dashed rgba(255,255,255,0.22)', 'border-radius:10px',
+        'z-index:2147483647', 'pointer-events:none',
+      ].join(';');
+      blankNote.appendChild(document.createElement('span'));
+      blankNote.appendChild(document.createElement('span'));
+      blankNote.lastChild.style.cssText =
+        'font-size:11px;opacity:0.62;font-weight:400';
+      document.body.appendChild(blankNote);
+    }
+    blankNote.firstChild.textContent = reason;
+    /*
+     * The hint a first source needs and no other surface gives.
+     *
+     * A producer builds their scene before a game exists, so their FIRST
+     * overlay is blank — correctly, and the reason above says so. What it
+     * doesn't say is that PRSH can fill it: demo mode renders every layout's
+     * sample bundle, which is the whole point of `production.sample`, and it
+     * is a two-word switch in the top bar that announces nothing about being
+     * the answer to this.
+     *
+     * Only when there is something to offer: the layout must HAVE a sample
+     * bundle, and the switch must be off — with demo mode already on, a still
+     * blank overlay is a different problem and this line would be a lie.
+     * Preview chrome like the note it rides on, so it is never on air.
+     */
+    blankNote.lastChild.textContent =
+      (!demoOn && sampleState) ? 'Turn on Sample in the top bar to fill it with placeholder data' : '';
+  }
+
+  /*
+   * ── Why is this overlay drawing something other than what was asked? ──────
+   *
+   * The sibling of `setBlank`, and a different situation: the overlay is not
+   * blank and nothing is broken — it is drawing correctly, at a size the source
+   * cannot hold. The Player Name's type is an absolute number of pixels and its
+   * frame is a ceiling on that number, so a source too short for 48px draws 33,
+   * and every surface in OBS reports that all is well.
+   *
+   * Same three channels as setBlank, and the same absolute rule: NEVER on air.
+   * A note composited into a live stream is worse than the problem it reports.
+   *   - `data-prsh-note` on <html>, for anything inspecting the document,
+   *   - `console.info` on CHANGE only (mounts call this every render, and a HUD
+   *     feed at 30fps would bury the console),
+   *   - a small corner badge, in the two contexts that are not a broadcast.
+   *
+   * DEMO MODE IS THE SECOND CONTEXT, and it is the one that matters here.
+   * setBlank draws in PREVIEW_MODE alone, which is the console's own iframe —
+   * but that iframe is a scale model at the element's DECLARED aspect, so it
+   * cannot reproduce a clamp caused by the shape a producer dragged the real
+   * source into. The place this has to be visible is the real OBS source while
+   * a scene is being built, which is exactly what `production.sample` is for:
+   * app-wide, never self-enabling, guarded by an unmissable banner. It also
+   * adds no risk that mode does not already carry — if demo mode is on during a
+   * broadcast then canned fixture data is going out, and a diagnostic badge is
+   * the least of the problem.
+   */
+  let lastNoteReason = null;
+  let noteEl = null;
+
+  function setNote(reason, label) {
+    const changed = reason !== lastNoteReason;
+    lastNoteReason = reason;
+
+    if (reason) document.documentElement.setAttribute('data-prsh-note', reason);
+    else document.documentElement.removeAttribute('data-prsh-note');
+
+    if (changed && reason) console.info(`${label ? `[${label}] ` : ''}${reason}`);
+
+    // Re-checked on every call rather than captured once: demo mode is a switch
+    // a producer flips mid-session, and the badge has to leave with it.
+    if (!reason || !(PREVIEW_MODE || demoOn)) {
+      if (noteEl) { noteEl.remove(); noteEl = null; }
+      return;
+    }
+    if (!noteEl) {
+      noteEl = document.createElement('div');
+      noteEl.setAttribute('data-prsh-note-badge', '');
+      noteEl.style.cssText = [
+        'position:fixed', 'left:0', 'top:0', 'max-width:100%',
+        'padding:3px 7px', 'box-sizing:border-box',
+        'font:600 11px/1.35 Inter,system-ui,sans-serif',
+        'color:#fcd34d', 'background:rgba(10,10,16,0.82)',
+        'border:1px solid rgba(252,211,77,0.45)', 'border-radius:0 0 6px 0',
+        'z-index:2147483647', 'pointer-events:none',
+      ].join(';');
+      document.body.appendChild(noteEl);
+    }
+    noteEl.textContent = reason;
   }
 
   // ── Export ──
+  // `state` and `settings` are GETTERS, not objects: they hand back the live
+  // bundle or the sample one depending on whether demo mode is in force. Every
+  // mount reads them per render (`mount.update(OverlayBase.state, …)`), so the
+  // switch reaches all of them with no mount-side change. Never cache the
+  // returned object across renders.
   window.OverlayBase = {
     BASE_URL,
     state,
     settings,
+    get sampleActive() { return demoOn; },
+    get fontGeneration() { return fontGeneration; },
     deepGet,
     deepSet,
     deepUnset,
+    charId,
+    teamId,
     charImg,
     logoImg,
     applyAccentColor,
     applyDesignSettings,
+    applyTypeRoles,
+    clearDesignSettings,
     brandingLogoUrl,
+    onObsShown,
     readSetting,
+    // EXPOSED BECAUSE EVERY MOUNT NEEDS IT, and until 2026-09-12 none could
+    // have it: this was module-private, so every producer SWITCH in every mount
+    // resolved itself with a bare `!== false`. That is the exact rule the
+    // comment on settingOn says is wrong — it reads the STRING "false" as on,
+    // and a string is what `PUT /api/v1/settings` stores and what a hand-edited
+    // settings.json holds. The switch then sat in the console reading OFF while
+    // the overlay drew the row.
+    settingOn,
+    setBlank,
+    setNote,
     PREVIEW_MODE,
+    SAMPLE_MODE,
     PREVIEW_GLOBALS_ONLY,
     init,
   };

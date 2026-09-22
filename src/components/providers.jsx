@@ -1,22 +1,13 @@
-import { IntlProvider } from 'react-intl';
-import { locales } from '../lang/locales';
 import { SocketProvider } from '../context/socket';
 import AnnouncementsListener from '../context/announcements';
-import { useSettingsStore } from '../context/store';
+import { ObsConnectionManager } from '../context/obs';
 
 export default function Providers({ children }) {
-    const locale = useSettingsStore(state => state.lang);
-    const usersLocale = locale ? locale : 'en-US';
-
     return (
         <SocketProvider>
             <AnnouncementsListener />
-            <IntlProvider
-                locale={usersLocale}
-                messages={locales[usersLocale].messages}
-            >
-                {children}
-            </IntlProvider>
+            <ObsConnectionManager />
+            {children}
         </SocketProvider>
     )
 }

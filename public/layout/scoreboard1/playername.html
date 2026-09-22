@@ -1,84 +1,56 @@
 <!DOCTYPE html>
 <html>
+<!--
+  Player Name — a thin shell over lib/playername-mount.js, which is also what a
+  container stands up when this element is fed into one. One side's name
+  (?scoreboard=N&team=1|2) with the address-book prefix beside it; the type size,
+  alignment and prefix position are authored on this element's Production stage
+  panel.
+-->
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="textColor, fontFamily, textShadow" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <!-- The whitelist must name every knob the mount reads: the stage's Style
+       section filters LAYOUT_SETTINGS.playername down to what appears here, so
+       an omitted key is a setting the mount honours but nobody can reach. -->
+  <meta name="overlay-settings" content="nameSize, prefixSize, align, prefixPosition, textColor, accentColor, displayFont, textShadow, textStroke" />
+  <!-- Inter is bundled locally and injected by overlay-base.js. -->
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      width: 400px;
-      height: 100px;
-      background: transparent;
-      font-family: var(--font-family, 'Inter', sans-serif);
-    }
-    .name-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      padding: 16px;
-      transform-origin: top left;
-    }
-    .player-name {
-      font-size: 36px;
-      font-weight: 700;
-      color: var(--text-primary, #ffffff);
-      text-shadow: var(--text-shadow, none);
-      white-space: nowrap;
-    }
+    html, body { margin: 0; overflow: hidden; }
+    /* The declared native size — the catalog's, the preview's and the Add
+       picker's idea of this source's shape. It is a STARTING size and pure
+       render headroom: the type size is the `nameSize` setting, so a bigger
+       box is more room for the name to run rather than a bigger name, and the
+       box only ever clamps a size that will not fit it. `refW`/`refH` below
+       carry the same two numbers to the preview, which needs them to know how
+       much of a scale model it is. See the header of lib/playername-mount.js. */
+    body { width: 800px; height: 200px; background: transparent; }
+    #host { position: fixed; inset: 0; }
   </style>
 </head>
 <body>
-  <div class="name-container" id="name-container">
-    <span class="player-name" id="name-text"></span>
-  </div>
+  <div id="host"></div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
-  <script>
-    const REF_W = 400, REF_H = 100;
-    document.body.dataset.refW = REF_W;
-    document.body.dataset.refH = REF_H;
-
-    function autoScale() {
-      const el = document.getElementById('name-container');
-      const needsScale = Math.abs(window.innerWidth - REF_W) > 2 || Math.abs(window.innerHeight - REF_H) > 2;
-      if (needsScale) {
-        const scale = Math.min(window.innerWidth / REF_W, window.innerHeight / REF_H);
-        document.body.style.width = window.innerWidth + 'px';
-        document.body.style.height = window.innerHeight + 'px';
-        el.style.transform = `scale(${scale})`;
-        el.style.transformOrigin = 'top left';
-      } else {
-        document.body.style.width = REF_W + 'px';
-        document.body.style.height = REF_H + 'px';
-        el.style.transform = '';
-      }
-    }
-    window.addEventListener('resize', autoScale);
-    autoScale();
+  <script type="module">
+    import { mountPlayerName } from '/layout/lib/playername-mount.js';
 
     const params = new URLSearchParams(window.location.search);
-    const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
-    const TEAM_NUM = parseInt(params.get('team')) || 1;
-    const NAME_KEY = `score.${SCOREBOARD}.player.${TEAM_NUM}.rioName`;
-    const { deepGet, state, applyDesignSettings } = OverlayBase;
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    const TEAM = parseInt(params.get('team')) || 1;
 
-    function render() {
-      applyDesignSettings('playername');
-      const name = deepGet(state, NAME_KEY, '');
-      document.getElementById('name-text').textContent = name;
-    }
+    document.body.dataset.refW = 800;
+    document.body.dataset.refH = 200;
+
+    const pn = mountPlayerName({ host: document.getElementById('host'), sb: SB, team: TEAM });
 
     OverlayBase.init({
-      render,
+      render: () => pn.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'scoreboard',
       fetchSettings: true,
-      shouldRender: (key) => key === NAME_KEY,
-      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+      shouldRender: pn.shouldRender,
+      shouldRenderSettings: pn.shouldRenderSettings,
     });
   </script>
 </body>

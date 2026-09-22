@@ -1,0 +1,53 @@
+{
+  "_comment": [
+    "SHARED CASE TABLE for the board-game lifecycle, read by BOTH runtimes:",
+    "tests/unit/test_board_lifecycle_parity.py (server/boards.py lifecycle_of) and",
+    "src/routes/production/board/board-lifecycle.test.js (boards.js boardLifecycle).",
+    "",
+    "A behaviour, not a table, is what these two share — so parity is pinned with",
+    "cases rather than by parsing one language from the other (the shape",
+    "test_per_side_parity.py uses for a literal list). Drift in either direction",
+    "fails that runtime's own suite.",
+    "",
+    "Omitted inputs default: game_id null, the three flags null, captured/restored",
+    "false. Each case names only what it is about."
+  ],
+  "cases": [
+    { "why": "no game at all", "in": {}, "out": "empty" },
+    { "why": "a game id and nothing else is a game in progress",
+      "in": { "game_id": "g1" }, "out": "live" },
+    { "why": "absent live_following reads as still following (pre-flag state)",
+      "in": { "game_id": "g1", "live_following": null }, "out": "live" },
+
+    { "why": "the HUD frame says the game reached its end",
+      "in": { "game_id": "g1", "game_over": true }, "out": "final" },
+    { "why": "the slot holds a completed API record",
+      "in": { "game_id": "g1", "game_completed": true }, "out": "final" },
+    { "why": "a parsed box score for THIS game is the strongest evidence, and the only end-of-game signal a HUD board gets",
+      "in": { "game_id": "g1", "captured": true }, "out": "final" },
+    { "why": "captured outranks a still-live-looking frame",
+      "in": { "game_id": "g1", "captured": true, "game_over": false, "live_following": true },
+      "out": "final" },
+
+    { "why": "the server stopped following a game that never finished cleanly",
+      "in": { "game_id": "g1", "live_following": false }, "out": "stranded" },
+    { "why": "final outranks stranded — a result beats an abandonment",
+      "in": { "game_id": "g1", "game_over": true, "live_following": false }, "out": "final" },
+
+    { "why": "restored outranks every detail of a game that is not current",
+      "in": { "game_id": "g1", "restored": true }, "out": "restored" },
+    { "why": "last night's finished game: restored still wins",
+      "in": { "game_id": "g1", "restored": true, "game_over": true, "captured": true },
+      "out": "restored" },
+    { "why": "a mid-game quit reboots restored, not stranded",
+      "in": { "game_id": "g1", "restored": true, "live_following": false },
+      "out": "restored" },
+    { "why": "restored with no game is still empty — the flag describes a game's provenance, not the board",
+      "in": { "restored": true }, "out": "empty" }
+  ],
+  "stale": {
+    "_comment": "isStaleBoard / is_stale — what has stopped being a game in progress.",
+    "true": ["final", "stranded", "restored"],
+    "false": ["empty", "live"]
+  }
+}

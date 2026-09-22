@@ -12,15 +12,65 @@ import httpx
 from loguru import logger
 
 from server.state import State
+from server.startgg import bracket_cache
+from server.startgg.parsers import (
+    deep as _deep,
+    parse_entrant,
+    parse_set,
+    parse_set_full,
+)
 from server.startgg.queries import (
     TOURNAMENT_DATA_QUERY,
     TOURNAMENT_PHASES_QUERY,
     SETS_QUERY,
     SET_QUERY,
     ENTRANTS_QUERY,
-    ENTRANT_QUERY,
     BRACKET_SETS_QUERY,
 )
+
+
+def auto_fill_entries(fields: dict[str, str], *, skip_blank: bool = False) -> list[tuple]:
+    """Write start.gg-derived ``tournamentInfo`` fields without eating an edit.
+
+    THE AUTO-FILL CONTRACT, stated once so every writer obeys it: a field is
+    overwritten only while it is still EMPTY or still equal to the value we last
+    filled it with (recorded per field in ``tournamentInfo._auto``). A producer
+    who types over it owns it from then on, and re-blanking it re-enables the
+    auto-fill.
+
+    Two callers, and the second is why this is a function. `_load_event` brings
+    back five fields once per EVENT. `apply_startgg_set` brings back a sixth —
+    `phase` — once per SET, from a different path that skipped the record
+    entirely and wrote unconditionally: a hand-typed "Season 9 Week 2" was
+    protected against a detail-less set and destroyed by a detailed one, on every
+    fixture load, silently.
+
+    `skip_blank` is the one real difference between them. A tournament load
+    reports every field it has, so a blank there is information — the event has
+    no address — and clears. A set reports its phase only sometimes, so a blank
+    there means "this set didn't say", and clearing would be the bug the old
+    guard was written to avoid.
+
+    The record is MERGED, never replaced: a field this call doesn't mention keeps
+    what it was filled with, so reloading an event can't make the phase written
+    by a set load look producer-typed.
+    """
+    info = State.state.get("tournamentInfo", {}) or {}
+    auto = dict(info.get("_auto") or {})
+    entries: list[tuple] = []
+    for field, new_val in fields.items():
+        new_val = (new_val or "").strip()
+        if skip_blank and not new_val:
+            continue
+        current = info.get(field, "")
+        untouched = current in ("", None) or current == auto.get(field)
+        auto[field] = new_val
+        if untouched and current != new_val:
+            entries.append((f"tournamentInfo.{field}", new_val))
+    if not entries and auto == (info.get("_auto") or {}):
+        return []
+    return entries + [("tournamentInfo._auto", auto)]
+
 
 _API_URL = "https://www.start.gg/api/-/gql"
 _HEADERS = {
@@ -40,25 +90,21 @@ _ACTIVE_STATES = [1, 6, 2]
 _ALL_STATES = [1, 6, 2, 3]
 
 
-def _deep(obj, path, default=None):
-    """Synchronous deep-get for parsing GraphQL responses."""
-    for key in path.split("."):
-        if not isinstance(obj, dict):
-            return default
-        obj = obj.get(key, default)
-    return obj
-
-
 class StartGGProvider:
     """Singleton provider for start.gg tournament data."""
 
     _client: httpx.AsyncClient | None = None
     _event_slug: str | None = None
-    _event_url: str | None = None
     _tournament_data: dict | None = None
-    _entrants_cache: dict | None = None  # {gamerTag_lower: parsed_player_dict}
     _bracket_cache: dict[int, dict] = {}  # phase_group_id -> parsed bracket dict
-    _load_lock: asyncio.Lock = asyncio.Lock()
+    # Created lazily so it binds to the RUNNING event loop, matching
+    # `RioGameDataProvider._lock` and `PostGame._lock`. Built eagerly at class
+    # definition this bound to whichever loop first contended for it — harmless
+    # in the app (one long-lived loop) and latent in tests only because
+    # `asyncio.Lock.acquire` returns early when uncontended and never asks for
+    # the loop. The first test to actually contend would have got "attached to
+    # a different loop" from a line nowhere near the cause.
+    _load_lock: asyncio.Lock | None = None
     _restore_task: asyncio.Task | None = None
     _prefetch_task: asyncio.Task | None = None
     # Cap concurrency against the unauthenticated start.gg endpoint —
@@ -80,7 +126,6 @@ class StartGGProvider:
             slug = cls._parse_slug(bracket_link)
             if slug:
                 cls._event_slug = slug
-                cls._event_url = bracket_link
                 logger.info("[startgg] restored event slug from state: {}", slug)
                 # Background refresh — same pattern as RotationManager: don't
                 # block startup, just shoot the API to update tournament data.
@@ -115,16 +160,17 @@ class StartGGProvider:
     async def Clear(cls):
         """Clear cached tournament data and the persisted bracket link."""
         cls._event_slug = None
-        cls._event_url = None
         cls._tournament_data = None
-        cls._entrants_cache = None
         cls._bracket_cache = {}
         await State.SetBatch([
             ("tournamentInfo.bracket_link", ""),
             ("tournamentInfo.name", ""),
+            ("tournamentInfo.event_name", ""),
             ("tournamentInfo.location", ""),
             ("tournamentInfo.date", ""),
             ("tournamentInfo.entrants", ""),
+            # Reset the auto-fill record so the next load fills fields fresh.
+            ("tournamentInfo._auto", {}),
         ])
         await State.Save()
 
@@ -188,9 +234,15 @@ class StartGGProvider:
     # ── public methods ─────────────────────────────────────────
 
     @classmethod
+    def _lock(cls) -> asyncio.Lock:
+        if cls._load_lock is None:
+            cls._load_lock = asyncio.Lock()
+        return cls._load_lock
+
+    @classmethod
     async def LoadEvent(cls, url: str) -> dict:
         """Load tournament + event data from a start.gg URL and write to State."""
-        async with cls._load_lock:
+        async with cls._lock():
             return await cls._load_event_impl(url)
 
     @classmethod
@@ -204,10 +256,8 @@ class StartGGProvider:
         canonical_url = f"https://www.start.gg/{slug}"
         # Only invalidate caches when the event actually changes.
         if cls._event_slug != slug:
-            cls._entrants_cache = None
             cls._bracket_cache = {}
         cls._event_slug = slug
-        cls._event_url = canonical_url
 
         data = await cls._query(
             "TournamentDataQuery",
@@ -241,14 +291,21 @@ class StartGGProvider:
 
         cls._tournament_data = result
 
-        # Write to State (same keys tournament_info.jsx subscribes to)
-        entries = [
-            ("tournamentInfo.name", result["tournamentName"]),
-            ("tournamentInfo.location", result["address"] or ("Online" if result["isOnline"] else "")),
-            ("tournamentInfo.date", date_str),
-            ("tournamentInfo.entrants", str(result["numEntrants"])),
-            ("tournamentInfo.bracket_link", canonical_url),
-        ]
+        # Write to State (same keys tournament_info.jsx subscribes to). A load may
+        # be a first load or a *refresh* of an already-loaded event, and the
+        # producer may have hand-edited some Info fields in between — the auto-fill
+        # record is what preserves those edits (see auto_fill_entries, which the
+        # per-set `phase` write shares).
+        entries = auto_fill_entries({
+            "name": result["tournamentName"],
+            "event_name": result["eventName"],
+            "location": result["address"] or ("Online" if result["isOnline"] else ""),
+            "date": date_str,
+            "entrants": str(result["numEntrants"]),
+        })
+        # Identity/derived fields always track start.gg (never producer-edited).
+        entries.append(("tournamentInfo.bracket_link", canonical_url))
+
         await State.SetBatch(entries)
         await State.Save()
 
@@ -369,8 +426,8 @@ class StartGGProvider:
             return {"sets": [], "pageInfo": {"page": 1, "totalPages": 0}}
 
         if phase_group_id and phase_group_id in cls._bracket_cache:
-            return cls._sets_from_bracket_cache(
-                phase_group_id, page, include_finished,
+            return bracket_cache.sets_from_cache(
+                cls._bracket_cache[phase_group_id], page, include_finished,
             )
 
         states = _ALL_STATES if include_finished else _ACTIVE_STATES
@@ -395,7 +452,7 @@ class StartGGProvider:
         raw_sets = _deep(sets_data, "nodes", [])
         page_info = _deep(sets_data, "pageInfo", {"page": 1, "totalPages": 0})
 
-        parsed = [cls._parse_set(s) for s in (raw_sets or [])]
+        parsed = [parse_set(s) for s in (raw_sets or [])]
 
         return {
             "sets": parsed,
@@ -407,86 +464,19 @@ class StartGGProvider:
         }
 
     @classmethod
-    def _sets_from_bracket_cache(
-        cls,
-        phase_group_id: int,
-        page: int,
-        include_finished: bool,
-    ) -> dict:
-        """Reshape cached bracket data into the paginated /sets response shape.
+    async def GetSet(cls, set_id) -> dict:
+        """Get a single set by ID with full player detail.
 
-        The bracket cache stores sets organized by round (winners/losers/GF)
-        with players in a separate lookup. /sets wants a flat list with
-        per-set p1_name/p2_name/seeds. We flatten, look up player names, and
-        apply the same filtering and pagination the API path would.
+        Accepts numeric ids (real sets, fetched with full user/profile detail via
+        SetQuery) and synthetic ``preview_<phaseGroupId>_<round>_<idx>`` ids that
+        start.gg hands out for an *unseeded* phase. Preview ids aren't resolvable
+        through SetQuery, so we resolve them from the phase group's set list — it
+        already carries entrant names, seeds and start.gg player ids, enough to
+        seat a match ahead of the bracket being seeded.
         """
-        cached = cls._bracket_cache[phase_group_id]
-        bracket_type = cached.get("type", "")
-        phase_label = cached.get("phaseName", "")
-        players = cached.get("players", {}) or {}
+        if isinstance(set_id, str) and not set_id.lstrip("-").isdigit():
+            return await cls._resolve_preview_set(set_id)
 
-        # Walk every round bucket. Losers rounds were stored as abs(round_num)
-        # so we re-flip the sign to preserve winners-vs-losers info downstream.
-        flat: list[tuple[int, dict]] = []
-        for r, round_data in (cached.get("winnersRounds") or {}).items():
-            rn = int(r)
-            for s in round_data.get("sets", []) or []:
-                flat.append((rn, s))
-        for r, round_data in (cached.get("losersRounds") or {}).items():
-            rn = -int(r)
-            for s in round_data.get("sets", []) or []:
-                flat.append((rn, s))
-        # Grand finals come after winners; use a large positive sentinel so
-        # they sort last among positive rounds.
-        for s in cached.get("grandFinals") or []:
-            flat.append((9999, s))
-
-        if not include_finished:
-            flat = [(rn, s) for (rn, s) in flat
-                    if s.get("state") != "completed"]
-
-        # Sort: live/called first, then pending, then complete; tie-break by
-        # round magnitude so earlier rounds appear first within a state group.
-        state_order = {"active": 0, "called": 0, "created": 1, "completed": 2}
-        flat.sort(key=lambda rs: (state_order.get(rs[1].get("state"), 9), abs(rs[0])))
-
-        parsed: list[dict] = []
-        for rn, s in flat:
-            p1 = players.get(str(s.get("entrant1Id") or ""), {}) or {}
-            p2 = players.get(str(s.get("entrant2Id") or ""), {}) or {}
-            parsed.append({
-                "id": s.get("id"),
-                "team1score": s.get("score1"),
-                "team2score": s.get("score2"),
-                "round_name": s.get("roundName", ""),
-                "round": rn,
-                "tournament_phase": phase_label,
-                "bracket_type": bracket_type,
-                "p1_name": p1.get("name", ""),
-                "p2_name": p2.get("name", ""),
-                "p1_seed": p1.get("seed"),
-                "p2_seed": p2.get("seed"),
-                "state": s.get("state", ""),
-            })
-
-        per_page = 64
-        total = len(parsed)
-        total_pages = max(1, (total + per_page - 1) // per_page)
-        start = max(0, (page - 1) * per_page)
-        page_items = parsed[start:start + per_page]
-
-        return {
-            "sets": page_items,
-            "pageInfo": {
-                "page": page,
-                "totalPages": total_pages,
-                "total": total,
-            },
-        }
-
-    @classmethod
-    async def GetSet(cls, set_id: int) -> dict:
-        """Get a single set by ID with full player detail."""
         data = await cls._query(
             "SetQuery",
             SET_QUERY,
@@ -497,20 +487,22 @@ class StartGGProvider:
         if not raw:
             return {"error": "Set not found"}
 
-        return cls._parse_set_full(raw)
+        return parse_set_full(raw)
 
     @classmethod
-    async def GetEntrant(cls, entrant_id: int) -> dict | None:
-        """Fetch a single entrant by ID with full user profile data."""
-        data = await cls._query(
-            "EntrantQuery",
-            ENTRANT_QUERY,
-            {"id": entrant_id},
+    async def _resolve_preview_set(cls, set_id: str) -> dict:
+        """Resolve a synthetic preview set id from its phase group's set list."""
+        m = re.match(r"preview_(\d+)_", set_id)
+        if not m:
+            return {"error": "Set not found"}
+        phase_group_id = int(m.group(1))
+        listing = await cls.GetSets(
+            phase_group_id=phase_group_id, include_finished=True,
         )
-        raw = _deep(data, "data.entrant")
-        if not raw:
-            return None
-        return cls._parse_entrant(raw)
+        for s in listing.get("sets", []):
+            if str(s.get("id")) == str(set_id):
+                return s
+        return {"error": "Set not found"}
 
     @classmethod
     async def GetEntrants(cls, page: int = 1) -> dict:
@@ -528,7 +520,7 @@ class StartGGProvider:
         raw = _deep(entrants_data, "nodes", [])
         page_info = _deep(entrants_data, "pageInfo", {"page": 1, "totalPages": 0})
 
-        parsed = [cls._parse_entrant(e) for e in (raw or [])]
+        parsed = [parse_entrant(e) for e in (raw or [])]
 
         return {
             "entrants": parsed,
@@ -538,108 +530,6 @@ class StartGGProvider:
                 "total": page_info.get("total", 0),
             },
         }
-
-    @classmethod
-    async def _ensure_entrants_cache(cls):
-        """Build a lookup of all entrants by gamerTag (lowercase).
-
-        Fetches all pages from the entrants endpoint (which reliably returns
-        user profile data on the public API) and caches them for the duration
-        of the loaded event. Page 1 reveals total_pages; remaining pages
-        fan out via asyncio.gather.
-        """
-        if cls._entrants_cache is not None:
-            return
-
-        if not cls._event_slug:
-            cls._entrants_cache = {}
-            return
-
-        cache = {}
-        first = await cls.GetEntrants(1)
-        for entrant in first.get("entrants", []):
-            for p in entrant.get("players", []):
-                tag = (p.get("gamerTag") or "").lower()
-                if tag:
-                    cache[tag] = p
-
-        total_pages = first.get("pageInfo", {}).get("totalPages", 0) or 0
-        if total_pages > 1:
-            rest = await asyncio.gather(*[
-                cls.GetEntrants(p) for p in range(2, total_pages + 1)
-            ])
-            for result in rest:
-                for entrant in result.get("entrants", []):
-                    for p in entrant.get("players", []):
-                        tag = (p.get("gamerTag") or "").lower()
-                        if tag:
-                            cache[tag] = p
-
-        cls._entrants_cache = cache
-        logger.info("[startgg] entrants cache built: {} players", len(cache))
-
-    @classmethod
-    async def LoadSetIntoScoreboard(cls, set_id: int, scoreboard_number: int = 1) -> dict:
-        """Fetch a set and write player tags + scores into the scoreboard state.
-
-        Writes to name/team/profile fields — does NOT touch rioName, character,
-        or game state (inning, outs, etc.).
-        """
-        set_data = await cls.GetSet(set_id)
-        if "error" in set_data:
-            return set_data
-
-        # Build entrants cache so we can cross-reference profile data
-        await cls._ensure_entrants_cache()
-
-        sb = scoreboard_number
-        entrants = set_data.get("entrants", [[], []])
-
-        entries = []
-
-        # Player tags, prefixes, and profile data
-        for team_idx in range(2):
-            team_num = team_idx + 1
-            players = entrants[team_idx] if team_idx < len(entrants) else []
-            if players:
-                p = players[0]  # First (primary) player
-                tag = (p.get("gamerTag") or "").lower()
-
-                # Cross-reference with entrants cache for profile data
-                cached = cls._entrants_cache.get(tag) if cls._entrants_cache else None
-                if cached:
-                    for key in ("full_name", "pronoun", "country", "state", "city", "twitter"):
-                        if cached.get(key):
-                            p[key] = cached[key]
-
-                base = f"score.{sb}.player.{team_num}"
-                entries.append((f"{base}.name", p.get("gamerTag", "")))
-                entries.append((f"{base}.team", p.get("prefix", "") or ""))
-                entries.append((f"{base}.full_name", p.get("full_name", "")))
-                entries.append((f"{base}.country", p.get("country", "")))
-                entries.append((f"{base}.state", p.get("state", "")))
-                entries.append((f"{base}.pronoun", p.get("pronoun", "")))
-
-        # Scores — map W/L to 1/0 for the numeric scoreboard
-        t1s = set_data.get("team1score")
-        t2s = set_data.get("team2score")
-        if t1s == "W":
-            t1s, t2s = 1, 0
-        elif t2s == "W":
-            t1s, t2s = 0, 1
-        entries.append((f"score.{sb}.score_left", t1s if isinstance(t1s, (int, float)) else 0))
-        entries.append((f"score.{sb}.score_right", t2s if isinstance(t2s, (int, float)) else 0))
-
-        # Phase and round
-        if set_data.get("tournament_phase"):
-            entries.append((f"score.{sb}.phase", set_data["tournament_phase"]))
-        if set_data.get("round_name"):
-            entries.append((f"score.{sb}.match", set_data["round_name"]))
-
-        await State.SetBatch(entries)
-        await State.Save()
-
-        return {"success": True, "set": set_data}
 
     # ── bracket data ────────────────────────────────────────────
 
@@ -697,114 +587,13 @@ class StartGGProvider:
                 all_sets.extend(nodes or [])
 
         # Build phase label
-        phase_label = phase_name
+        label = phase_name
         if group_count > 1 and display_id:
-            phase_label = f"{phase_name} - Pool {display_id}"
+            label = f"{phase_name} - Pool {display_id}"
 
-        # Build player lookup and organize sets by round
-        players = {}
-        rounds_map = {}  # round_number -> list of sets
-
-        for raw in all_sets:
-            round_num = raw.get("round", 0)
-            if round_num not in rounds_map:
-                rounds_map[round_num] = {
-                    "name": raw.get("fullRoundText", f"Round {round_num}"),
-                    "sets": [],
-                }
-
-            slots = raw.get("slots", [])
-            entrant1 = _deep(slots[0], "entrant") if len(slots) > 0 else None
-            entrant2 = _deep(slots[1], "entrant") if len(slots) > 1 else None
-
-            # Track players
-            for entrant in [entrant1, entrant2]:
-                if entrant and entrant.get("id"):
-                    eid = str(entrant["id"])
-                    if eid not in players:
-                        participants = entrant.get("participants", []) or []
-                        p = participants[0].get("player", {}) if participants else {}
-                        players[eid] = {
-                            "name": p.get("gamerTag") or entrant.get("name", ""),
-                            "seed": entrant.get("initialSeedNum"),
-                            "prefix": p.get("prefix", "") or "",
-                        }
-
-            # Score handling (same W/L logic as _parse_set)
-            p1_slot = slots[0] if len(slots) > 0 else {}
-            p2_slot = slots[1] if len(slots) > 1 else {}
-            score1 = raw.get("entrant1Score")
-            score2 = raw.get("entrant2Score")
-            p1_placement = _deep(p1_slot, "standing.placement")
-            p2_placement = _deep(p2_slot, "standing.placement")
-            p1_standing_score = _deep(p1_slot, "standing.stats.score.value")
-            p2_standing_score = _deep(p2_slot, "standing.stats.score.value")
-
-            if score1 is None and score2 is None and p1_placement is not None:
-                score1 = "W" if p1_placement == 1 else "L" if p1_placement == 2 else None
-                score2 = "W" if p2_placement == 1 else "L" if p2_placement == 2 else None
-            elif score1 is None and p1_standing_score is not None:
-                score1 = p1_standing_score
-                score2 = p2_standing_score
-
-            # State
-            state_map = {1: "created", 2: "active", 3: "completed", 6: "called"}
-
-            set_data = {
-                "id": raw.get("id"),
-                "identifier": raw.get("identifier", ""),
-                "entrant1Id": str(entrant1["id"]) if entrant1 and entrant1.get("id") else None,
-                "entrant2Id": str(entrant2["id"]) if entrant2 and entrant2.get("id") else None,
-                "score1": score1,
-                "score2": score2,
-                "state": state_map.get(raw.get("state"), str(raw.get("state", ""))),
-                "completed": raw.get("state") == 3,
-                "roundName": raw.get("fullRoundText", ""),
-            }
-            rounds_map[round_num]["sets"].append(set_data)
-
-        # Separate into winners, losers, and grand finals
-        winners_rounds = {}
-        losers_rounds = {}
-        grand_finals = []
-
-        if bracket_type == "DOUBLE_ELIMINATION":
-            # Positive rounds = winners, negative = losers
-            # The highest positive rounds may be Grand Finals
-            positive_rounds = sorted([r for r in rounds_map if r > 0])
-            negative_rounds = sorted([r for r in rounds_map if r < 0], key=lambda x: abs(x))
-
-            # In double-elim, grand finals are typically the last 1-2 positive rounds
-            # after the main winners bracket. Detect by round name containing "Grand Final"
-            for r in positive_rounds:
-                round_data = rounds_map[r]
-                is_gf = any("Grand Final" in s.get("roundName", "") for s in round_data["sets"])
-                if is_gf:
-                    grand_finals.extend(round_data["sets"])
-                else:
-                    winners_rounds[r] = round_data
-
-            for r in negative_rounds:
-                losers_rounds[abs(r)] = rounds_map[r]
-        elif bracket_type == "SINGLE_ELIMINATION":
-            for r in sorted(rounds_map.keys()):
-                if r > 0:
-                    winners_rounds[r] = rounds_map[r]
-        else:
-            # Round robin or other — just put everything in winners
-            for r in sorted(rounds_map.keys()):
-                winners_rounds[r] = rounds_map[r]
-
-        result = {
-            "type": bracket_type,
-            "phaseName": phase_label,
-            "phaseGroupId": phase_group_id,
-            "winnersRounds": winners_rounds,
-            "losersRounds": losers_rounds,
-            "grandFinals": grand_finals,
-            "players": players,
-        }
-
+        result = bracket_cache.structure_bracket(
+            phase_group_id, bracket_type, label, all_sets,
+        )
         cls._bracket_cache[phase_group_id] = result
         return result
 
@@ -820,192 +609,3 @@ class StartGGProvider:
         await State.Save()
 
         return bracket_data
-
-    # ── parsing helpers ────────────────────────────────────────
-
-    @staticmethod
-    def _parse_set(raw: dict) -> dict:
-        """Parse a set from the paginated sets query (minimal player detail)."""
-        slots = raw.get("slots", [])
-        p1 = slots[0] if len(slots) > 0 else {}
-        p2 = slots[1] if len(slots) > 1 else {}
-
-        phase_name = _deep(raw, "phaseGroup.phase.name", "")
-        group_count = _deep(raw, "phaseGroup.phase.groupCount", 0) or 0
-        if group_count > 1:
-            display_id = _deep(raw, "phaseGroup.displayIdentifier", "")
-            if display_id:
-                phase_name = f"{phase_name} - Pool {display_id}"
-
-        def entrant_name(slot):
-            e = slot.get("entrant")
-            if not e:
-                return ""
-            return e.get("name", "")
-
-        def entrant_seed(slot):
-            e = slot.get("entrant")
-            if not e:
-                return None
-            return e.get("initialSeedNum")
-
-        # State: 1=created, 2=active, 3=completed, 6=called
-        state_map = {1: "created", 2: "active", 3: "completed", 6: "called"}
-
-        # Scores: use entrantNScore if available, otherwise derive W/L from standing
-        team1score = raw.get("entrant1Score")
-        team2score = raw.get("entrant2Score")
-        p1_placement = _deep(p1, "standing.placement")
-        p2_placement = _deep(p2, "standing.placement")
-        p1_standing_score = _deep(p1, "standing.stats.score.value")
-        p2_standing_score = _deep(p2, "standing.stats.score.value")
-
-        # If numeric scores are null but standings exist, use W/L
-        wl_only = (team1score is None and team2score is None
-                   and p1_placement is not None)
-        if wl_only:
-            team1score = "W" if p1_placement == 1 else "L" if p1_placement == 2 else None
-            team2score = "W" if p2_placement == 1 else "L" if p2_placement == 2 else None
-        elif team1score is None and p1_standing_score is not None:
-            team1score = p1_standing_score
-            team2score = p2_standing_score
-
-        return {
-            "id": raw.get("id"),
-            "team1score": team1score,
-            "team2score": team2score,
-            "round_name": raw.get("fullRoundText", ""),
-            "round": raw.get("round"),
-            "tournament_phase": phase_name,
-            "bracket_type": _deep(raw, "phaseGroup.phase.bracketType", ""),
-            "p1_name": entrant_name(p1),
-            "p2_name": entrant_name(p2),
-            "p1_seed": entrant_seed(p1),
-            "p2_seed": entrant_seed(p2),
-            "state": state_map.get(raw.get("state"), str(raw.get("state", ""))),
-        }
-
-    @staticmethod
-    def _parse_set_full(raw: dict) -> dict:
-        """Parse a single set with full player detail (from SetQuery)."""
-        slots = raw.get("slots", [])
-        p1 = slots[0] if len(slots) > 0 else {}
-        p2 = slots[1] if len(slots) > 1 else {}
-
-        phase_name = _deep(raw, "phaseGroup.phase.name", "")
-        group_count = _deep(raw, "phaseGroup.phase.groupCount", 0) or 0
-        if group_count > 1:
-            display_id = _deep(raw, "phaseGroup.displayIdentifier", "")
-            if display_id:
-                phase_name = f"{phase_name} - Pool {display_id}"
-
-        # Scores: use entrantNScore if available, otherwise derive W/L from standing
-        team1score = raw.get("entrant1Score")
-        team2score = raw.get("entrant2Score")
-        p1_placement = _deep(p1, "standing.placement")
-        p2_placement = _deep(p2, "standing.placement")
-        p1_standing_score = _deep(p1, "standing.stats.score.value")
-        p2_standing_score = _deep(p2, "standing.stats.score.value")
-
-        wl_only = (team1score is None and team2score is None
-                   and p1_placement is not None)
-        if wl_only:
-            team1score = "W" if p1_placement == 1 else "L" if p1_placement == 2 else None
-            team2score = "W" if p2_placement == 1 else "L" if p2_placement == 2 else None
-        elif team1score is None and p1_standing_score is not None:
-            team1score = p1_standing_score
-            team2score = p2_standing_score
-
-        set_data = {
-            "id": raw.get("id"),
-            "team1score": team1score,
-            "team2score": team2score,
-            "round_name": raw.get("fullRoundText", ""),
-            "round": raw.get("round"),
-            "tournament_phase": phase_name,
-            "bracket_type": _deep(raw, "phaseGroup.phase.bracketType", ""),
-        }
-
-        entrant_ids = []
-        entrants = [[], []]
-        for i, slot in enumerate([p1, p2]):
-            if i > 1:
-                break
-            entrant = slot.get("entrant")
-            if not entrant:
-                entrant_ids.append(None)
-                continue
-            entrant_ids.append(entrant.get("id"))
-            participants = entrant.get("participants", []) or []
-            for participant in participants:
-                player = participant.get("player", {}) or {}
-                user = participant.get("user", {}) or {}
-
-                player_data = {
-                    "gamerTag": player.get("gamerTag", ""),
-                    "prefix": player.get("prefix", ""),
-                    "playerId": player.get("id"),
-                }
-
-                if user:
-                    if user.get("name"):
-                        player_data["full_name"] = user["name"]
-                    if user.get("genderPronoun"):
-                        player_data["pronoun"] = user["genderPronoun"]
-                    auths = user.get("authorizations", []) or []
-                    if auths:
-                        player_data["twitter"] = auths[0].get("externalUsername", "")
-                    if user.get("images"):
-                        player_data["avatar"] = user["images"][0].get("url", "")
-                    loc = user.get("location", {}) or {}
-                    if loc.get("country"):
-                        player_data["country"] = loc["country"]
-                    if loc.get("state"):
-                        player_data["state"] = loc["state"]
-                    if loc.get("city"):
-                        player_data["city"] = loc["city"]
-
-                entrants[i].append(player_data)
-
-        set_data["entrants"] = entrants
-        set_data["entrant_ids"] = entrant_ids
-        return set_data
-
-    @staticmethod
-    def _parse_entrant(raw: dict) -> dict:
-        """Parse an entrant from the entrants query."""
-        result = {
-            "id": raw.get("id"),
-            "name": raw.get("name", ""),
-            "seed": raw.get("initialSeedNum"),
-        }
-
-        participants = raw.get("participants", []) or []
-        players = []
-        for p in participants:
-            player = p.get("player", {}) or {}
-            user = p.get("user", {}) or {}
-            pd = {
-                "gamerTag": player.get("gamerTag", ""),
-                "prefix": player.get("prefix", ""),
-                "playerId": player.get("id"),
-            }
-            if user:
-                if user.get("name"):
-                    pd["full_name"] = user["name"]
-                if user.get("genderPronoun"):
-                    pd["pronoun"] = user["genderPronoun"]
-                auths = user.get("authorizations", []) or []
-                if auths:
-                    pd["twitter"] = auths[0].get("externalUsername", "")
-                loc = user.get("location", {}) or {}
-                if loc.get("country"):
-                    pd["country"] = loc["country"]
-                if loc.get("state"):
-                    pd["state"] = loc["state"]
-                if loc.get("city"):
-                    pd["city"] = loc["city"]
-            players.append(pd)
-
-        result["players"] = players
-        return result

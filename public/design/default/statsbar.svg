@@ -1,0 +1,91 @@
+<svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    DEFAULT package - Stats bar (452x118): the per-team batter/pitcher stat
+    card (stats-card-mount.js). Character well on the left, four value/label
+    cells across the rest, and an optional bottom line. card-bg swaps between
+    data-h-full and data-h-compact when that line row is hidden. Fixed Rio
+    palette.
+
+    EVERY var() CARRIES A LITERAL FALLBACK, for the reason statscard.svg spells
+    out: an unresolved custom property in a presentation style computes to the
+    property's INITIAL value - black fill on a black stroke - so a shell that
+    forgot the token layer renders this bar as a black rectangle with black
+    text on it, silently.
+
+    == THE CELLS ARE NOT EQUAL, AND THAT IS THE POINT ========================
+    stat-row declares the BAND (64..442, the character well ends at 60 and the
+    right edge mirrors its inset) and the mount divides it in the ratio of what
+    each category needs - `width` on each stat, in characters, from
+    RioData.getStatsLine; see layoutStatCells in mount-utils.js. Batting is
+    AB 3 / AVG 5 / SLG 5 / SO% 4 and pitching IP 5 / ERA 4 / K% 4 / AVG 5, so
+    the columns differ between the two sets and move under the batter-change
+    cross-fade.
+
+    Equal columns were the bug: measured at weight 700, Chivo Mono's advance is
+    0.600em for EVERY glyph, so at 30px a two-character AB is 36 units and a
+    ".429" is 72 - and a 95-wide cell built for the second leaves the first
+    floating in 59 units of air, which on the batting set is most of the row.
+
+    NOTHING AUTO-FITS AT 30px IN EITHER SET, because the budgets are maxima and
+    the cells are sized from them: the tightest pairs are "128.1" at 90 units in
+    an IP cell bounded at 90.3 and "12.0" at 72 in an ERA cell bounded at 72.24.
+    That headroom is what the dropped precision bought - a percentage to a tenth
+    is six characters at "100.0%" and an ERA to a hundredth five at "12.00",
+    and at those budgets the numerals come down to about 28px to fit.
+
+    == THE BOTTOM LINE IS LEFT-ALIGNED, AND THAT IS WHAT MAKES IT BIG ========
+    "Game" sits at the left and the line runs from x=56 to the card's right
+    content edge (442) - 386 units, against the 330 a CENTRED line could claim
+    while dodging that label. Measured in Inter 700: an ordinary pitching line
+    ("10.0 IP, 12 H, 2 R, 2 ER, 0 BB, 10 K, 1 HR, 75 P") is 383.8 units at 18px,
+    so the common heavy case renders at full size where centred-at-13.5px it was
+    the SMALLEST type on a card whose other numbers are 30. It clears the bound
+    by 2.2 units and used to clear it by 23: the innings gained their unit on
+    2026-09-13 (format_pitching_line), and a line long enough to need it - the
+    worst realistic case, 396.2 - now auto-fits to about 17.5px, which is the
+    mechanism working rather than a budget being overrun.
+
+    The label is not always there - `line-label` is bound only for a HUD game's
+    line, and an API board's "Tournament Stats" arrives as the line itself - so
+    line-text authors BOTH left edges (data-x-labelled / data-x-bare) against
+    one right bound (data-maxr) and the mount picks, the same shape as
+    card-bg's four edges above. A theme declaring none of the three keeps
+    whatever geometry it authored, which is how classic's centred bar is
+    untouched by this.
+  -->
+  <style>
+    .st-lab  { fill: var(--ink-dim, #8f8fa3); font-family: var(--font-display, 'Rajdhani', 'Arial Narrow', sans-serif); }
+    .st-num  { fill: var(--ink, #f5f5f8); font-family: var(--font-mono, 'Chivo Mono', ui-monospace, 'SF Mono', monospace); font-variant-numeric: tabular-nums; }
+    .st-cap  { fill: var(--ink, #f5f5f8); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+  </style>
+
+  <rect data-slot="card-bg" x="2" y="2" width="448" height="114" rx="12" data-h-full="114" data-h-compact="76" style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30);stroke-width:1.5"/>
+
+  <g data-slot="content">
+    <rect x="10" y="14" width="50" height="50" rx="10" fill="rgba(255,255,255,0.045)"/>
+    <rect x="10" y="14" width="3" height="50" rx="1.5" style="fill:var(--accent,#e60012)"/>
+    <image data-slot="char-icon" x="13" y="17" width="44" height="44" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <!-- Authored at the BATTING allocation; the mount re-divides the band per
+         stat set (data-span-x/data-span-w below). -->
+    <g data-slot="stat-row" data-span-x="64" data-span-w="378">
+      <text data-slot="stat-0-value" data-maxw="57.37" x="97.35" y="43" text-anchor="middle" class="st-num" font-size="30" font-weight="700">0</text>
+      <text data-slot="stat-0-label" x="97.35" y="59" text-anchor="middle" class="st-lab" font-size="14" font-weight="600" letter-spacing="0.8">AB</text>
+      <text data-slot="stat-1-value" data-maxw="95.61" x="186.29" y="43" text-anchor="middle" class="st-num" font-size="30" font-weight="700">.000</text>
+      <text data-slot="stat-1-label" x="186.29" y="59" text-anchor="middle" class="st-lab" font-size="14" font-weight="600" letter-spacing="0.8">AVG</text>
+      <text data-slot="stat-2-value" data-maxw="95.61" x="297.47" y="43" text-anchor="middle" class="st-num" font-size="30" font-weight="700">.000</text>
+      <text data-slot="stat-2-label" x="297.47" y="59" text-anchor="middle" class="st-lab" font-size="14" font-weight="600" letter-spacing="0.8">SLG</text>
+      <text data-slot="stat-3-value" data-maxw="76.49" x="397.53" y="43" text-anchor="middle" class="st-num" font-size="30" font-weight="700">0%</text>
+      <text data-slot="stat-3-label" x="397.53" y="59" text-anchor="middle" class="st-lab" font-size="14" font-weight="600" letter-spacing="0.8">SO%</text>
+    </g>
+
+    <!-- Bottom line: rule 10..442, one shared baseline at 103 (the band runs
+         77.5..115.25, and the label+line ink centres on 96.4 together). -->
+    <g data-slot="line-group">
+      <rect x="10" y="76" width="432" height="1.5" style="fill:var(--border,#1f1f30)"/>
+      <text data-slot="line-label" x="12" y="103" class="st-lab" font-size="14" font-weight="600"></text>
+      <text data-slot="line-text" data-maxw="386" data-x-labelled="56" data-x-bare="12" data-maxr="442"
+            x="56" y="103" class="st-cap" font-size="18" font-weight="700"></text>
+    </g>
+  </g>
+</svg>

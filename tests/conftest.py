@@ -1,7 +1,7 @@
 """Shared pytest fixtures.
 
 The server is built on class-level singletons (State, Settings,
-RioGameDataProvider, StatsTracker, RotationManager) whose mutable class
+RioGameDataProvider, StatsTracker, PoolManager) whose mutable class
 variables would otherwise leak between tests. The autouse fixtures here give
 every test a clean baseline, redirect all disk writes into a temp dir, and a
 SocketIO emit that never touches a real server.
@@ -37,6 +37,7 @@ def isolate_user_data(tmp_path, monkeypatch):
     developer's real settings.json / state.json / stream_labels.
     """
     from aiopath import AsyncPath
+    from server.participants import Participants
     from server.state import State
     from server.settings import Settings
 
@@ -46,17 +47,28 @@ def isolate_user_data(tmp_path, monkeypatch):
                         AsyncPath(str(tmp_path / "stream_labels")))
     monkeypatch.setattr(Settings, "_settings_out",
                         AsyncPath(str(tmp_path / "settings.json")))
+    monkeypatch.setattr(Participants, "_out",
+                        AsyncPath(str(tmp_path / "participants.json")))
+    monkeypatch.setattr(Participants, "_logos_dir", tmp_path / "branding" / "leagues")
     return tmp_path
 
 
 @pytest.fixture(autouse=True)
 def reset_singletons():
     """Snapshot and restore class-level singleton state around every test."""
+    from server.announcements import Announcements
+    from server.automations import Automations
+    from server.participants import Participants
     from server.state import State
     from server.settings import Settings
+    from server.postgame import PostGame
+    from server.postgame.watch import StatFileWatcher
+    from server.rio.game_end import GameEndWatcher
+    from server.rio.game_pool import CompletedGamePool, OngoingGamePool
     from server.rio.provider import RioGameDataProvider as Provider
     from server.rio.stats_tracker import StatsTracker
-    from server.rio.rotation import RotationManager
+    from server.rio.rotation import PoolManager
+    from server.startgg.provider import StartGGProvider
 
     saved = {
         "state": copy.deepcopy(State.state),
@@ -65,12 +77,39 @@ def reset_singletons():
         "settings": copy.deepcopy(Settings.settings),
         "prev_sides": dict(Provider._prev_player_sides),
         "prev_inning": Provider._prev_inning,
+        "prev_game_id": Provider._prev_game_id,
+        "raw_game": Provider._raw_game,
         "sides_swapped": Provider._sides_swapped,
         "user_overridden": Provider._user_overridden,
+        "feed_released": Provider._feed_released,
+        "released_frame": Provider._released_frame,
         "hud_targets": list(Provider._hud_targets),
         "hud_watcher": Provider.hud_watcher,
         "stats_slots": dict(StatsTracker._slots),
-        "rotations": dict(RotationManager._rotations),
+        "rotations": dict(PoolManager._rotations),
+        "gameend_pending": set(GameEndWatcher._pending),
+        "gameend_done": set(GameEndWatcher._done),
+        "autocapture_done": set(StatFileWatcher._done),
+        "announcements_active": list(Announcements._active),
+        "participants": dict(Participants.participants),
+        "books": dict(Participants.books),
+        # The API-game pools and the post-game caches are class-level dicts
+        # like every entry above. They were missed, so a test that seeded a
+        # pool or captured a box score left it visible to every later test —
+        # latent only because nothing yet asserts on an empty pool.
+        "ongoing_games": dict(OngoingGamePool.games),
+        "ongoing_follow_misses": dict(OngoingGamePool._follow_misses),
+        "ongoing_ended_follow": dict(OngoingGamePool._ended_follow),
+        "completed_games": dict(CompletedGamePool.games),
+        "pg_captured": dict(PostGame._captured),
+        "pg_stat_objs": dict(PostGame._stat_objs),
+        "pg_contacts": dict(PostGame._contacts),
+        # The loaded event and its parsed brackets are class state too, so a
+        # test that loads one leaves every later test looking at a provider
+        # that already has an event.
+        "sgg_bracket_cache": dict(StartGGProvider._bracket_cache),
+        "sgg_event_slug": StartGGProvider._event_slug,
+        "sgg_tournament_data": StartGGProvider._tournament_data,
     }
 
     # Clean baseline for the test.
@@ -80,31 +119,118 @@ def reset_singletons():
     # Fresh queue per test so a coroutine enqueued under one test's event loop
     # never gets awaited under another's ("attached to a different loop").
     State.queue = asyncio.Queue()
+    # The write-path hooks are class-level too: a consumer registered in one
+    # test would otherwise run inside every later test's writes.
+    State.hooks = []
+    State.unset_hooks = []
+    Settings.watchers = []
+    # Same loop-binding hazard as the queue: an Event/Lock binds on first await.
+    State._persist_dirty = None
+    State._save_lock = None
+    Automations.reset()
 
     Provider._prev_player_sides = {}
     Provider._prev_inning = None
+    Provider._prev_game_id = None
+    Provider._raw_game = None
     Provider._sides_swapped = False
     Provider._user_overridden = False
+    Provider._feed_released = False
+    Provider._released_frame = None
     Provider._hud_targets = []
     Provider.hud_watcher = None
+    # Sticky across games by design (it drives the next frame's mode retry), so
+    # a test that leaves it raised makes the next one retry a mode it never set.
+    Provider._game_mode_unresolved = False
+    # asyncio.Lock binds to the loop it first awaits under — each test gets a
+    # fresh event loop, so drop any lock created under a previous test's loop.
+    Provider._update_lock = None
+    PostGame._capture_lock = None
 
     StatsTracker._slots = {}
-    RotationManager._rotations = {}
+    PoolManager._rotations = {}
+    PoolManager._locks = {}
+    GameEndWatcher._pending = set()
+    GameEndWatcher._done = set()
+    StatFileWatcher._done = set()
+    Announcements._active = []
+    Participants.participants = {}
+    Participants.books = {}
+    Participants._ensure_main()
+    Participants._reindex()
+    OngoingGamePool.games = {}
+    OngoingGamePool._follow_misses = {}
+    OngoingGamePool._ended_follow = {}
+    CompletedGamePool.games = {}
+    PostGame._captured = {}
+    PostGame._stat_objs = {}
+    PostGame._contacts = {}
+    StartGGProvider._bracket_cache = {}
+    StartGGProvider._event_slug = None
+    StartGGProvider._tournament_data = None
+    # Same loop-binding hazard as the two locks above.
+    StartGGProvider._load_lock = None
 
     yield
 
+    Automations.reset()
+    State.hooks = []
+    State.unset_hooks = []
+    Settings.watchers = []
     State.state = saved["state"]
     State.last_state = saved["last_state"]
     State.changed_keys = saved["changed_keys"]
     Settings.settings = saved["settings"]
     Provider._prev_player_sides = saved["prev_sides"]
     Provider._prev_inning = saved["prev_inning"]
+    Provider._prev_game_id = saved["prev_game_id"]
+    Provider._raw_game = saved["raw_game"]
     Provider._sides_swapped = saved["sides_swapped"]
     Provider._user_overridden = saved["user_overridden"]
+    Provider._feed_released = saved["feed_released"]
+    Provider._released_frame = saved["released_frame"]
     Provider._hud_targets = saved["hud_targets"]
     Provider.hud_watcher = saved["hud_watcher"]
+    Provider._update_lock = None
+    PostGame._capture_lock = None
     StatsTracker._slots = saved["stats_slots"]
-    RotationManager._rotations = saved["rotations"]
+    PoolManager._rotations = saved["rotations"]
+    GameEndWatcher._pending = saved["gameend_pending"]
+    GameEndWatcher._done = saved["gameend_done"]
+    StatFileWatcher._done = saved["autocapture_done"]
+    Announcements._active = saved["announcements_active"]
+    Participants.participants = saved["participants"]
+    Participants.books = saved["books"]
+    Participants._reindex()
+    OngoingGamePool.games = saved["ongoing_games"]
+    OngoingGamePool._follow_misses = saved["ongoing_follow_misses"]
+    OngoingGamePool._ended_follow = saved["ongoing_ended_follow"]
+    CompletedGamePool.games = saved["completed_games"]
+    PostGame._captured = saved["pg_captured"]
+    PostGame._stat_objs = saved["pg_stat_objs"]
+    PostGame._contacts = saved["pg_contacts"]
+    StartGGProvider._bracket_cache = saved["sgg_bracket_cache"]
+    StartGGProvider._event_slug = saved["sgg_event_slug"]
+    StartGGProvider._tournament_data = saved["sgg_tournament_data"]
+
+
+@pytest.fixture
+def rig():
+    """Put boards in the rig for a test (`rig(1, 2, 3)`).
+
+    The default rig is one board, and the bind routes 404 a board that is not in
+    it (`require_board`) — a board id off a request must not write
+    `score.{N}.match` for a board no layout reads and no rack row lists. A test
+    exercising a two- or three-board rig has to actually have one.
+    """
+    from server.settings import Settings
+    from server.utils.deep_dict import deep_set
+
+    def _rig(*ids):
+        deep_set(Settings.settings, "scoreboards.active", [int(i) for i in ids])
+        Settings.revision += 1
+
+    return _rig
 
 
 @pytest.fixture
@@ -115,5 +241,38 @@ def set_setting():
 
     def _set(key, value):
         deep_set(Settings.settings, key, value)
+        # Settings.Set bumps this on every write; consumers that cache a
+        # normalized subtree against it would otherwise never see a
+        # fixture-written setting.
+        Settings.revision += 1
 
     return _set
+
+
+@pytest.fixture
+def pin_player():
+    """Pin a rioName to a side in the address book — the `pin` layer's input.
+
+    Writes the row straight into the in-memory registry (no IO, no await), the
+    same way `set_setting` writes Settings. `reset_singletons` empties
+    `Participants.participants` between tests, so nothing to restore.
+
+    A direct write bypasses the class's own mutators, so it re-indexes: the pin
+    layer resolves through `MatchByRioName`, which reads the index, so a row
+    written around it is a row the cascade cannot see.
+    """
+    from server.participants import Participants, _DISPLAY_DEFAULTS, _IDENTITY_DEFAULTS
+
+    def _pin(rio_name, side=1, pid=None):
+        pid = pid or f"p_test_{rio_name}"
+        Participants.participants[pid] = {
+            "id": pid,
+            "identities": {**_IDENTITY_DEFAULTS, "rioName": rio_name},
+            "display": {**_DISPLAY_DEFAULTS, "tag": rio_name},
+            "prefs": {"side": side},
+            "meta": {"createdAt": "", "updatedAt": "", "source": "manual"},
+        }
+        Participants._index_row(Participants.participants[pid])
+        return Participants.participants[pid]
+
+    return _pin

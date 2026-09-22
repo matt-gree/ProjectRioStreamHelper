@@ -203,8 +203,17 @@ bower_components
 # node-waf configuration
 .lock-wscript
 
+# Agent git worktrees live here. Must be ignored: they nest under the project
+# root, so Tailwind v4's content crawler (which scans everything not in
+# .gitignore) would otherwise pick up each worktree's duplicate source +
+# public assets, and a removed worktree leaves dangling url() refs
+# (vite:css-analysis ENOENT). Also keeps `git status` quiet.
+.claude/worktrees/
+
 # Dependency directories
-node_modules/
+# No trailing slash so a `node_modules` symlink (used to share deps into a
+# git worktree) is ignored too, not just a real directory.
+node_modules
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -291,3 +300,18 @@ user_data/
 
 # MSB game assets (Nintendo IP — distributed separately, not committed)
 public/game_assets/msb/
+
+# Slice26 design-package explorations — not approved to ship, keep local only
+/Slice26.fig
+/figma-exports/
+public/design/slice26*
+/slice26-wip/
+
+# Design masters (.fig + raw Figma exports) — local workspace, never committed.
+# Only the compiled theme SVGs under public/design/ or user_data/ ship.
+/design-sources/
+
+# impeccable runtime output — a per-machine hook cache (absolute paths, session
+# ids) plus generated critique reports. The tool itself is checked in under
+# .claude/skills/ and .github/.
+.impeccable/

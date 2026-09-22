@@ -3,11 +3,13 @@
 socketio.emit is mocked and all disk paths are redirected to tmp (conftest), so
 these exercise the real routers without a network or touching user_data.
 """
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from server.api import router_v1
+from server.api.v1.layouts import _SHELVED_GROUPS, _layout_dir
 from server.settings import Settings
 
 
@@ -40,18 +42,28 @@ def test_put_state_emits_set_frame(client, mock_socket):
 
 
 # --- /settings (secret redaction) ---
+# SECRET_KEYS is currently empty, so these patch in a fake secret key to keep
+# the API-layer redaction paths covered. The per-key GET reads the copy
+# imported into server.api.v1.settings; the full GET reads server.settings.
 
-def test_settings_secret_get_returns_bool_not_value(client, set_setting):
-    set_setting("challonge.api_key", "supersecret")
-    r = client.get("/api/v1/settings", params={"key": "challonge.api_key"})
+@pytest.fixture
+def fake_secret(monkeypatch):
+    keys = frozenset({"myservice.api_key"})
+    monkeypatch.setattr("server.settings.SECRET_KEYS", keys)
+    monkeypatch.setattr("server.api.v1.settings.SECRET_KEYS", keys)
+
+
+def test_settings_secret_get_returns_bool_not_value(client, set_setting, fake_secret):
+    set_setting("myservice.api_key", "supersecret")
+    r = client.get("/api/v1/settings", params={"key": "myservice.api_key"})
     # Secret keys never leave the server as raw values — just whether configured.
     assert r.json() is True
 
 
-def test_settings_full_get_redacts_secret(client, set_setting):
-    set_setting("challonge.api_key", "supersecret")
+def test_settings_full_get_redacts_secret(client, set_setting, fake_secret):
+    set_setting("myservice.api_key", "supersecret")
     full = client.get("/api/v1/settings").json()
-    assert full["challonge"]["api_key"] == "***"
+    assert full["myservice"]["api_key"] == "***"
 
 
 def test_settings_nonsecret_round_trips(client):
@@ -68,13 +80,19 @@ def test_layouts_variant_matrix(client):
     for entry in layouts:
         by_type.setdefault(entry["type"], []).append(entry)
 
-    # Scoreboard expands into the 5 size variants.
-    assert len(by_type["scoreboard"]) == 5
-    assert {e["sizeVariant"] for e in by_type["scoreboard"]} == {"xs", "s", "m", "l", "xl"}
+    # Scoreboard expands into the size variants. A RETIRED size is not offered
+    # (xs/xl went with the SVG conversion, m on 2026-08-29) — the mount maps
+    # every unknown or legacy size to "l", which is what lets one be dropped
+    # without stranding the OBS sources that still name it.
+    assert len(by_type["scoreboard"]) == 2
+    assert {e["sizeVariant"] for e in by_type["scoreboard"]} == {"s", "l"}
     assert all("?size=" in e["url"] for e in by_type["scoreboard"])
 
-    # Team-variant layouts expand into ?team=1 / ?team=2.
-    for t in ("stats", "roster", "teamlogo", "controller"):
+    # Team-variant layouts expand into ?team=1 / ?team=2. `controller` is in
+    # this list on every platform: gc-overlay 1.1.0 carries a transport for
+    # each, so the catalog no longer hides it off-Darwin.
+    team_types = ["statsbar", "roster", "teamlogo", "controller"]
+    for t in team_types:
         assert len(by_type[t]) == 2, t
         assert {e["team"] for e in by_type[t]} == {1, 2}
         assert all("?team=" in e["url"] for e in by_type[t])
@@ -88,11 +106,45 @@ def test_layouts_scoreboard_exposes_supported_settings(client):
     assert isinstance(sb["supportedSettings"], list) and sb["supportedSettings"]
 
 
+def test_shelved_groups_are_not_offered_but_still_exist(client):
+    """A shelved group is not in the catalog, and is still on disk.
+
+    Shelving is a CATALOG decision: the Add picker stops offering the group, and
+    a browser source already pointing at one of its files keeps rendering
+    (`hidden` in src/routes/production/elements.js is the console's half — not
+    offered, still understood). Deleting the files instead would break a
+    producer's live source, which is not what parking the work means.
+    """
+    layouts = client.get("/api/v1/layouts").json()
+    for group in _SHELVED_GROUPS:
+        assert not [e for e in layouts if e.get("group") == group], f"{group} is offered"
+        assert list((_layout_dir / group).glob("*.html")), f"{group} has no files left"
+
+
+@pytest.mark.skipif("bracket" in _SHELVED_GROUPS, reason="bracket group is shelved")
 def test_layouts_bracket_has_dimensions(client):
+    """Re-arms on its own the moment `bracket` leaves _SHELVED_GROUPS."""
     layouts = client.get("/api/v1/layouts").json()
     brackets = [e for e in layouts if e["type"] == "bracket"]
     assert brackets  # index/winners_only/losers_only/player_schedule
     assert all("width" in e and "height" in e for e in brackets)
+
+
+# --- /match (payload validation) ---
+
+def test_match_stage_must_be_one_of_the_three(client):
+    """`stage` is an INPUT now — the Match desk's badge is a control — and it gates
+    Up next by an exact match on 'draft'. An unconstrained string meant a typo
+    ("Draft") stranded the fixture out of the running order for good, with a reason
+    blaming a stage nothing had set."""
+    m = client.post("/api/v1/match").json()["id"]
+
+    assert client.put(f"/api/v1/match/{m}", json={"stage": "Draft"}).status_code == 422
+    assert client.put(f"/api/v1/match/{m}", json={"stage": "shipped"}).status_code == 422
+
+    for stage in ("live", "post", "draft"):
+        r = client.put(f"/api/v1/match/{m}", json={"stage": stage})
+        assert r.status_code == 200 and r.json()["stage"] == stage
 
 
 # --- /rio/swap ---

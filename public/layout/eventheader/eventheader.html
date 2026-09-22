@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<!--
+  Event Header — a thin shell over lib/eventheader-mount.js, which is also what
+  a container stands up when this element is fed into one. Two thin bands
+  framing the canvas, each an ordered list of fields
+  (overlays.eventheader.bands.{header,footer}); band authoring lives on this
+  element's Production stage panel.
+-->
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <!-- The whitelist must name every knob the mount reads: Setup filters
+       LAYOUT_SETTINGS.eventheader down to what appears here, so an omitted key
+       is a setting the mount honours but nobody can reach. -->
+  <meta name="overlay-settings" content="showHeader, headerOffsetY, showFooter, footerOffsetY, bands, bandWidth, headerFontSize, footerFontSize, bgStyle, separator, textColor, accentColor, cardBg, textShadow, textStroke, displayFont" />
+  <style>
+    html, body { margin: 0; width: 1920px; height: 1080px; background: transparent; overflow: hidden; }
+    /* The mount scales its 1920×1080 stage to this box, so a smaller OBS
+       source shrinks the bands rather than cropping them. */
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script type="module">
+    import { mountEventHeader } from '/layout/lib/eventheader-mount.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+
+    document.body.dataset.refW = 1920;
+    document.body.dataset.refH = 1080;
+
+    const eh = mountEventHeader({ host: document.getElementById('host'), sb: SB });
+
+    OverlayBase.init({
+      render: () => eh.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'eventheader',
+      fetchSettings: true,
+      shouldRender: eh.shouldRender,
+      shouldRenderSettings: eh.shouldRenderSettings,
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<svg viewBox="0 0 380 240" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+  <!--
+    CLASSIC package - Stat CARD (landscape, 380x240): the default package's 2x2
+    card geometry, painted with the user's Design-tab CSS variables instead of
+    the Rio brand palette. data-design-vars="app" opts in, so the mount runs
+    applyDesignSettings and accent / card background / text / border / shadow
+    all follow the app's design knobs like the pre-2.0 overlays did.
+
+    THE SAME ELEMENT AS classic/statsbar.svg AT A DIFFERENT ASPECT - one mount
+    (stats-card-mount.js, svgElement:'statscard'), one slot set, one
+    RioData.getStatsLine resolution. The bar is the wide four-across source; this
+    is the 2x2 a container hosts. Until this file existed, a classic package drew
+    its own bar in one scene and the DEFAULT package's Rio-branded card in the
+    next, because a missing element falls back element-by-element rather than
+    package-by-package.
+
+    TYPE IS ONE ROLE HERE, deliberately: every classic element paints through
+    var(- -font-body), which is what the single pre-2.0 font setting migrated
+    onto at overlays schema v5. A value still declares tabular figures, because
+    the producer's body face need not be one that has them by default and a
+    ticking number that shoves its neighbours is the thing they prevent.
+
+    == TWO MOVING EDGES ======================================================
+    The stat block NEVER MOVES. Both captions are optional, and each one owns an
+    edge of the card rather than reflowing what is between them: the header opens
+    the TOP edge upward over a band already drawn there, the footer opens the
+    BOTTOM edge downward. card-bg declares all four positions and the mount
+    animates between them (0.45s power3.out):
+
+      data-top-open    8    header shown (the card's own 8-unit bleed)
+      data-top-closed  46   header hidden, 16 units above the grid's own frame
+      data-bot-open    232  footer shown (the bleed again, from the far edge)
+      data-bot-closed  194  footer hidden, the same 16 units below it
+
+    So all four on/off combinations come from one pair of edges rather than four
+    authored layouts. Only the two OPEN edges reach the canvas, so only they
+    carry the card's bleed; the closed pair is interior and says where the stat
+    block stops.
+
+    THE CLOSED PAIR WAS 30 / 206 - 28 units clear of the block on each side -
+    and that is the DEFAULT package's number, measured to an object this file
+    does not draw. There the block sits in a rounded well (a filled rect at
+    y=58..178), so 28 is the air around a visible box and reads as margin.
+    Classic deleted the well on purpose - one surface, a hairline border, the
+    dividers doing the dividing - and kept the offsets, so the same 28 became
+    empty card above bare ink. In its commonest state (header off, footer on)
+    that put 33 units above the first row of numerals against 13 below the last
+    row of labels: a card noticeably heavier at the top than at the bottom.
+
+    16 is measured to what this file actually draws, the grid's own rules
+    (y=62..178): the closed edge now sits the same distance from them as the
+    open edge's rule does, so the card hugs the block by one inset whether that
+    edge is a border or a hairline. Two things fall out of it and are worth
+    checking against, because they are what say the number is right rather than
+    merely smaller: the portrait (y=70..166) ends up centred between the card's
+    top edge and the footer rule, 24 above and 23 below; and with both captions
+    off the ink sits 17 clear at each end.
+
+    THE FOOTER LINE IS LEFT-ALIGNED BESIDE ITS LABEL, and that is what makes it
+    big. Centred, it could claim only about 240 of the band's 340 units, because
+    a centred line grows out of the middle BOTH ways: it has to clear the "Game"
+    label on one side and reserve the same width it will never use on the other.
+    Running left to right from x=76 it gets 284, and 340 when there is no label
+    at all.
+
+    THAT 76 IS MEASURED IN THIS PACKAGE'S OWN FACE, which the 68 it replaced was
+    not. Both numbers came from default/statscard.svg, where the label is set in
+    Rajdhani: "Game" is 37.4 units there at 16px, so from x=20 it ends at 57.4
+    and the line starting at 68 clears it by 10.6. Classic sets everything in
+    Inter, where the same word is 45.0 - it ends at 65.0, and the line began 3.0
+    units later, near enough touching it. 76 is 65.0 plus the 10.6 gutter the
+    default was already leaving, so the two packages now separate the caption
+    from its line by the same visible gap rather than by the same number.
+
+    The label is not always bound - it belongs to a HUD game's line, while an API board's "Tournament Stats" arrives as the line
+    ITSELF - so line-text authors BOTH left edges (data-x-labelled / data-x-bare)
+    against one right bound (data-maxr) and the mount picks. All three or none:
+    lineTextBox refuses a partial set, or the line would sit left-aligned during
+    a game and jump back to centred the moment it ended.
+
+    A LINE IS NOT A LABEL, and it is not a value either. `subtextColor` is
+    described on its own control as covering "stat labels and the game line
+    text", so the line has to follow it - but unset it should read like the
+    default package's, which draws this line in full ink. Hence the nested
+    fallback: the producer's subtext colour when they have chosen one, the
+    palette's text colour when they have not.
+  -->
+  <style>
+    .cstc-val  { fill: var(--stat-value-color, var(--text-primary, #ffffff)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); font-variant-numeric: tabular-nums; }
+    .cstc-sub  { fill: var(--stat-subtext-color, rgb(155,155,155)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
+    .cstc-head { fill: var(--text-primary, #ffffff); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+    .cstc-cap  { fill: var(--stat-subtext-color, var(--text-primary, #ffffff)); font-family: var(--font-body, 'Inter', system-ui, sans-serif); text-shadow: var(--text-shadow, none); }
+  </style>
+
+  <!-- Authored in its commonest state: header off, footer on.
+
+       8 UNITS OF BLEED ON EVERY EDGE - see "A card's bleed is half the widest
+       border its producer can set" in public/design/README.md. The two OPEN
+       edges are the ones that reach the canvas, so they are the ones that move:
+       top-open 2 to 8, bot-open 238 to 232, and the card 2..378 to 8..372. The
+       two CLOSED edges are interior, which is why the stat block
+       between them has not moved a unit.
+
+       data-h-full / data-h-compact are GONE rather than updated. They are the
+       older fixed-top path, and `cardEdges` takes the four-edge branch whenever
+       it is complete (stats-card-mount.js) - so on this file they could only
+       ever be a second set of numbers nothing reads and nothing checks. -->
+  <rect data-slot="card-bg" x="8" y="46" width="364" height="186" rx="12"
+        data-top-open="8" data-top-closed="46"
+        data-bot-open="232" data-bot-closed="194"
+        style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
+
+  <g data-slot="content">
+    <!-- Header caption: band 8..44.25, caption centred on a 30 baseline -->
+    <g data-slot="head-group" opacity="0">
+      <text data-slot="head-text" data-maxw="330" x="190" y="30" text-anchor="middle"
+            class="cstc-head" font-size="19" font-weight="700" letter-spacing="0.6"></text>
+      <rect x="20" y="44.25" width="340" height="1.5" style="fill:rgba(255,255,255,0.12)"/>
+    </g>
+
+    <!-- Character icon (left). It sits ON the card, not in a well with an accent
+         bar down its left edge - that pairing is the default package's signature
+         and it came in here for one revision. Classic draws a card as one
+         surface with a hairline border and lets the dividers below do the
+         dividing, which is also why the portrait keeps the same treatment as
+         classic/statsbar.svg: one element at two aspects. Centred in the 20..148
+         column the 2x2 grid leaves it. -->
+    <image data-slot="char-icon" x="36" y="70" width="96" height="96"
+           preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+
+    <!-- 2x2 grid dividers. The horizontal one ran to 372 - past the header and
+         footer rules' 360, and hard against the card's own edge - so the card
+         had two different right-hand insets stacked three rows apart. Both the
+         grid and its rule end on the one content inset now, which moves the
+         cell boundary to 254 and the two columns to 201 / 307. -->
+    <rect x="254" y="62" width="1.5" height="116" style="fill:rgba(255,255,255,0.12)"/>
+    <rect x="148" y="117.25" width="212" height="1.5" style="fill:rgba(255,255,255,0.12)"/>
+
+    <!-- Row 1: top-left / top-right -->
+    <text data-slot="stat-0-value" data-maxw="106" x="201" y="88" text-anchor="middle" class="cstc-val" font-size="34" font-weight="700">0</text>
+    <text data-slot="stat-0-label" x="201" y="106" text-anchor="middle" class="cstc-sub" font-size="16" font-weight="600" letter-spacing="0.8">AB</text>
+    <text data-slot="stat-1-value" data-maxw="106" x="307" y="88" text-anchor="middle" class="cstc-val" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-1-label" x="307" y="106" text-anchor="middle" class="cstc-sub" font-size="16" font-weight="600" letter-spacing="0.8">AVG</text>
+
+    <!-- Row 2: bottom-left / bottom-right -->
+    <text data-slot="stat-2-value" data-maxw="106" x="201" y="158" text-anchor="middle" class="cstc-val" font-size="34" font-weight="700">.000</text>
+    <text data-slot="stat-2-label" x="201" y="176" text-anchor="middle" class="cstc-sub" font-size="16" font-weight="600" letter-spacing="0.8">SLG</text>
+    <text data-slot="stat-3-value" data-maxw="106" x="307" y="158" text-anchor="middle" class="cstc-val" font-size="34" font-weight="700">0%</text>
+    <text data-slot="stat-3-label" x="307" y="176" text-anchor="middle" class="cstc-sub" font-size="16" font-weight="600" letter-spacing="0.8">SO%</text>
+
+    <!-- Footer caption / game line: band 190.75..232, on a 219 baseline (the
+         baseline follows the edge in, or the line would sit low in a band that
+         just lost 6 units off its bottom). -->
+    <g data-slot="line-group">
+      <rect x="20" y="189.25" width="340" height="1.5" style="fill:rgba(255,255,255,0.12)"/>
+      <text data-slot="line-label" x="20" y="219" class="cstc-sub" font-size="16" font-weight="600"></text>
+      <text data-slot="line-text" data-maxw="284" data-x-labelled="76" data-x-bare="20" data-maxr="360"
+            x="76" y="219" class="cstc-cap" font-size="23" font-weight="700"></text>
+    </g>
+  </g>
+</svg>

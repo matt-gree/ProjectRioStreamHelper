@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<!--
+  Commentary — a re-themable SVG caster strip (Talent tab assigns up to 4
+  casters from the registry; this renders the resolved commentary.{i}.* plates).
+
+  This file is a thin shell: the look lives in the active DESIGN PACKAGE's
+  theme SVG (/design/{package}/commentary.svg — picked by the global Design
+  Package selector), and the rendering/data-binding lives in the reusable mount
+  (commentary-mount.js). Drop this in OBS as a 1920×240 browser source and put
+  it where you want it in the scene — the source is the size of the card, not of
+  the canvas, so vertical placement is yours rather than the theme's. Full
+  stream width, because the row's spacing is measured against the frame.
+
+  A theme that still authors a full 1920×1080 canvas (Classic, Slice26) keeps
+  working: the mount bottom-anchors whatever box the theme declares inside the
+  source and crops the empty part.
+-->
+<head>
+  <meta charset="utf-8" />
+  <!-- The app-design knobs below apply only when the active package's theme
+       opts into them (data-design-vars="app" — e.g. the Classic package);
+       fixed-palette themes (Default/Rio, Slice26) ignore them. -->
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow, showShadow" />
+  <!-- Rio design tokens: brand palette + display/mono webfonts used by
+       fixed-palette themes (the Default package's Rajdhani/Chivo type). -->
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    /* Inter is the app's baseline overlay font — bundled locally and injected by
+       overlay-base.js (no Google Fonts dependency). A theme that wants a
+       different face should @import it inside its own SVG. */
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { width: 1920px; height: 240px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script type="module">
+    import { mountCommentary } from '/layout/lib/commentary-mount.js';
+
+    const host = document.getElementById('host');
+    const cm = mountCommentary({ host });
+
+    OverlayBase.init({
+      render: () => cm.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'commentary',
+      fetchSettings: true,
+      shouldRender: (key) => key.startsWith('commentary.'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.'),
+    });
+
+    // Reveal / hide the strip in step with OBS's combined on-screen signal
+    // (scene cuts + the source's eye icon — OverlayBase.onObsShown honours
+    // both; listening only to `active` was the original eye-toggle stutter).
+    // The mount dedupes and snaps hidden, so redundant/again-true events
+    // don't double the reveal.
+    OverlayBase.onObsShown((shown) => cm.setActive(shown));
+  </script>
+</body>
+</html>

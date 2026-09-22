@@ -4,6 +4,7 @@ socketio.emit is mocked (conftest) and all disk paths are redirected to a temp
 dir (conftest isolate_user_data), so these run without a server or touching
 user_data.
 """
+import orjson
 import pytest
 
 from server.state import State
@@ -85,6 +86,45 @@ def test_compute_changes_skips_equal_values():
     assert State._compute_changes(["a"]) == []
 
 
+def test_compute_changes_reports_a_vanished_key_as_unset():
+    # A key that is gone from `state` is an unset, not a set-to-None. Export
+    # relies on the distinction to remove the label file, and Save relies on it
+    # to drop the key from last_state instead of leaving a None tombstone.
+    State.state = {}
+    State.last_state = {"a": {"b": 1}}
+    assert State._compute_changes(["a"]) == [
+        {"key": "a", "old": {"b": 1}, "new": None, "action": "unset"}
+    ]
+
+
+# --- unset must not leave a tombstone that breaks the next write ---
+
+async def test_save_after_unset_removes_the_key_from_last_state():
+    await State.Set("score.1.player.1.rioName", "A")
+    await State.Save()
+    await State.Unset("score.1.player")
+    await State.Save()
+    # `player` must be GONE, not present-and-None: deep_set descends through
+    # last_state, and a None here is not traversable.
+    assert "player" not in State.last_state["score"]["1"]
+
+
+async def test_a_board_can_be_rebuilt_on_a_reused_id_after_being_cleared():
+    """Board/match ids are reused (`_lowest_available_id`, `max+1`), so state is
+    routinely unset and then written back into at the same path. That second
+    Save must not raise."""
+    await State.SetBatch([("score.2.player.1.rioName", "A")])
+    await State.Save()
+
+    await State.Unset("score.2")           # remove board 2
+    await State.Save()
+
+    await State.SetBatch([("score.2.player.1.rioName", "B")])  # id reused
+    await State.Save()                      # regression: raised TypeError
+
+    assert State.last_state["score"]["2"]["player"]["1"]["rioName"] == "B"
+
+
 # --- Export (stream labels) ---
 
 async def test_export_writes_label_when_enabled(set_setting, isolate_user_data):
@@ -93,6 +133,34 @@ async def test_export_writes_label_when_enabled(set_setting, isolate_user_data):
     await State.Export(changes)
     label = isolate_user_data / "stream_labels" / "score" / "1" / "batter.txt"
     assert label.read_text() == "Mario"
+
+
+async def test_export_removes_the_label_when_a_key_is_unset(set_setting, isolate_user_data):
+    # The "unset" action reaches Export for real now that _compute_changes emits
+    # it; the label file must come back off disk, not be rewritten as "None".
+    set_setting("general.disable_export", False)
+    await State.Export([{"key": "score.1.batter", "old": None, "new": "Mario", "action": "set"}])
+    label = isolate_user_data / "stream_labels" / "score" / "1" / "batter.txt"
+    assert label.exists()
+
+    await State.Export([{"key": "score.1.batter", "old": "Mario", "new": None, "action": "unset"}])
+    assert not label.exists()
+
+
+async def test_export_end_to_end_unset_removes_label(set_setting, isolate_user_data):
+    # Same thing driven through the real Set/Unset/Save path rather than a
+    # hand-built change list.
+    set_setting("general.disable_export", False)
+    await State.Set("score.1.batter", "Mario")
+    await State.Save()
+    await (await State.queue.get())()          # drain the queued Export
+    label = isolate_user_data / "stream_labels" / "score" / "1" / "batter.txt"
+    assert label.read_text() == "Mario"
+
+    await State.Unset("score.1.batter")
+    await State.Save()
+    await (await State.queue.get())()
+    assert not label.exists()
 
 
 async def test_export_skips_labels_when_disabled(set_setting, isolate_user_data):
@@ -117,9 +185,357 @@ async def test_export_coerces_string_disable_flag(set_setting, isolate_user_data
     assert (isolate_user_data / "stream_labels" / "x.txt").exists() is should_write
 
 
-async def test_export_always_writes_state_json(set_setting, isolate_user_data):
-    # SaveImmediately runs regardless of the export flag.
+async def test_export_marks_state_json_dirty_without_writing_it(
+    set_setting, isolate_user_data
+):
+    """Export raises the flag; Persister owns the file.
+
+    Regression: Export wrote the WHOLE of state.json itself, so every one of the
+    2-3 Save() calls a single HUD frame makes rewrote ~270 KB. See
+    test_persister_collapses_a_burst for what that costs.
+    """
     set_setting("general.disable_export", True)
     State.state = {"a": 1}
     await State.Export([])
-    assert (isolate_user_data / "state.json").exists()
+    assert not (isolate_user_data / "state.json").exists()
+    assert State._persist_dirty is not None and State._persist_dirty.is_set()
+
+
+async def test_http_image_dest_includes_key_path():
+    # The http(s) branch of _create_files_dict must build the same
+    # path-prefixed destination filename as the './' branch and
+    # _remove_files_dict, or create/remove disagree and downloads for
+    # different keys collide into the same file.
+    path = "score/1/player/1/logo"
+    await State._create_files_dict(path, "http://example.com/logo.png")
+    assert State.queue.qsize() == 1
+    job = await State.queue.get()
+    dlpath = str(job.keywords["dlpath"])
+    assert dlpath.endswith(f"stream_labels/{path}.png")
+
+
+# --- write-path hooks ---
+#
+# A hook is `async (entries) -> [(key, value), ...]`: it sees a write that has
+# already landed in `state` and may add entries to the SAME batch. That
+# co-location is the whole point — a consumer that decides something off a write
+# (the container automation engine) reaches the overlays in the triggering
+# frame instead of a round-trip later.
+
+
+async def test_a_hook_folds_its_entries_into_the_same_batch(mock_socket):
+    async def hook(entries):
+        return [("derived", len(entries))]
+
+    State.hooks.append(hook)
+    await State.SetBatch([("a", 1), ("b", 2)])
+
+    assert State.state["derived"] == 2
+    assert "derived" in State.changed_keys      # persisted by the caller's Save
+    assert mock_socket.await_count == 1
+    _, payload = mock_socket.await_args.args
+    # Same frame, its own list — the caller's items stay the caller's, so a
+    # client can suppress its own echo without swallowing the hook's answer.
+    assert payload["items"] == [{"key": "a", "value": 1}, {"key": "b", "value": 2}]
+    assert payload["augmented"] == [{"key": "derived", "value": 2}]
+
+
+async def test_a_hook_reads_the_post_write_world():
+    """The write is applied BEFORE the hook, so a rule can resolve content out
+    of the same batch that changed it."""
+    seen = {}
+
+    async def hook(entries):
+        seen["value"] = State.state["score"]["1"]["batter"]
+        return []
+
+    State.hooks.append(hook)
+    await State.SetBatch([("score.1.batter", "Mario")])
+    assert seen["value"] == "Mario"
+
+
+async def test_a_single_set_with_an_addition_becomes_a_batch_frame(mock_socket):
+    """Splitting it would put the trigger on air a frame before its
+    consequence. Every consumer handles both shapes."""
+    async def hook(entries):
+        return [("extra", True)]
+
+    State.hooks.append(hook)
+    await State.Set("a", 1)
+
+    assert mock_socket.await_count == 1
+    event, payload = mock_socket.await_args.args
+    assert event == "v1.state.set_batch"
+    # ONE frame, TWO lists. See `_augment`: a client suppresses the echo of its
+    # own `items` by session id, and a hook's entries are the server's answer to
+    # that write rather than the client's own — mixed in, they were dropped by
+    # the one client that needed them most.
+    assert payload["items"] == [{"key": "a", "value": 1}]
+    assert payload["augmented"] == [{"key": "extra", "value": True}]
+
+
+async def test_a_set_with_no_hook_addition_keeps_its_single_frame(mock_socket):
+    async def hook(entries):
+        return []
+
+    State.hooks.append(hook)
+    await State.Set("a", 1)
+    assert mock_socket.await_args.args[0] == "v1.state.set"
+
+
+async def test_a_raising_hook_never_loses_the_write(mock_socket):
+    async def boom(entries):
+        raise RuntimeError("nope")
+
+    async def after(entries):
+        return [("still", "ran")]
+
+    State.hooks.extend([boom, after])
+    await State.SetBatch([("a", 1)])
+
+    assert State.state["a"] == 1
+    assert State.state["still"] == "ran"        # one bad hook doesn't stop the rest
+    assert mock_socket.await_count == 1
+
+
+async def test_unset_observers_see_the_cleared_keys(mock_socket):
+    """Unsets can't carry a fold-in — a clear and a set are different frames —
+    so observers only observe, and schedule their own follow-up."""
+    seen = []
+
+    async def observer(keys):
+        seen.append(list(keys))
+
+    State.unset_hooks.append(observer)
+    await State.Set("a", 1)
+    await State.Unset("a")
+    await State.UnsetBatch(["b", "c"])
+
+    assert seen == [["a"], ["b", "c"]]
+
+
+# --- stream-label filenames must be legal on Windows too ---
+
+@pytest.mark.parametrize("raw,expected", [
+    ("Mario", "Mario"),                 # ordinary names are untouched
+    ("score", "score"),
+    ('a<b>c:d"e|f?g*h', "a_b_c_d_e_f_g_h"),
+    ("back\\slash", "back_slash"),
+    ("fwd/slash", "fwd_slash"),
+    ("trailing.", "trailing"),          # Windows silently drops these
+    ("trailing ", "trailing"),
+    ("", "_"),
+    ("...", "_"),
+    ("nul", "_nul"),                    # DOS device names, with or without ext
+    ("CON", "_CON"),
+    ("com1", "_com1"),
+    ("LPT9", "_LPT9"),
+    ("console", "console"),             # only the exact device names
+])
+def test_safe_segment(raw, expected):
+    from server.state import _safe_segment
+    assert _safe_segment(raw) == expected
+
+
+async def test_export_sanitizes_user_text_in_a_label_path(set_setting, isolate_user_data):
+    """A dict key can carry user text — a participant's name, a tag — and it
+    becomes a real filename. `?` and `:` are legal on macOS and rejected by
+    Windows, where the raw name raised OSError and aborted the rest of the
+    export batch."""
+    set_setting("general.disable_export", False)
+    await State.Export([{
+        "key": "roster.by_name",
+        "old": None,
+        "new": {'Who? <the:one>': "Mario"},
+        "action": "set",
+    }])
+    written = list((isolate_user_data / "stream_labels" / "roster" / "by_name").glob("*.txt"))
+    assert [p.name for p in written] == ["Who_ _the_one_.txt"]
+    assert written[0].read_text() == "Mario"
+
+
+async def test_a_sanitized_label_is_removed_by_the_same_name(set_setting, isolate_user_data):
+    # Create and remove must sanitize identically, or an unset leaves the file
+    # on air forever.
+    set_setting("general.disable_export", False)
+    payload = {'Who? <the:one>': "Mario"}
+    await State.Export([{"key": "roster.by_name", "old": None, "new": payload, "action": "set"}])
+    label = isolate_user_data / "stream_labels" / "roster" / "by_name" / "Who_ _the_one_.txt"
+    assert label.exists()
+
+    await State.Export([{"key": "roster.by_name", "old": payload, "new": None, "action": "unset"}])
+    assert not label.exists()
+
+
+async def test_one_unwritable_label_does_not_lose_the_rest_of_the_batch(
+    set_setting, isolate_user_data, monkeypatch
+):
+    """A label is an independent output. A key whose file the OS refuses (locked
+    by OBS on Windows, full disk, permissions) must not abort the batch —
+    previously it raised out of Export and every later change was dropped."""
+    set_setting("general.disable_export", False)
+
+    real = State._create_files_dict.__func__
+
+    async def explode_on_one(cls, path, di):
+        if path.startswith("score/1/bad"):
+            raise PermissionError("file is open in another process")
+        return await real(cls, path, di)
+
+    monkeypatch.setattr(State, "_create_files_dict", classmethod(explode_on_one))
+
+    await State.Export([
+        {"key": "score.1.first", "old": None, "new": "A", "action": "set"},
+        {"key": "score.1.bad", "old": None, "new": "B", "action": "set"},
+        {"key": "score.1.last", "old": None, "new": "C", "action": "set"},
+    ])
+
+    labels = isolate_user_data / "stream_labels" / "score" / "1"
+    # The key AFTER the failure is what regressed — it never got written.
+    assert (labels / "first.txt").read_text() == "A"
+    assert (labels / "last.txt").read_text() == "C"
+    assert not (labels / "bad.txt").exists()
+
+
+# --- state.json persistence -------------------------------------------------
+#
+# state.json is read at boot and nowhere else, so it has to be RECENT rather
+# than current. What it must never be is rewritten per change: at ~270 KB of
+# real broadcast state and Rio's 300 ms HUD debounce, a write per Save() is
+# megabytes a second of disk traffic for the length of a stream.
+
+async def test_persister_collapses_a_burst_into_one_write(
+    isolate_user_data, monkeypatch
+):
+    import asyncio
+    from server import state as state_mod
+
+    monkeypatch.setattr(state_mod, "PERSIST_INTERVAL", 0.2)
+
+    writes = []
+    real = State.SaveImmediately
+
+    async def counted():
+        writes.append(1)
+        await real()
+
+    monkeypatch.setattr(State, "SaveImmediately", counted)
+
+    persister = asyncio.create_task(State.Persister())
+    consumer = asyncio.create_task(State.Consumer())
+    try:
+        # A burst the size of a few HUD frames' worth of Save() calls.
+        for i in range(30):
+            await State.SetBatch([(f"score.1.k{i}", i)])
+            await State.Save()
+        await State.queue.join()
+        await asyncio.sleep(0.05)
+        # Regression: this was 30 full-file writes, one per Save().
+        assert len(writes) == 1, f"{len(writes)} writes for one burst"
+
+        # And the burst is not merely dropped — the trailing write lands.
+        await asyncio.sleep(0.3)
+        assert len(writes) == 1
+        assert (isolate_user_data / "state.json").exists()
+    finally:
+        persister.cancel()
+        consumer.cancel()
+
+
+async def test_the_last_change_before_going_quiet_is_still_written(
+    isolate_user_data, monkeypatch
+):
+    """Coalescing must not mean losing the tail. A change made inside the
+    interval has to reach disk once the interval is over, with nothing further
+    to trigger it."""
+    import asyncio
+    from server import state as state_mod
+
+    monkeypatch.setattr(state_mod, "PERSIST_INTERVAL", 0.2)
+    persister = asyncio.create_task(State.Persister())
+    consumer = asyncio.create_task(State.Consumer())
+    try:
+        State.state = {}
+        await State.SetBatch([("first", 1)])
+        await State.Save()
+        await State.queue.join()
+        await asyncio.sleep(0.05)          # leading write: {"first": 1}
+
+        await State.SetBatch([("second", 2)])
+        await State.Save()
+        await State.queue.join()
+        await asyncio.sleep(0.4)           # nothing else happens after this
+
+        import orjson
+        on_disk = orjson.loads((isolate_user_data / "state.json").read_bytes())
+        assert on_disk.get("second") == 2, "the trailing change never reached disk"
+    finally:
+        persister.cancel()
+        consumer.cancel()
+
+
+async def test_concurrent_saves_cannot_interleave_on_the_shared_tmp_file(
+    isolate_user_data,
+):
+    """Shutdown runs an explicit SaveImmediately while the persister may have
+    one in flight. Both build the same `state.json.tmp`, and there is an await
+    between the open that truncates it and the write that fills it — so without
+    a lock the atomic rename publishes a file neither writer wrote."""
+    import asyncio
+    import orjson
+
+    State.state = {"big": "x" * 200_000}
+    small = {"small": "y"}
+
+    async def switch_then_save():
+        await asyncio.sleep(0)
+        State.state = small
+        await State.SaveImmediately()
+
+    await asyncio.gather(State.SaveImmediately(), switch_then_save())
+
+    raw = (isolate_user_data / "state.json").read_bytes()
+    loaded = orjson.loads(raw)             # must parse at all
+    assert loaded in ({"big": "x" * 200_000}, small), "state.json is a blend"
+
+
+@pytest.mark.asyncio
+async def test_a_jpg_stream_label_downloads_and_is_stored_as_png(tmp_path, monkeypatch):
+    """Both halves were dead: `httpx.stream` is the SYNC API, so `async with` on
+    it raised before a byte arrived, and the conversion then called str methods
+    on an AsyncPath. Every image label failed into the log."""
+    import io
+    import httpx
+    from aiopath import AsyncPath
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), "red").save(buf, format="JPEG")
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, content=buf.getvalue()))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient",
+                        lambda **kw: real_client(transport=transport, **kw))
+
+    target = AsyncPath(str(tmp_path / "logo.jpg"))
+    await State._download_image("https://example.test/logo.jpg", target)
+
+    assert not (tmp_path / "logo.jpg").exists()
+    with Image.open(tmp_path / "logo.png") as img:
+        assert img.format == "PNG"
+
+
+async def test_load_drops_retired_state_keys(isolate_user_data):
+    """A board's keys are overwritten, never swept, so keys nothing writes any
+    more (the ELO cluster, a league TEAM, the old player schedule) would sit in
+    state.json forever."""
+    (isolate_user_data / "state.json").write_bytes(orjson.dumps({
+        "playerSchedule": {"players": {}},
+        "score": {"3": {
+            "winner_incoming_elo": 1500, "loser_result_elo": 1490, "stadium": "Mario Stadium",
+            "player": {"1": {"league_team": "X", "rioName": "A"}},
+        }},
+    }))
+    await State.Load()
+    assert "playerSchedule" not in State.state
+    board = State.state["score"]["3"]
+    assert board == {"stadium": "Mario Stadium", "player": {"1": {"rioName": "A"}}}

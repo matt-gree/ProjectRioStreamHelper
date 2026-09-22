@@ -1,14 +1,12 @@
-import '@mantine/core/styles.css';
-import '@mantine/notifications/styles.css';
-
 import { Component } from 'react';
 import Providers from './providers';
 import { useStoresLoaded } from '../context/store';
 import { HashRouter } from 'react-router-dom';
 import Root from '../routes/root';
-import { MantineProvider, Center, Loader, Stack, Text, Button } from '@mantine/core';
-import { Notifications } from '@mantine/notifications';
-import { useSettingsStore } from '../context/store';
+import { TooltipProvider } from './ui/tooltip';
+import { Toaster } from './ui/sonner';
+import { Button } from './ui/button';
+import { Loader } from './ui/primitives';
 
 class ErrorBoundary extends Component {
     state = { error: null };
@@ -20,14 +18,14 @@ class ErrorBoundary extends Component {
     render() {
         if (this.state.error) {
             return (
-                <Center h="100vh">
-                    <Stack align="center" gap="sm">
-                        <Text size="lg" fw={700}>Something went wrong</Text>
-                        <Text size="sm" c="dimmed" maw={400} ta="center">
+                <div className="flex h-screen items-center justify-center">
+                    <div className="flex flex-col items-center gap-2 text-center">
+                        <p className="text-lg font-bold">Something went wrong</p>
+                        <p className="max-w-[400px] text-sm text-muted-foreground">
                             {this.state.error.message}
-                        </Text>
+                        </p>
                         <Button
-                            variant="light"
+                            variant="secondary"
                             size="sm"
                             onClick={() => {
                                 this.setState({ error: null });
@@ -36,8 +34,8 @@ class ErrorBoundary extends Component {
                         >
                             Reload
                         </Button>
-                    </Stack>
-                </Center>
+                    </div>
+                </div>
             );
         }
         return this.props.children;
@@ -46,25 +44,20 @@ class ErrorBoundary extends Component {
 
 function LoadingScreen() {
     return (
-        <Center h="100vh">
-            <Stack align="center" gap="sm">
+        <div className="flex h-screen items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
                 <Loader size="md" />
-                <Text size="sm" c="dimmed">Connecting to server...</Text>
-            </Stack>
-        </Center>
+                <p className="text-sm text-muted-foreground">Connecting to server…</p>
+            </div>
+        </div>
     );
 }
 
 function AppInner() {
     const loaded = useStoresLoaded();
-    // ui.color_scheme is one of "light" | "dark" | "auto". We only override
-    // Mantine's "auto" (system) when the user picked a specific scheme.
-    const scheme = useSettingsStore(state => state?.ui?.color_scheme) || 'auto';
-    const forceColorScheme = scheme === 'auto' ? undefined : scheme;
-
     return (
-        <MantineProvider defaultColorScheme="auto" forceColorScheme={forceColorScheme}>
-            <Notifications position="top-right" autoClose={3000} />
+        <TooltipProvider delayDuration={200}>
+            <Toaster position="top-right" />
             <ErrorBoundary>
                 <HashRouter>
                     <Providers>
@@ -72,7 +65,7 @@ function AppInner() {
                     </Providers>
                 </HashRouter>
             </ErrorBoundary>
-        </MantineProvider>
+        </TooltipProvider>
     );
 }
 

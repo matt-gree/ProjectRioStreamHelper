@@ -1,4 +1,4 @@
-import { Group, Text, Anchor } from '@mantine/core';
+import { Anchor } from './ui/primitives';
 
 export function PatreonIcon({ size = 16, color = 'currentColor' }) {
     return (
@@ -16,31 +16,27 @@ export function YouTubeIcon({ size = 16, color = 'currentColor' }) {
     );
 }
 
-export function SupportLinks({ size = 'xs', gap = 'lg', justify = 'center', style }) {
+export function SupportLinks({ className, style }) {
     return (
-        <Group gap={gap} justify={justify} style={style}>
+        <div className={`flex flex-wrap items-center justify-center gap-6 ${className || ''}`} style={style}>
             <Anchor
                 href="https://www.patreon.com/projectrio"
                 target="_blank"
                 rel="noopener noreferrer"
-                underline="hover"
+                className="flex items-center gap-1.5 text-xs"
             >
-                <Group gap={5} align="center" wrap="nowrap">
-                    <PatreonIcon size={13} />
-                    <Text size={size} span>Support Project Rio on Patreon</Text>
-                </Group>
+                <PatreonIcon size={13} />
+                <span>Support Project Rio on Patreon</span>
             </Anchor>
             <Anchor
                 href="https://www.youtube.com/@MattGree"
                 target="_blank"
                 rel="noopener noreferrer"
-                underline="hover"
+                className="flex items-center gap-1.5 text-xs"
             >
-                <Group gap={5} align="center" wrap="nowrap">
-                    <YouTubeIcon size={13} />
-                    <Text size={size} span>MattGree on YouTube</Text>
-                </Group>
+                <YouTubeIcon size={13} />
+                <span>MattGree on YouTube</span>
             </Anchor>
-        </Group>
+        </div>
     );
 }

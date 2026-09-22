@@ -79,25 +79,6 @@ async def startgg_set(set_id: int, session_id: str | None = None) -> ORJSONRespo
 
 
 @method(
-    router.post, "/startgg/load-set",
-    version="1", id="startgg.load_set",
-    response_class=ORJSONResponse
-)
-async def startgg_load_set(
-    set_id: int = 0,
-    scoreboard_number: int = 1,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Load a set's player tags and scores into a scoreboard."""
-    if not set_id:
-        raise HTTPException(status_code=400, detail="set_id is required")
-    result = await StartGGProvider.LoadSetIntoScoreboard(set_id, scoreboard_number)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return ORJSONResponse(result)
-
-
-@method(
     router.post, "/startgg/load-bracket",
     version="1", id="startgg.load_bracket",
     response_class=ORJSONResponse
@@ -110,24 +91,6 @@ async def startgg_load_bracket(
     if not phase_group_id:
         raise HTTPException(status_code=400, detail="phase_group_id is required")
     result = await StartGGProvider.LoadBracket(phase_group_id)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return ORJSONResponse(result)
-
-
-@method(
-    router.get, "/startgg/bracket-data",
-    version="1", id="startgg.bracket_data",
-    response_class=ORJSONResponse
-)
-async def startgg_bracket_data(
-    phase_group_id: int = 0,
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    """Get bracket structure for a phase group (without writing to State)."""
-    if not phase_group_id:
-        raise HTTPException(status_code=400, detail="phase_group_id is required")
-    result = await StartGGProvider.GetBracketData(phase_group_id)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return ORJSONResponse(result)

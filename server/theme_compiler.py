@@ -1,0 +1,645 @@
+"""The theme compiler — turn a designer's SVG export into a conforming theme.
+
+Design tools can't author the ``data-slot``/``data-part``/``data-tpl`` markers
+the svg-theme-engine binds to, but they all export **layer names as ids**. The
+compiler translates a layer-naming grammar into those markers, normalizes
+known export quirks, and lints the result against the element's contract
+(server/theme_contracts.py), producing the report the Design-tab install
+dialog shows. Designer-facing grammar doc: public/design/DESIGNER-GUIDE.md.
+
+The grammar (one layer name = one marker + optional modifiers):
+
+    slot=side1-name maxw=420      ->  data-slot="side1-name" data-maxw="420"
+    part=away-cap                 ->  data-part="away-cap"
+    tpl=match w=620               ->  data-tpl="match" data-w="620"  (moved into <defs>)
+    band x=210 w=1500 h=170 gap=24 align=center
+                                  ->  data-band="" data-x="210" ...
+
+- ``:`` works in place of ``=`` (some tools mangle ``=``); tokens split on
+  spaces or underscores (Figma turns spaces into ``_`` in exported ids).
+- Names are lowercased; valid names match ``[a-z0-9][a-z0-9-]*``.
+- Conforming (hand-authored) files pass through byte-identical: every
+  transform is a no-op when there is nothing to do, and lint still runs.
+
+Normalizations applied (each one is reported):
+- root ``width``/``height`` stripped (size must come from the viewBox)
+- ``preserveAspectRatio`` filled in from the contract when absent
+- ``var()`` in presentation attributes (fill/stroke/stop-color/color) moved
+  into inline ``style`` — as an attribute it silently does nothing
+- ``data-tpl`` groups relocated into ``<defs>``
+- ``--`` inside XML comments defused (it breaks the parser)
+- manifest ``"palette": "app"`` sets ``data-design-vars="app"`` on the root
+- a ``layout=absolute`` (or ``layout=stack``) marker layer lifts to the root as
+  ``data-layout`` and is dropped (design tools can't set root attributes)
+- ``scaffold``-tagged layers (dashed placeholder boxes and other editing aids)
+  are removed so they never ship — the live slot renders its real content
+
+Used by design_packages.install_zip (every installed zip) and by the CLI
+``scripts/compile-theme.py`` (designer/agent iteration). A compiler failure
+must never block an install — callers wrap it and fall back to the raw file.
+"""
+import difflib
+import re
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
+
+from server.theme_contracts import CONTRACTS, Contract
+
+SVG_NS = "http://www.w3.org/2000/svg"
+XLINK_NS = "http://www.w3.org/1999/xlink"
+
+# modifier key (grammar) -> attribute suffix (data-<suffix>)
+_MODIFIERS = {
+    "maxw": "maxw", "w": "w", "h": "h", "x": "x", "y": "y",
+    "gap": "gap", "pad": "pad", "vw": "vw", "align": "align",
+    "anim": "anim",
+    "hfull": "h-full", "h-full": "h-full",
+    "hcompact": "h-compact", "h-compact": "h-compact",
+    # Horizontal-meld metadata (Scoreboard S): a segment's card width when it is
+    # the rightmost-visible, and card-bg's collapsed width.
+    "cardw": "cardw", "compactw": "compact-w", "compact-w": "compact-w",
+    # Vertical-meld metadata (Scoreboard S's game-mode band): a segment's card
+    # height while it shows, and card-bg's collapsed height. The same axis pair
+    # as the two above — miss one and the card silently stops growing.
+    "cardh": "cardh", "compacth": "compact-h", "compact-h": "compact-h",
+    # Stat card: the card edges with and without the header / last-line band.
+    "topopen": "top-open", "top-open": "top-open",
+    "topclosed": "top-closed", "top-closed": "top-closed",
+    "botopen": "bot-open", "bot-open": "bot-open",
+    "botclosed": "bot-closed", "bot-closed": "bot-closed",
+    # Stat bar / stat card: the bottom line's two LEFT edges (with and without
+    # its "Game" label) against its one right bound. A trio, like the meld pairs
+    # above — a theme carrying fewer than three falls back to its authored,
+    # centred geometry, so a dropped modifier is silent on air rather than loud.
+    "xlabelled": "x-labelled", "x-labelled": "x-labelled",
+    "xbare": "x-bare", "x-bare": "x-bare",
+    "maxr": "maxr",
+    # Lower third: a logo's caption-less box, "x y w h".
+    "full": "full",
+    # Matchup summary: a portrait pinned to the MEASURED edge of a name, because
+    # the name's width is the data and no authored x is right for both a short
+    # name and a long one (mount-utils pinBesideText). The slot name, the
+    # direction and the gap are a trio like the meld pairs above — drop one
+    # through a design tool and the portrait silently reverts to a fixed x that
+    # is wrong at half the name lengths.
+    "pinbefore": "pin-before", "pin-before": "pin-before",
+    "pinafter": "pin-after", "pin-after": "pin-after",
+    "pingap": "pin-gap", "pin-gap": "pin-gap",
+    # The scoreboard's linescore: the BAND the inning columns divide into equal
+    # cells, however many innings the game ran (scoreboard-mount layoutBox).
+    # A pair, like the meld metadata above — a band with only one of its two
+    # numbers is not a band, and the mount falls back to fixed positions.
+    "spanx": "span-x", "span-x": "span-x",
+    "spanw": "span-w", "span-w": "span-w",
+    # Scoreboard S's game-mode band: a slot whose x tracks the MELDING card's
+    # centre rather than sitting at a fixed one (scoreboard-mount centerToCard).
+    "center": "center",
+    # Template-only: where the generator PLACED a stack row for preview, so the
+    # compiler can put its local origin back. Never reaches a shipped theme.
+    "at": "at",
+}
+
+# Modifiers whose value is a coordinate LIST. A layer name is split on spaces,
+# so the designer spells these comma-separated (`full=32,28,176,176`) and the
+# compiler hands the mount back the whitespace form it parses.
+_LIST_MODIFIERS = {"full"}
+
+# Bare modifier tokens — a flag, not a key=value. `hidden` restores the authored
+# opacity:0 of a layer the template deliberately REVEALS so the designer can see
+# and style it (a FINAL badge, a runner icon). Without it the reveal compiles
+# back as a permanently visible layer; see server/figma_template.py.
+_FLAGS = {"hidden": ("opacity", "0")}
+
+# A layer tagged with a `scaffold` token (e.g. `scaffold=s1-logo`) is a
+# design-tool editing aid — the dashed placeholder boxes marking an image slot's
+# footprint. The compiler drops these so they never reach the live overlay.
+_SCAFFOLD_RE = re.compile(r"(?:^|[ _])scaffold(?:[=:][^ _]*)?(?:$|[ _])", re.I)
+_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+_LAYOUT_MARKER_RE = re.compile(r"^layout[=:_ ]+(absolute|stack)$", re.I)
+_VAR_ATTRS = ("fill", "stroke", "stop-color", "color")
+
+
+@dataclass
+class Finding:
+    level: str  # error | warn | info
+    message: str
+
+
+@dataclass
+class FileReport:
+    file: str
+    element: str | None
+    changed: bool = False
+    bound: int | None = None    # slots bound / total, when the contract has them
+    total: int | None = None
+    findings: list[Finding] = field(default_factory=list)
+
+    def add(self, level: str, message: str) -> None:
+        self.findings.append(Finding(level, message))
+
+    def to_dict(self) -> dict:
+        return {
+            "file": self.file,
+            "element": self.element,
+            "changed": self.changed,
+            "bound": self.bound,
+            "total": self.total,
+            "findings": [{"level": f.level, "message": f.message} for f in self.findings],
+        }
+
+
+def parse_grammar_id(raw: str) -> tuple[str, str, dict[str, str], list[str]] | None:
+    """Parse a grammar id into (marker, name, data_attrs, problems), or None.
+
+    The single dispatcher for every marker id the compiler understands:
+    ``slot``/``part``/``tpl``/``band`` (translated into data-* attributes),
+    plus the layer-level markers ``layout=absolute|stack`` (mode lifted onto
+    the root <svg>, layer dropped) and ``scaffold`` (design-tool editing aid,
+    layer stripped). Modifiers are ``key=value`` except the bare flags in
+    ``_FLAGS`` (``hidden`` -> ``opacity="0"``), which is why the returned attrs
+    are not all ``data-*``. None means "not a grammar id at all" — an ordinary
+    designer id, left alone. A recognized marker with problems still returns,
+    so the caller can report them.
+    """
+    raw = raw.strip()
+    m = _LAYOUT_MARKER_RE.match(raw)
+    if m:
+        return "layout", m.group(1).lower(), {}, []
+    # A scaffold tag anywhere in the id wins over slot/part/tpl — the layer is
+    # editing-only and never ships, whatever else its name claims.
+    if _SCAFFOLD_RE.search(raw):
+        return "scaffold", "", {}, []
+    tokens = [t for t in re.split(r"[ _]+", raw) if t]
+    if not tokens:
+        return None
+    problems: list[str] = []
+    first = tokens[0]
+    m = re.match(r"^(slot|part|tpl)[=:](.*)$", first, re.I)
+    if m:
+        marker = m.group(1).lower()
+        name = m.group(2).strip().lower()
+        if not _NAME_RE.match(name):
+            problems.append(f"invalid {marker} name {name!r} (use lowercase letters, digits, dashes)")
+            name = ""
+        mods = tokens[1:]
+    elif first.lower() == "band" and len(tokens) > 1:
+        # bare "band" with no modifiers is treated as an ordinary layer name —
+        # the lowerthird band container always needs x/w/h anyway
+        marker, name, mods = "band", "", tokens[1:]
+    else:
+        return None
+
+    attrs: dict[str, str] = {}
+    for tok in mods:
+        flag = _FLAGS.get(tok.lower())
+        if flag:
+            attrs[flag[0]] = flag[1]
+            continue
+        km = re.match(r"^([a-zA-Z-]+)[=:](.+)$", tok)
+        if not km:
+            problems.append(f"unrecognized modifier {tok!r}")
+            continue
+        key, value = km.group(1).lower(), km.group(2)
+        flag = _FLAGS.get(key)
+        if flag:
+            # `hidden=1` / `hidden=false`: not the documented spelling, but a
+            # flag misread as an unknown modifier is a hidden state silently
+            # lost, which is the failure this whole grammar exists to prevent.
+            if value.strip().lower() not in ("0", "false", "no", ""):
+                attrs[flag[0]] = flag[1]
+            continue
+        suffix = _MODIFIERS.get(key)
+        if suffix is None:
+            problems.append(f"unknown modifier {key!r}")
+            continue
+        if key in _LIST_MODIFIERS:
+            value = re.sub(r"[,\s]+", " ", value).strip()
+        attrs[f"data-{suffix}"] = value
+    return marker, name, attrs, problems
+
+
+_TRANSLATE_RE = re.compile(
+    r"^\s*translate\(\s*(-?[\d.]+)\s*[,\s]\s*(-?[\d.]+)\s*\)\s*$", re.I
+)
+
+
+def _translate_xy(transform: str | None) -> tuple[float, float] | None:
+    """(x, y) of a lone ``translate()``, or None for absent//other transforms.
+
+    Deliberately narrow. A row the template placed carries exactly this, and a
+    matrix or a rotate means the designer did something the caller must not
+    unpick by arithmetic — None is the signal to say so rather than guess.
+    """
+    if not transform:
+        return None
+    m = _TRANSLATE_RE.match(transform)
+    if not m:
+        return None
+    return float(m.group(1)), float(m.group(2))
+
+
+def _defuse_comments(text: str) -> tuple[str, bool]:
+    """Replace `--` inside XML comments (invalid XML; a classic authored-note bug)."""
+    changed = False
+
+    def fix(m: re.Match) -> str:
+        nonlocal changed
+        inner = m.group(1)
+        if "--" in inner:
+            changed = True
+            inner = inner.replace("--", "- -")
+        return f"<!--{inner}-->"
+
+    return re.sub(r"<!--(.*?)-->", fix, text, flags=re.S), changed
+
+
+def _remove_layers(els: list, parent_of: dict) -> int:
+    """Detach each element from its parent (subtree goes with it). Safe when an
+    element's ancestor was already removed (nested markers): the membership
+    check makes a second removal a no-op instead of a ValueError."""
+    removed = 0
+    for el in els:
+        parent = parent_of.get(el)
+        if parent is not None and el in list(parent):
+            parent.remove(el)
+            removed += 1
+    return removed
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _text_of(el: ET.Element) -> str:
+    return " ".join("".join(el.itertext()).split())
+
+
+def _style_props(style: str) -> set[str]:
+    return {p.split(":", 1)[0].strip().lower() for p in style.split(";") if ":" in p}
+
+
+def compile_svg(
+    svg_text: str,
+    element: str | None,
+    filename: str = "",
+    palette: str | None = None,
+) -> tuple[str, FileReport]:
+    """Compile one theme SVG. Returns (output_text, report).
+
+    Output is byte-identical to the input when nothing needed changing.
+    ``element`` keys the contract lookup (usually the filename stem);
+    ``palette="app"`` opts the theme into the Design-tab CSS vars.
+    """
+    report = FileReport(file=filename or f"{element}.svg", element=element)
+    contract: Contract | None = CONTRACTS.get(element or "")
+    if contract is None:
+        report.add("info", f"no contract for element '{element}' — grammar translated, lint skipped")
+
+    mutations = 0
+    text, defused = _defuse_comments(svg_text)
+    if defused:
+        report.add("info", "fixed '--' inside an XML comment (invalid XML)")
+        mutations += 1
+
+    ET.register_namespace("", SVG_NS)
+    ET.register_namespace("xlink", XLINK_NS)
+    try:
+        parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+        root = ET.fromstring(text, parser=parser)
+    except ET.ParseError as e:
+        report.add("error", f"not valid SVG/XML ({e}) — installed as-is")
+        return svg_text, report
+
+    if _local(root.tag) != "svg":
+        report.add("error", "root element is not <svg> — installed as-is")
+        return svg_text, report
+
+    parent_of = {child: parent for parent in root.iter() for child in parent}
+
+    # --- root normalization ---
+    stripped_dims = [d for d in ("width", "height") if root.get(d) is not None]
+    for dim in stripped_dims:
+        del root.attrib[dim]
+        mutations += 1
+    if stripped_dims:
+        report.add("info", "stripped fixed width/height from the root (size comes from the viewBox)")
+
+    vb = root.get("viewBox")
+    if not vb:
+        report.add("warn", "root <svg> has no viewBox — the theme cannot scale")
+    elif contract:
+        try:
+            _, _, w, h = (float(v) for v in vb.replace(",", " ").split())
+            size = (round(w), round(h))
+            if size != contract.canvas and size not in contract.alt_canvases:
+                report.add(
+                    "warn",
+                    f"canvas is {w:g}x{h:g}, this element is authored at "
+                    f"{contract.canvas[0]}x{contract.canvas[1]} — it will be fit, not fill",
+                )
+        except ValueError:
+            report.add("warn", f"unparseable viewBox {vb!r}")
+
+    if contract and not root.get("preserveAspectRatio"):
+        root.set("preserveAspectRatio", contract.preserve_aspect_ratio)
+        report.add("info", f'set preserveAspectRatio="{contract.preserve_aspect_ratio}" (contract default)')
+        mutations += 1
+    elif contract and root.get("preserveAspectRatio") != contract.preserve_aspect_ratio:
+        report.add(
+            "warn",
+            f'preserveAspectRatio is "{root.get("preserveAspectRatio")}" — the contract expects '
+            f'"{contract.preserve_aspect_ratio}" (kept yours; make sure it is intentional)',
+        )
+
+    if palette == "app" and root.get("data-design-vars") != "app":
+        root.set("data-design-vars", "app")
+        report.add("info", 'set data-design-vars="app" (token-skin palette, from the manifest)')
+        mutations += 1
+
+    # --- layer-level markers (dispatched by parse_grammar_id, same grammar as
+    # the slot/part/tpl translation below, but these DROP the layer):
+    #   layout=absolute|stack — lifts the mode to the root as data-layout; lets
+    #     a design tool declare it via a named layer, since it can't set
+    #     attributes on the root <svg>.
+    #   scaffold — design-tool editing aids (dashed placeholder boxes marking an
+    #     image slot's footprint). A real logo/icon renders in its own slot on
+    #     top; the placeholder was only a visual guide, so it never ships. ---
+    layout_markers: list[tuple] = []
+    scaffold_els: list = []
+    for el in root.iter():
+        if not isinstance(el.tag, str) or not el.get("id"):
+            continue
+        parsed = parse_grammar_id(el.get("id"))
+        if parsed is None:
+            continue
+        if parsed[0] == "layout":
+            layout_markers.append((el, parsed[1]))
+        elif parsed[0] == "scaffold":
+            scaffold_els.append(el)
+
+    if layout_markers:
+        mode = layout_markers[0][1]
+        if root.get("data-layout") is None:
+            root.set("data-layout", mode)
+            report.add("info", f'set data-layout="{mode}" on the root (from a layout marker layer)')
+        _remove_layers([el for el, _ in layout_markers], parent_of)
+        mutations += 1
+
+    removed_scaffold = _remove_layers(scaffold_els, parent_of)
+    if removed_scaffold:
+        report.add("info", f"removed {removed_scaffold} scaffold layer(s) (editing-only, never shipped)")
+        mutations += 1
+
+    # --- grammar translation ---
+    translated = 0
+    grammar_problems: list[str] = []
+    for el in root.iter():
+        if not isinstance(el.tag, str):
+            continue  # comments
+        raw_id = el.get("id")
+        if not raw_id:
+            continue
+        parsed = parse_grammar_id(raw_id)
+        if parsed is None:
+            continue
+        marker, name, attrs, problems = parsed
+        if marker in ("layout", "scaffold"):
+            continue  # layer-level markers — handled (and removed) above
+        grammar_problems.extend(f"id {raw_id!r}: {p}" for p in problems)
+        if marker != "band" and not name:
+            continue
+        key = "data-band" if marker == "band" else f"data-{marker}"
+        value = "" if marker == "band" else name
+        if el.get(key) is None:
+            el.set(key, value)
+            mutations += 1
+            translated += 1
+        elif el.get(key) != value:
+            report.add("info", f"id {raw_id!r} ignored — element already has {key}=\"{el.get(key)}\"")
+        for k, v in attrs.items():
+            if k == "opacity":
+                # `hidden` is a state RESTORE, not a data marker: the template
+                # revealed this layer, so the export always carries a visible
+                # opacity (as an attribute, inline style, or neither) that has
+                # to be overwritten rather than deferred to.
+                el.set(k, v)
+                style = el.get("style")
+                if style and "opacity" in style:
+                    kept = [d for d in style.split(";")
+                            if d.strip() and d.split(":", 1)[0].strip() != "opacity"]
+                    if kept:
+                        el.set("style", ";".join(kept))
+                    else:
+                        el.attrib.pop("style", None)
+                mutations += 1
+            elif el.get(k) is None:
+                el.set(k, v)
+                mutations += 1
+    if translated:
+        report.add("info", f"translated {translated} grammar id(s) into data-* markers")
+    for p in grammar_problems:
+        report.add("warn", p)
+
+    # --- stack-row origins: undo the template's preview placement ---------
+    # A stack theme's rows are authored at a LOCAL y origin of 0 and stacked by
+    # the mount at runtime, which in a static file draws every row on top of
+    # every other one. The template moves them to the offsets they actually
+    # land on so the designer sees a card rather than a pile, and records where
+    # it put each one as `at=K`. Put the origin back — whichever way the design
+    # tool chose to express the placement:
+    #   kept as a group transform  -> subtract it (a nudge the designer made on
+    #                                 top of K survives as the remainder)
+    #   BAKED into the children    -> no transform came back, so translate the
+    #                                 group by -K to restore the local origin
+    # Getting this wrong is invisible in the file and doubles the offset on air,
+    # so the baked case is reported rather than silently corrected.
+    restored, baked = 0, []
+    for el in root.iter():
+        if not isinstance(el.tag, str) or el.get("data-at") is None:
+            continue
+        at, raw = el.get("data-at"), el.get("transform")
+        del el.attrib["data-at"]
+        try:
+            placed = float(at)
+        except ValueError:
+            continue
+        offset = _translate_xy(raw)
+        if offset is None:
+            if raw:
+                # A rotate/matrix/scale we will not silently unpick.
+                report.add("warn", f"row {el.get('data-slot')!r} carries transform {raw!r} — "
+                                   "its stack origin could not be restored, check it by hand")
+                continue
+            if placed:
+                baked.append(el.get("data-slot") or "?")
+            # No transform came back, so the contents themselves sit at +K and
+            # the group has to be pulled back by K. Treated as translate(0,0)
+            # here so the one subtraction below covers both cases.
+            x, y = 0.0, 0.0
+        else:
+            x, y = offset
+        # What is left once the template's own placement is taken out: zero for
+        # a clean round trip, and whatever the designer moved on top of it
+        # otherwise. It goes on an INNER wrapper, never back on the row group —
+        # the mount owns that group's transform and rewrites it on every
+        # relayout, so a correction parked there survives exactly until the
+        # first one.
+        el.attrib.pop("transform", None)
+        x, y = round(x, 3), round(y - placed, 3)
+        if x or y:
+            wrapper = ET.Element(f"{{{SVG_NS}}}g")
+            wrapper.set("transform", f"translate({x:g},{y:g})")
+            wrapper.extend(list(el))
+            for child in list(el):
+                el.remove(child)
+            el.append(wrapper)
+        restored += 1
+        mutations += 1
+    if restored:
+        report.add("info", f"restored {restored} stack row(s) to their local y origin")
+    if baked:
+        report.add(
+            "info",
+            f"row(s) {', '.join(sorted(baked))} came back with the preview offset baked into "
+            "their contents (no group transform) — translated back; check the stack on air",
+        )
+
+    # --- Figma tspan-positioned text -> flat <text> ---
+    # Design tools export text as <text><tspan x=.. y=..>value</tspan></text>,
+    # putting the position on the tspan. The engine's setText writes textContent,
+    # which deletes the tspan (and its x/y) the moment live data arrives — so the
+    # value would jump to the <text> origin. Lift a single tspan's x/y onto the
+    # <text> and inline its value. Multi-tspan (multi-line) text is left as-is.
+    flattened = 0
+    for el in root.iter():
+        if not isinstance(el.tag, str) or _local(el.tag) != "text":
+            continue
+        children = [c for c in el if isinstance(c.tag, str)]
+        if len(children) != 1 or _local(children[0].tag) != "tspan":
+            continue
+        if (el.text or "").strip():
+            continue  # text directly on <text> alongside a tspan — leave it
+        tspan = children[0]
+        for pos in ("x", "y"):
+            if tspan.get(pos) is not None and el.get(pos) is None:
+                el.set(pos, tspan.get(pos))
+        el.text = (tspan.text or "") + (tspan.tail or "")
+        el.remove(tspan)
+        flattened += 1
+        mutations += 1
+    if flattened:
+        report.add("info", f"flattened {flattened} tspan-positioned text element(s) (x/y lifted onto <text>)")
+
+    # --- var() in presentation attributes -> inline style ---
+    moved_vars = 0
+    for el in root.iter():
+        if not isinstance(el.tag, str):
+            continue
+        for attr in _VAR_ATTRS:
+            val = el.get(attr)
+            if val and "var(" in val:
+                style = el.get("style") or ""
+                if attr not in _style_props(style):
+                    style = (style.rstrip().rstrip(";") + "; " if style.strip() else "") + f"{attr}:{val}"
+                    el.set("style", style)
+                del el.attrib[attr]
+                moved_vars += 1
+                mutations += 1
+    if moved_vars:
+        report.add("info", f"moved {moved_vars} var() paint(s) into inline style (as attributes they silently do nothing)")
+
+    # --- relocate data-tpl groups into <defs> ---
+    defs = next((c for c in root if isinstance(c.tag, str) and _local(c.tag) == "defs"), None)
+    to_move = []
+    for el in root.iter():
+        if isinstance(el.tag, str) and el.get("data-tpl") is not None:
+            anc, in_defs = parent_of.get(el), False
+            while anc is not None:
+                if isinstance(anc.tag, str) and _local(anc.tag) == "defs":
+                    in_defs = True
+                    break
+                anc = parent_of.get(anc)
+            if not in_defs:
+                to_move.append(el)
+    for el in to_move:
+        if defs is None:
+            defs = ET.Element(f"{{{SVG_NS}}}defs")
+            root.insert(0, defs)
+        parent_of[el].remove(el)
+        defs.append(el)
+        mutations += 1
+    if to_move:
+        report.add("info", f"moved {len(to_move)} template group(s) (data-tpl) into <defs>")
+
+    # --- lint against the contract ---
+    if contract is not None and contract.slots is not None:
+        _lint(root, contract, report)
+
+    out = ET.tostring(root, encoding="unicode") if mutations else svg_text
+    report.changed = bool(mutations)
+    return out, report
+
+
+def _lint(root: ET.Element, contract: Contract, report: FileReport) -> None:
+    found_slots: dict[str, ET.Element] = {}
+    found_parts: dict[str, ET.Element] = {}
+    for el in root.iter():
+        if not isinstance(el.tag, str):
+            continue
+        if el.get("data-slot"):
+            found_slots.setdefault(el.get("data-slot"), el)
+        if el.get("data-part"):
+            found_parts.setdefault(el.get("data-part"), el)
+
+    if contract.slots == {}:  # backdrop element: slots are ignored by design
+        report.bound, report.total = 0, 0
+        if found_slots:
+            report.add("warn", f"{contract.note or 'this element takes no data slots'} "
+                               f"— found: {', '.join(sorted(found_slots))}")
+        return
+
+    known = contract.slots
+    bound = [n for n in found_slots if n in known]
+    report.bound, report.total = len(bound), len(known)
+
+    missing_required = sorted(n for n, s in known.items() if s.required and n not in found_slots)
+    if missing_required:
+        report.add("warn", f"missing required slot(s): {', '.join(missing_required)} — these stay empty on stream")
+
+    for name in sorted(set(found_slots) - set(known)):
+        hint = difflib.get_close_matches(name, list(known), n=1)
+        suffix = f" — did you mean '{hint[0]}'?" if hint else ""
+        report.add("warn", f"unknown slot '{name}' (the mount will never bind it){suffix}")
+
+    for name, el in sorted(found_slots.items()):
+        spec = known.get(name)
+        expected_tag = {"group": "g"}.get(spec.kind, spec.kind) if spec else None
+        if spec and spec.kind != "any" and _local(el.tag) != expected_tag:
+            extra = " — was the text outlined on export?" if spec.kind == "text" else ""
+            report.add("warn", f"slot '{name}' is on <{_local(el.tag)}> but should be <{expected_tag}>{extra}")
+
+    if contract.parts:
+        for name in sorted(set(found_parts) - set(contract.parts)):
+            hint = difflib.get_close_matches(name, list(contract.parts), n=1)
+            suffix = f" — did you mean '{hint[0]}'?" if hint else ""
+            report.add("warn", f"unknown part '{name}'{suffix}")
+        missing_parts = sorted(n for n, s in contract.parts.items() if s.required and n not in found_parts)
+        if missing_parts:
+            report.add("warn", f"missing required part(s): {', '.join(missing_parts)}")
+
+    # Unbound text inventory — decorative text is fine; this catches the slot
+    # the designer drew but forgot to name.
+    unbound = []
+    for el in root.iter():
+        if isinstance(el.tag, str) and _local(el.tag) == "text" \
+                and not el.get("data-slot") and not el.get("data-part"):
+            t = _text_of(el)
+            if t:
+                unbound.append(t if len(t) <= 30 else t[:27] + "...")
+    if unbound:
+        shown = ", ".join(f'"{t}"' for t in unbound[:8])
+        more = f" (+{len(unbound) - 8} more)" if len(unbound) > 8 else ""
+        report.add("info", f"{len(unbound)} unbound <text> element(s) — fine if decorative: {shown}{more}")
+
+    if contract.note and contract.slots != {}:
+        report.add("info", contract.note)

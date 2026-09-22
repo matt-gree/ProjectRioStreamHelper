@@ -7,7 +7,8 @@ fact that the HUD ships names while the API ships integer ids.
 import pytest
 
 from server.rio.pyrio.lookup import LookupDicts
-from server.rio.provider import _stadium_slug, RioGameDataProvider as P
+from server.rio.provider import RioGameDataProvider as P
+from server.rio.apply import _stadium_slug
 
 
 # --- _stadium_slug ---

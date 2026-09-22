@@ -47,9 +47,6 @@ describe('state store mutations', () => {
     });
 
     it('deleteItems removes multiple keys', () => {
-        // Nested keys mirror real usage (score.N.*). Top-level keys can't be
-        // deleted this way — Zustand's set() merges, so an absent top-level key
-        // is re-added; deleting a nested key replaces its present parent.
         st().setItems([
             { key: 'score.1.outs', value: 1 },
             { key: 'score.1.balls', value: 2 },
@@ -59,9 +56,30 @@ describe('state store mutations', () => {
         expect(st().getItem('score.1.balls')).toBeUndefined();
     });
 
-    it('mergeItems merges a server snapshot', () => {
-        st().mergeItems({ score: { 1: { inning: 7 } } });
+    it('delete removes top-level keys and keeps store actions intact', () => {
+        // why: deletes must use Zustand replace mode — a merge can never
+        // remove a top-level key, so a single-segment unset would no-op.
+        st().setItem('matchup', { present: true }, false);
+        st().setItem('other', 1, false);
+        st().deleteItem('matchup', false);
+        expect(st().getItem('matchup')).toBeUndefined();
+        expect(st().getItem('other')).toBe(1);
+
+        st().deleteItems(['other'], false);
+        expect(st().getItem('other')).toBeUndefined();
+        expect(typeof st().setItem).toBe('function');   // actions survive replace
+    });
+
+    it('replaceItems replaces the data with a server snapshot', () => {
+        st().setItem('stale', 1, false);
+        st().setLoaded(true);
+        st().replaceItems({ score: { 1: { inning: 7 } } });
         expect(st().getItem('score.1.inning')).toBe(7);
+        // A key the snapshot no longer has is gone — a merge would have kept it.
+        expect(st().getItem('stale')).toBeUndefined();
+        // The store's own members are not data.
+        expect(st().loaded).toBe(true);
+        expect(typeof st().setItem).toBe('function');
     });
 });
 

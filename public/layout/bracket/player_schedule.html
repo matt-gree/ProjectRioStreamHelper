@@ -2,11 +2,10 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderRadius, borderColor, borderWidth, fontFamily" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
-  <style>
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderRadius, borderColor, borderWidth, displayFont, bodyFont, monoFont" />
+  <!-- Inter is bundled locally and injected by overlay-base.js. -->
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+    <style>
     :root {
       --accent: #f59e0b;
       --accent-rgb: 245, 158, 11;
@@ -16,7 +15,6 @@
       --border-color: rgba(255, 255, 255, 0.08);
       --border-width: 1px;
       --border-radius: 12px;
-      --font-family: 'Inter', sans-serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,7 +24,7 @@
       width: 440px;
       height: 600px;
       background: transparent;
-      font-family: var(--font-family);
+      font-family: var(--font-body, 'Inter', system-ui, sans-serif);
       color: var(--text-primary);
     }
 
@@ -515,6 +513,10 @@
 
     OverlayBase.init({
       render,
+      // The bracket bundle plus the player whose card this is: without an
+      // active player the layout draws its "set a player" note, which is
+      // correct on air and useless as a preview.
+      sample: { file: 'bracket', state: { 'bracket.activePlayer': 'Samn' } },
       shouldRender: (key) => key.startsWith('bracket') || key.startsWith('playerSchedule'),
       shouldRenderSettings: (key) => key.startsWith('overlays.'),
       fetchSettings: true,

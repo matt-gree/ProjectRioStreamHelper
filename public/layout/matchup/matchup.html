@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Matchup History — a re-themable SVG head-to-head band (Draft/Break phases).
+  Layout: all-time series summary (names · win counts · total games) over the
+  five most recent games between the two players, each card with team logos,
+  score, game mode and stadium — fetched from the Project Rio API.
+
+  This file is a thin shell: the look lives in the active DESIGN PACKAGE's
+  theme SVG (/design/{package}/matchup.svg — picked by the global Design
+  Package selector), the rendering/data-binding in matchup-mount.js, and the
+  data in the singleton matchup.* state (POST /api/v1/matchup/fetch?match=M —
+  the Fetch button on the Production page). Drop this in OBS as a 1920×480
+  browser source and place it in the scene yourself — full stream width, because
+  the card row is measured against the frame, but only as tall as the band. A
+  theme that still authors a full 1920×1080 canvas is bottom-anchored inside the
+  source and cropped.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Knobs resolve under overlays.matchup.*. The app-design knobs (cardBg,
+       fontFamily, …) apply only when the active package's theme opts into
+       them (data-design-vars="app" — e.g. the Classic package). -->
+  <meta name="overlay-settings" content="accentColor, cardBg, textColor, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow, showShadow" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    /* Native size hint: the band's own box (392 tall + the theme's bottom
+       margin and glow headroom), not the stream canvas. The SVG scales to
+       whatever the OBS source is. */
+    body { width: 1920px; height: 480px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script type="module">
+    import { mountMatchup } from '/layout/lib/matchup-mount.js';
+
+    const host = document.getElementById('host');
+    const mu = mountMatchup({ host });
+
+    OverlayBase.init({
+      render: () => mu.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'matchup',
+      // Re-render when our data, the bound match, or branding change.
+      shouldRender: (key) => key.startsWith('matchup') || key.startsWith('match.') || key.startsWith('branding') || key.startsWith('tournamentInfo'),
+      shouldRenderSettings: (key) => key.startsWith('overlays.matchup.') || key.startsWith('overlays.global.'),
+      fetchSettings: true,
+    });
+
+    // Follow OBS's on-screen signal (scene cuts AND the source's eye icon):
+    // hide snaps the band dark, show plays one clean reveal, redundant
+    // activates are deduped in the mount's reveal gate.
+    OverlayBase.onObsShown((shown) => mu.setShown(shown));
+  </script>
+</body>
+</html>

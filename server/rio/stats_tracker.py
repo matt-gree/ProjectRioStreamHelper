@@ -118,7 +118,7 @@ def _resolve_stats_tag(scoreboard_number: int) -> str | None:
     """Per-scoreboard stats tag. No global fallback — if a scoreboard has no
     tag configured we skip the API fetch entirely (caller decides what to do).
     """
-    return Settings.Get(f"scoreboards.sources.{scoreboard_number}.stats_tag", None)
+    return Settings.Get(f"scoreboards.binding.{scoreboard_number}.stats_tag", None)
 
 
 @dataclass
@@ -155,18 +155,27 @@ class StatsTracker:
 
     @classmethod
     def reset_scoreboard(cls, sb: int):
-        """Reset state for a single scoreboard."""
+        """Reset state for a single scoreboard: the stats slot AND its diagnostics.
+
+        The two belong together. `stats_api._last_fetch_info[sb]` describes the
+        fetch that filled the slot being dropped here, so a reset that kept it
+        left the board's diagnostics popover reporting a fetch for stats the
+        board no longer has — including a stale error, which is the one thing a
+        producer checks that popover to rule out.
+
+        Board ids are RE-USED (`_lowest_available_id`), so on the removal path
+        that leftover is not dormant: the next board to take this id inherits
+        another board's failure. Every caller wants both halves — a new game, a
+        HUD-target change, a playback-mode change, board removal, and the reset
+        hatch — so the drop lives HERE rather than beside each call, where the
+        set is exactly large enough for one site to be missed (it was: nothing
+        called `reset_fetch_info` at all).
+        """
         slot = cls._slots.get(sb)
         if slot and slot.fetch_task and not slot.fetch_task.done():
             slot.fetch_task.cancel()
         cls._slots[sb] = _SbSlot()
-
-    @classmethod
-    def reset_all(cls):
-        for slot in cls._slots.values():
-            if slot.fetch_task and not slot.fetch_task.done():
-                slot.fetch_task.cancel()
-        cls._slots = {}
+        stats_api.reset_fetch_info(sb)
 
     @classmethod
     def set_sides_swapped(cls, sb: int, swapped: bool):
@@ -343,7 +352,12 @@ class StatsTracker:
         for display_team in range(2):
             data_team = (1 - display_team) if sides_swapped else display_team
             team_num = display_team + 1
-            username = slot.players[data_team] if data_team < len(slot.players) else ""
+            # Prefer the name currently in State (display slot) so a producer's
+            # manual name override drives the stats lookup too; fall back to the
+            # slot's cached HUD username. Both describe the same displayed player.
+            state_name = await State.Get(f"{sb}.player.{team_num}.rioName", "")
+            username = (str(state_name).strip() if state_name
+                        else (slot.players[data_team] if data_team < len(slot.players) else ""))
             roster = slot.rosters.get(data_team, [])
 
             for char_idx in range(min(9, len(roster))):
@@ -421,123 +435,3 @@ class StatsTracker:
                 await cls._fetch_api_stats(sb, usernames, tag, push=True)
             else:
                 await stats_api.set_no_players_diagnostic(sb, tag)
-
-    @classmethod
-    async def push_api_stats_for_scoreboard(cls, scoreboard_number: int):
-        """Push API-only stats (no HUD merge) for a scoreboard.
-
-        Used by rotation/game-pool when applying API games. Reads player names
-        and rosters from State, looks up pre-fetched stats from the slot's
-        index, and writes to State.
-        """
-        slot = cls._slot(scoreboard_number)
-        sb = f"score.{scoreboard_number}"
-        entries = []
-
-        for team_num in (1, 2):
-            prefix = f"{sb}.player.{team_num}"
-            username = await State.Get(f"{prefix}.rioName", "")
-            if not username:
-                continue
-
-            for char_idx in range(9):
-                char_name = await State.Get(f"{prefix}.character.{char_idx}.name")
-                if not char_name:
-                    continue
-
-                stat_prefix = f"{sb}.stats.{team_num}.character.{char_idx}"
-
-                api_row = slot.api_index.get((str(username), str(char_name)))
-                api_batting = _extract_api_batting(api_row) if api_row is not None else _empty_batting()
-                api_pitching = _extract_api_pitching(api_row) if api_row is not None else _empty_pitching()
-
-                empty_bat = _empty_batting()
-                empty_pit = _empty_pitching()
-                merged_batting = _merge_batting(api_batting, empty_bat)
-                merged_pitching = _merge_pitching(api_pitching, empty_pit)
-
-                entries.extend([
-                    (f"{stat_prefix}.name", char_name),
-                    (f"{stat_prefix}.api.batting", api_batting),
-                    (f"{stat_prefix}.api.pitching", api_pitching),
-                    (f"{stat_prefix}.batting", merged_batting),
-                    (f"{stat_prefix}.pitching", merged_pitching),
-                    (f"{stat_prefix}.current_game", {
-                        "batting": empty_bat,
-                        "pitching": empty_pit,
-                        "batting_line": format_batting_line(**empty_bat),
-                        "pitching_line": format_pitching_line(**empty_pit),
-                    }),
-                ])
-
-        if entries:
-            await State.SetBatch(entries)
-            await State.Save()
-
-    @classmethod
-    async def prefetch_for_players(cls, usernames: list[str], scoreboard_number: int):
-        """Fetch API stats for a list of players into one scoreboard's slot.
-
-        Used by the rotation manager to pre-cache stats for all rotation
-        players so individual game switches don't need API calls.
-        """
-        unique = list({u for u in usernames if u})
-        if not unique:
-            return
-        tag = _resolve_stats_tag(scoreboard_number)
-        if not tag:
-            logger.info(
-                f"[StatsTracker] sb{scoreboard_number} prefetch skipped — "
-                "no game mode configured"
-            )
-            return
-        await cls._fetch_api_stats(scoreboard_number, unique, tag, push=False)
-        logger.info(
-            f"[StatsTracker] sb{scoreboard_number} pre-fetched stats for "
-            f"{len(unique)} rotation players"
-        )
-
-    @classmethod
-    def get_all_stats(cls, scoreboard_number: int | None = None) -> dict:
-        """Return current merged stats snapshot for a scoreboard."""
-        if scoreboard_number is None:
-            # Default to first HUD-target if any, else first active scoreboard.
-            sources = Settings.Get("scoreboards.sources", {})
-            active = Settings.Get("scoreboards.active", [1])
-            hud_targets = [sb for sb in active
-                           if sources.get(str(sb), {}).get("type") == "hud"]
-            scoreboard_number = hud_targets[0] if hud_targets else (active[0] if active else 1)
-        slot = cls._slot(scoreboard_number)
-        result = {"scoreboard": scoreboard_number, "api_ready": slot.api_ready}
-
-        for team_idx in range(2):
-            team_key = f"team_{team_idx + 1}"
-            username = slot.players[team_idx] if team_idx < len(slot.players) else ""
-            result[team_key] = {"player": username, "characters": {}}
-            roster = slot.rosters.get(team_idx, [])
-
-            for i in range(min(9, len(roster))):
-                char_name = roster[i]
-                if not char_name:
-                    continue
-
-                api_row = slot.api_index.get((username, char_name))
-                api_batting = _extract_api_batting(api_row) if api_row is not None else _empty_batting()
-                api_pitching = _extract_api_pitching(api_row) if api_row is not None else _empty_pitching()
-
-                hud_char = slot.hud_stats.get(team_idx, {}).get(i, {})
-                hud_batting = hud_char.get("batting", _empty_batting())
-                hud_pitching = hud_char.get("pitching", _empty_pitching())
-
-                result[team_key]["characters"][i] = {
-                    "name": char_name,
-                    "roster_index": i,
-                    "batting": _merge_batting(api_batting, hud_batting),
-                    "pitching": _merge_pitching(api_pitching, hud_pitching),
-                    "current_game": {
-                        "batting": hud_batting,
-                        "pitching": hud_pitching,
-                    },
-                }
-
-        return result

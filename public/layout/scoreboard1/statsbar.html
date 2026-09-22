@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+  Stat Bar — a re-themable SVG stat card for the character currently batting /
+  pitching on one side (?team=1|2) of a scoreboard (?scoreboard=N, default 1).
+  The wide one; the 2x2 Stat Card is the same data and the same mount, worn as
+  a container member (statscard.svg).
+
+  Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
+  (/design/{package}/statsbar.svg), the binding/transitions in
+  stats-card-mount.js, the data resolution in RioData.getStatsLine. Drop into
+  OBS as a 452x118 browser source — the canvas `body` declares below, and the
+  one `theme_contracts.CONTRACTS['statsbar']` pins.
+-->
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Element knobs + the app-design knobs honored when the active package's
+       theme opts into them (e.g. Classic). -->
+  <meta name="overlay-settings" content="transitionType, subLine, subLineText, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow" />
+  <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { width: 452px; height: 118px; }
+    #host { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/layout/lib/overlay-base.js"></script>
+  <script src="/layout/lib/rio-data.js"></script>
+  <script type="module">
+    import { mountStatsCard } from '/layout/lib/stats-card-mount.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const SB = parseInt(params.get('scoreboard')) || 1;
+    const TEAM = parseInt(params.get('team')) || 1;
+
+    document.body.dataset.refW = 452;
+    document.body.dataset.refH = 118;
+
+    const host = document.getElementById('host');
+    const card = mountStatsCard({ host, sb: SB, team: TEAM });
+
+    OverlayBase.init({
+      render: () => card.update(OverlayBase.state, OverlayBase.settings),
+      sample: 'scoreboard',
+      shouldRender: (key) => key.startsWith(`score.${SB}.`),
+      shouldRenderSettings: (key) =>
+        key.startsWith('overlays.statsbar.') || key.startsWith('overlays.global.') ||
+        key.startsWith('scoreboards.'),
+      fetchSettings: true,
+    });
+  </script>
+</body>
+</html>

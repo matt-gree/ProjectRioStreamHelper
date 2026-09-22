@@ -1,0 +1,22 @@
+{
+  "state": {
+    "playerplates.1": {
+      "active": true,
+      "name": "Baltor33",
+      "subField": "pronoun",
+      "subLabel": "Pronouns",
+      "subValue": "he/him",
+      "subVisible": true,
+      "location": "left"
+    },
+    "playerplates.2": {
+      "active": true,
+      "name": "MattGree",
+      "subField": "twitter",
+      "subLabel": "Twitter",
+      "subValue": "@mattgree",
+      "subVisible": true,
+      "location": "right"
+    }
+  }
+}

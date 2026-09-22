@@ -1,0 +1,282 @@
+<svg viewBox="0 0 1920 80" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    DEFAULT package - Results Ticker (1920x80): the Rio marquee bar. A RESULTS
+    badge pins the left edge; ticker-mount.js clones the card-template once per
+    game into the track group and scrolls it. Template card width is declared
+    via data-w; the track's visible width via data-vw. Fixed Rio palette.
+
+    == THE CARD IS ANCHORED AT ITS CENTRE, AND IT HAS TO BE ==================
+    The names used to be pinned to the card's OUTER edges and grow inward, so
+    what varied with a name's length was the gap between a name and the number
+    it labels: measured on a typical pair, 36.8 units of open band on one side
+    and 41.7 on the other, 23 percent of the card, BREATHING card to card as the
+    names changed. That is the Matchup strip's finding in miniature, and it has
+    the same answer. The score plate is fixed at the card's centre; each name
+    anchors INWARD against it at a constant clearance; each captain icon is
+    pinned to the MEASURED outer edge of its name (data-pin-before /
+    data-pin-after / data-pin-gap, resolved per clone by the mount). What varies
+    is now the card's outer MARGIN, which is a margin and reads as one.
+
+    The four numbers that budget it: the name's data-maxw is 98, its clearance
+    to the win rail is 10, the icon is 32 on a 10 gap. Worst case that puts the
+    icon at x=10 on a 424 card - so 10 is the tightest outer margin a long tag
+    can produce, and a typical one leaves 25 to 40.
+
+    == WHO WON IS DRAWN, NOT DIMMED =========================================
+    The only cue was `opacity: 0.5` on the losing SCORE, which at 16px going
+    past at 60px/s is not a cue at all. Both halves of the shared `rowOutcome`
+    now: an accent RAIL flush against the plate on the winner's side (the same
+    device the schedule row uses to say "this is the one"), and the loser's
+    whole row - icon, name and score together - dimmed. The two markers are
+    exclusive by construction: the score lives INSIDE its side's row, so the
+    row dim reaches it and the per-node dim stays off.
+
+    == SIZES ================================================================
+    The score is the payload and used to be the smallest headline on the card
+    (16, under 17px names). It is 26 against 18 now. The card grew 340 -> 424 to
+    pay for that and for the name budget above; at the default 16 gap the pitch
+    is exactly 440, so four cards span the 1760 track.
+  -->
+  <style>
+    .tk-ink  { fill: var(--ink); font-family: var(--font-display); }
+    .tk-dim  { fill: var(--ink-dim); font-family: var(--font-body); }
+    .tk-num  { fill: var(--ink); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    /* Motion for the badge's mushroom field. Bob and sway are separate elements
+       on purpose - one transform property per animation, so the two compose
+       instead of overwriting each other - and every duration, amplitude and
+       (negative) delay is per sprite, so the drift never reads as a loop. The
+       same arrangement as schedule.svg and the three band elements. */
+    .tk-mush      { animation: tk-mush-bob  var(--bob-dur)  ease-in-out var(--bob-delay)  infinite alternate; will-change: transform; }
+    .tk-mush-sway { animation: tk-mush-sway var(--sway-dur) ease-in-out var(--sway-delay) infinite alternate; will-change: transform; }
+    @keyframes tk-mush-bob  { from { transform: translateY(calc(var(--bob-amp)  * -0.5)); } to { transform: translateY(calc(var(--bob-amp)  * 0.5)); } }
+    @keyframes tk-mush-sway { from { transform: translateX(calc(var(--sway-amp) * -0.5)); } to { transform: translateX(calc(var(--sway-amp) * 0.5)); } }
+    @media (prefers-reduced-motion: reduce) {
+      .tk-mush, .tk-mush-sway { animation: none; will-change: auto; }
+    }
+  </style>
+  <defs>
+    <symbol id="rio-mark" viewBox="0 0 16 16" shape-rendering="crispEdges">
+      <rect x="5" y="0" width="6" height="1" fill="#000000"/>
+      <rect x="3" y="1" width="2" height="1" fill="#000000"/>
+      <rect x="5" y="1" width="1" height="1" fill="#ff0000"/>
+      <rect x="6" y="1" width="1" height="1" fill="#ffffff"/>
+      <rect x="7" y="1" width="1" height="1" fill="#ff0000"/>
+      <rect x="8" y="1" width="2" height="1" fill="#ffffff"/>
+      <rect x="10" y="1" width="1" height="1" fill="#ff0000"/>
+      <rect x="11" y="1" width="2" height="1" fill="#000000"/>
+      <rect x="2" y="2" width="1" height="1" fill="#000000"/>
+      <rect x="3" y="2" width="2" height="1" fill="#ff0000"/>
+      <rect x="5" y="2" width="2" height="1" fill="#ffffff"/>
+      <rect x="7" y="2" width="1" height="1" fill="#ff0000"/>
+      <rect x="8" y="2" width="3" height="1" fill="#ffffff"/>
+      <rect x="11" y="2" width="2" height="1" fill="#ff0000"/>
+      <rect x="13" y="2" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="3" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="3" width="2" height="1" fill="#ff0000"/>
+      <rect x="4" y="3" width="4" height="1" fill="#ffffff"/>
+      <rect x="8" y="3" width="1" height="1" fill="#ff0000"/>
+      <rect x="9" y="3" width="3" height="1" fill="#ffffff"/>
+      <rect x="12" y="3" width="2" height="1" fill="#ff0000"/>
+      <rect x="14" y="3" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="4" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="4" width="4" height="1" fill="#ff0000"/>
+      <rect x="6" y="4" width="3" height="1" fill="#ffffff"/>
+      <rect x="9" y="4" width="1" height="1" fill="#ff0000"/>
+      <rect x="10" y="4" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="4" width="2" height="1" fill="#ff0000"/>
+      <rect x="14" y="4" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="5" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="5" width="1" height="1" fill="#ffffff"/>
+      <rect x="2" y="5" width="2" height="1" fill="#ff0000"/>
+      <rect x="4" y="5" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="5" width="1" height="1" fill="#ff0000"/>
+      <rect x="7" y="5" width="3" height="1" fill="#ffffff"/>
+      <rect x="10" y="5" width="4" height="1" fill="#ff0000"/>
+      <rect x="14" y="5" width="1" height="1" fill="#ffffff"/>
+      <rect x="15" y="5" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="6" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="6" width="2" height="1" fill="#ffffff"/>
+      <rect x="3" y="6" width="1" height="1" fill="#ff0000"/>
+      <rect x="4" y="6" width="3" height="1" fill="#ffffff"/>
+      <rect x="7" y="6" width="1" height="1" fill="#ff0000"/>
+      <rect x="8" y="6" width="4" height="1" fill="#ffffff"/>
+      <rect x="12" y="6" width="1" height="1" fill="#ff0000"/>
+      <rect x="13" y="6" width="2" height="1" fill="#ffffff"/>
+      <rect x="15" y="6" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="7" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="7" width="2" height="1" fill="#ffffff"/>
+      <rect x="3" y="7" width="2" height="1" fill="#ff0000"/>
+      <rect x="5" y="7" width="3" height="1" fill="#ffffff"/>
+      <rect x="8" y="7" width="1" height="1" fill="#ff0000"/>
+      <rect x="9" y="7" width="2" height="1" fill="#ffffff"/>
+      <rect x="11" y="7" width="2" height="1" fill="#ff0000"/>
+      <rect x="13" y="7" width="2" height="1" fill="#ffffff"/>
+      <rect x="15" y="7" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="8" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="8" width="2" height="1" fill="#ffffff"/>
+      <rect x="3" y="8" width="3" height="1" fill="#ff0000"/>
+      <rect x="6" y="8" width="2" height="1" fill="#ffffff"/>
+      <rect x="8" y="8" width="1" height="1" fill="#ff0000"/>
+      <rect x="9" y="8" width="1" height="1" fill="#ffffff"/>
+      <rect x="10" y="8" width="3" height="1" fill="#ff0000"/>
+      <rect x="13" y="8" width="2" height="1" fill="#ffffff"/>
+      <rect x="15" y="8" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="9" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="9" width="1" height="1" fill="#ffffff"/>
+      <rect x="2" y="9" width="4" height="1" fill="#ff0000"/>
+      <rect x="6" y="9" width="4" height="1" fill="#000000"/>
+      <rect x="10" y="9" width="4" height="1" fill="#ff0000"/>
+      <rect x="14" y="9" width="1" height="1" fill="#ffffff"/>
+      <rect x="15" y="9" width="1" height="1" fill="#000000"/>
+      <rect x="0" y="10" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="10" width="3" height="1" fill="#ff0000"/>
+      <rect x="4" y="10" width="2" height="1" fill="#000000"/>
+      <rect x="6" y="10" width="4" height="1" fill="#ffffff"/>
+      <rect x="10" y="10" width="2" height="1" fill="#000000"/>
+      <rect x="12" y="10" width="3" height="1" fill="#ff0000"/>
+      <rect x="15" y="10" width="1" height="1" fill="#000000"/>
+      <rect x="1" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="11" width="1" height="1" fill="#ff0000"/>
+      <rect x="3" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="4" y="11" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="7" y="11" width="2" height="1" fill="#ffffff"/>
+      <rect x="9" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="10" y="11" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="13" y="11" width="1" height="1" fill="#ff0000"/>
+      <rect x="14" y="11" width="1" height="1" fill="#000000"/>
+      <rect x="2" y="12" width="2" height="1" fill="#000000"/>
+      <rect x="4" y="12" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="12" width="1" height="1" fill="#000000"/>
+      <rect x="7" y="12" width="2" height="1" fill="#ffffff"/>
+      <rect x="9" y="12" width="1" height="1" fill="#000000"/>
+      <rect x="10" y="12" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="12" width="2" height="1" fill="#000000"/>
+      <rect x="3" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="4" y="13" width="2" height="1" fill="#ffffff"/>
+      <rect x="6" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="7" y="13" width="2" height="1" fill="#ffffff"/>
+      <rect x="9" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="10" y="13" width="2" height="1" fill="#ffffff"/>
+      <rect x="12" y="13" width="1" height="1" fill="#000000"/>
+      <rect x="4" y="14" width="1" height="1" fill="#000000"/>
+      <rect x="5" y="14" width="6" height="1" fill="#ffffff"/>
+      <rect x="11" y="14" width="1" height="1" fill="#000000"/>
+      <rect x="5" y="15" width="6" height="1" fill="#000000"/>
+    </symbol>
+    <clipPath id="tk-clip"><rect x="150" y="5.5" width="1758" height="69"/></clipPath>
+    <!-- The badge's own box, so the field can bleed off every edge of it and be
+         cut by the shape the producer sees rather than by a bounding rect. Two
+         rects: the rounded bar cap, and the square patch that runs it into the
+         track. -->
+    <clipPath id="tk-badge-clip">
+      <rect x="0" y="4" width="150" height="72" rx="12"/>
+      <rect x="120" y="4" width="30" height="72"/>
+    </clipPath>
+    <linearGradient id="tk-fade-r" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" style="stop-color:var(--band)" stop-opacity="0"/>
+      <stop offset="1" style="stop-color:var(--band)" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- bar shell -->
+  <rect x="0" y="4" width="1920" height="72" rx="12" style="fill:var(--band);stroke:var(--border);stroke-width:1.5"/>
+
+  <!-- scrolling cards (clipped to the bar) -->
+  <g clip-path="url(#tk-clip)">
+    <g data-slot="track" data-vw="1760" transform="translate(166,0)"></g>
+    <rect x="1830" y="5.5" width="78" height="69" style="fill:url(#tk-fade-r)"/>
+  </g>
+
+  <!-- RESULTS badge (drawn over the bar's left edge). The one STATIC region on
+       a moving element, which is why the mushroom field belongs here and
+       nowhere else on this bar: drifting marks behind the track would fight the
+       scroll, and a sprite inside card-template would be animated once per
+       clone - 21 of them in a ten-game pool. -->
+  <rect x="0" y="4" width="150" height="72" rx="12" style="fill:var(--accent)"/>
+  <rect x="120" y="4" width="30" height="72" style="fill:var(--accent)"/>
+
+  <!-- The field. Four marks on a 150x72 plate, so each one is mostly off an
+       edge: a mark drawn whole inside a badge this small reads as a logo that
+       has slipped, not as atmosphere. Sizes are 32/48/64 because the mark is a
+       16px pixel grid painted with crispEdges and anything else shears it.
+
+       The opacities are HIGHER than the same field carries on the dark band
+       elements (0.04-0.075 there, 0.055-0.09 here) and that is not a taste
+       difference: this ground is saturated accent (#e60012), so the mark's own
+       RED pixels vanish into it entirely and only the white and black ones
+       survive to draw the shape. Roughly half the sprite does no work, and the
+       number has to pay for it.
+
+       They are tuned by LOOKING, not by arithmetic, and the range is narrow:
+       the first pass ran 0.14-0.22 on that reasoning and drew four legible pink
+       mushrooms behind the word RESULTS - atmosphere that has become artwork,
+       which on the one static object in a moving element is the worst place for
+       it. Check a change here against a render before believing it. -->
+  <g data-part="field" clip-path="url(#tk-badge-clip)">
+    <g transform="translate(-16,18)"><g class="tk-mush" style="--bob-dur:13.7s;--bob-amp:14.2px;--bob-delay:-4.9s"><use class="tk-mush-sway" href="#rio-mark" width="64" height="64" opacity="0.07" style="--sway-dur:19.4s;--sway-amp:22.6px;--sway-delay:-7.3s"/></g></g>
+    <g transform="translate(18,-14)"><g class="tk-mush" style="--bob-dur:16.9s;--bob-amp:11.8px;--bob-delay:-1.7s"><use class="tk-mush-sway" href="#rio-mark" width="32" height="32" opacity="0.055" style="--sway-dur:23.8s;--sway-amp:18.1px;--sway-delay:-11.6s"/></g></g>
+    <g transform="translate(58,52)"><g class="tk-mush" style="--bob-dur:15.1s;--bob-amp:13.4px;--bob-delay:-8.4s"><use class="tk-mush-sway" href="#rio-mark" width="32" height="32" opacity="0.06" style="--sway-dur:21.2s;--sway-amp:20.7px;--sway-delay:-2.8s"/></g></g>
+    <g transform="translate(108,24)"><g class="tk-mush" style="--bob-dur:12.3s;--bob-amp:17.6px;--bob-delay:-6.1s"><use class="tk-mush-sway" href="#rio-mark" width="48" height="48" opacity="0.09" style="--sway-dur:17.6s;--sway-amp:27.3px;--sway-delay:-13.1s"/></g></g>
+  </g>
+
+  <rect x="148" y="4" width="2" height="72" fill="rgba(0,0,0,0.3)"/>
+  <text x="75" y="47" text-anchor="middle" fill="#ffffff" font-family="var(--font-display)" font-size="18" font-weight="700" letter-spacing="2.5">RESULTS</text>
+
+  <!-- Prototype game card (hidden; cloned + bound by the mount). 424 wide by 64
+       tall, on a 440 pitch at the default gap.
+
+       VERTICALLY IT IS BALANCED ON ITS INK, not on its baselines. The card runs
+       8..72; the tallest things on the main row (the plate and the two 32px
+       icons) run 15..47, and the footer's caps run 57.1..65. Seven units of air
+       above, seven below. It was 14.8 above and 3.7 below - the same two rows,
+       sitting low in their own card, which reads as a crop rather than as a
+       choice. -->
+  <g data-slot="card-template" data-w="424" opacity="0">
+    <rect data-part="card-bg" x="0" y="8" width="424" height="64" rx="10" style="fill:var(--band-2);stroke:var(--border);stroke-width:1"/>
+
+    <!-- The winner's rail, flush against the plate on that side. Flush and not
+         floating in the gap: at 10 from the name and 9 from the plate it reads
+         as belonging to neither, which for a marker is the whole job lost. -->
+    <rect data-part="away-win" x="160" y="17" width="6" height="28" rx="3" style="fill:var(--accent)" opacity="0"/>
+    <rect data-part="home-win" x="258" y="17" width="6" height="28" rx="3" style="fill:var(--accent)" opacity="0"/>
+
+    <!-- The plate is the theme's own chrome and is ALWAYS drawn - it is the
+         fixed object the eye tracks as the cards go past, so a live game
+         showing VS must show it in the same place, at the same size, as the
+         nine finished cards either side of it. -->
+    <rect x="166" y="15" width="92" height="32" rx="8" fill="rgba(0,0,0,0.42)"/>
+
+    <g data-part="away-row">
+      <image data-part="away-cap" x="10" y="15" width="32" height="32"
+             data-pin-before="away-name" data-pin-gap="10"
+             preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <text data-part="away-name" data-maxw="98" x="150" y="40" text-anchor="end" class="tk-ink" font-size="18" font-weight="700">Away</text>
+      <text data-part="score-away" x="204" y="40" text-anchor="end" class="tk-num" font-size="26" font-weight="700">0</text>
+    </g>
+    <g data-part="home-row">
+      <image data-part="home-cap" x="382" y="15" width="32" height="32"
+             data-pin-after="home-name" data-pin-gap="10"
+             preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <text data-part="home-name" data-maxw="98" x="274" y="40" text-anchor="start" class="tk-ink" font-size="18" font-weight="700">Home</text>
+      <text data-part="score-home" x="220" y="40" text-anchor="start" class="tk-num" font-size="26" font-weight="700">0</text>
+    </g>
+
+    <!-- score-group is what the mount hides when there is no result: the dash
+         between two numbers, and nothing else. The plate above it stays. -->
+    <g data-part="score-group">
+      <text x="212" y="39" text-anchor="middle" class="tk-dim" font-size="14">&#8211;</text>
+    </g>
+    <text data-part="vs" x="212" y="40" text-anchor="middle" class="tk-dim" font-size="16" font-weight="700" letter-spacing="1.5" opacity="0">VS</text>
+
+    <!-- MODE, then date - the competition earns the line and the park does not,
+         the same call the Matchup summary's history cards make. `stadium` is
+         still bound by the mount as its own part, so a package that wants it
+         only has to draw it. Uppercased here rather than in the data, because
+         the mode is content and a package is free to drop the transform. -->
+    <text data-part="meta" data-maxw="370" x="212" y="65" text-anchor="middle" class="tk-dim"
+          font-size="11" font-weight="600" letter-spacing="0.8"
+          style="text-transform:uppercase">MODE &#183; DATE</text>
+  </g>
+</svg>

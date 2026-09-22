@@ -1,0 +1,14 @@
+// Production console row kit — see the production-console-contract skill.
+// All three console surfaces (rack, stage, quick rail) compose from these.
+
+export { chipFor, CHIP_META } from './chip';
+export { StateChip } from './StateChip';
+export { GAME_STAGE, GameChip, GameStageChip } from './GameChip';
+export { PanelShell } from './PanelShell';
+export { QuickCard } from './QuickCard';
+export {
+    SubjectRow, ToggleRow, ToggleChip, ToggleChips, SelectRow, NumberRow, NumberField, FractionRow, TextRow, ColorRow,
+    FieldRow, ActionRow, SegmentedRow, ListRow, IconToggle, KitColumns, KitColumn,
+    Eyebrow, StatusLine, InlineSubjects,
+} from './rows';
+export { KIT_INPUT, KIT_INPUT_FLOW, KIT_FIELD, KIT_LABEL, KIT_NUMBER, KIT_SECTION } from './tokens';

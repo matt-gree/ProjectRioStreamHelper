@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import ORJSONResponse
 
 from server.announcements import Announcements
@@ -17,21 +17,6 @@ async def announcements_get(session_id: str | None = None) -> ORJSONResponse:
 
 
 @method(
-    router.post, "/announcements/dismiss",
-    version="1", id="announcements.dismiss",
-    response_class=ORJSONResponse,
-)
-async def announcements_dismiss(
-    announcement_id: str = "",
-    session_id: str | None = None,
-) -> ORJSONResponse:
-    if not announcement_id:
-        raise HTTPException(status_code=400, detail="announcement_id required")
-    await Announcements.Dismiss(announcement_id)
-    return ORJSONResponse({"success": True})
-
-
-@method(
     router.post, "/announcements/dismiss-all",
     version="1", id="announcements.dismiss_all",
     response_class=ORJSONResponse,
@@ -39,13 +24,3 @@ async def announcements_dismiss(
 async def announcements_dismiss_all(session_id: str | None = None) -> ORJSONResponse:
     count = await Announcements.DismissAll()
     return ORJSONResponse({"success": True, "dismissed": count})
-
-
-@method(
-    router.post, "/announcements/refresh",
-    version="1", id="announcements.refresh",
-    response_class=ORJSONResponse,
-)
-async def announcements_refresh(session_id: str | None = None) -> ORJSONResponse:
-    await Announcements.Refresh()
-    return ORJSONResponse({"success": True})

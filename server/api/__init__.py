@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from server.api.v1 import (
     state,
+    action,
     settings,
     rio,
     scoreboards,
@@ -10,11 +11,22 @@ from server.api.v1 import (
     layouts,
     branding,
     startgg,
-    challonge,
     controller,
     announcements,
     logs,
     assets,
+    visualizer,
+    participants,
+    match,
+    matchup,
+    schedule,
+    commentary,
+    organizers,
+    playerplates,
+    postgame,
+    design,
+    invariants,
+    network,
 )
 
 router_v1 = APIRouter(
@@ -23,6 +35,8 @@ router_v1 = APIRouter(
 )
 
 router_v1.include_router(state.router)
+router_v1.include_router(invariants.router)
+router_v1.include_router(action.router)
 router_v1.include_router(settings.router)
 router_v1.include_router(rio.router)
 router_v1.include_router(scoreboards.router)
@@ -32,8 +46,19 @@ router_v1.include_router(stats.router)
 router_v1.include_router(layouts.router)
 router_v1.include_router(branding.router)
 router_v1.include_router(startgg.router)
-router_v1.include_router(challonge.router)
 router_v1.include_router(controller.router)
 router_v1.include_router(announcements.router)
 router_v1.include_router(logs.router)
+router_v1.include_router(network.router)
 router_v1.include_router(assets.router)
+router_v1.include_router(visualizer.router)
+router_v1.include_router(participants.router)
+router_v1.include_router(match.router)
+router_v1.include_router(match.bind_router)
+router_v1.include_router(matchup.router)
+router_v1.include_router(schedule.router)
+router_v1.include_router(commentary.router)
+router_v1.include_router(organizers.router)
+router_v1.include_router(playerplates.router)
+router_v1.include_router(postgame.router)
+router_v1.include_router(design.router)

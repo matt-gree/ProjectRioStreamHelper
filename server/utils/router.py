@@ -1,4 +1,3 @@
-import orjson
 import asyncio
 from functools import partial
 from loguru import logger

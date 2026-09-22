@@ -2,9 +2,7 @@ from pystray import Icon, Menu, MenuItem
 from PIL import Image
 from server.settings import Config
 from loguru import logger
-from os import path as _os_path
 from pathlib import Path
-import os
 import subprocess
 import sys
 
@@ -58,40 +56,10 @@ class Tray:
             cls.icon.stop()
 
     @classmethod
-    def on_open_settings(cls, _icon=None, _item=None):
-        """Open the browser to the settings route."""
-        url = Config.config.get("server_url", "")
-        if not url:
-            return
-        # HashRouter: settings lives inside SettingsModal, which is toggled from
-        # the header. Opening the app root is the simplest reliable entry.
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", url])
-        else:
-            import webbrowser
-            webbrowser.open_new_tab(url)
-
-    @classmethod
     def on_open_logs(cls, _icon=None, _item=None):
         """Reveal the logs folder in Finder / Explorer."""
-        from server.paths import _frozen_writable_root
-        root = _frozen_writable_root() or Path(".").resolve()
-        log_dir = root / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            if sys.platform == "darwin":
-                subprocess.Popen(["open", str(log_dir)])
-            elif sys.platform == "win32":
-                os.startfile(str(log_dir))  # type: ignore[attr-defined]
-            else:
-                subprocess.Popen(["xdg-open", str(log_dir)])
-        except Exception:
-            logger.exception("[Tray] failed to open logs folder")
-
-    @classmethod
-    def show_notification(cls, *args, **kwargs):
-        if Icon.HAS_NOTIFICATION:
-            cls.icon.notify(*args, **kwargs)
+        from server.paths import logs_dir, reveal_path
+        reveal_path(logs_dir())
 
     @classmethod
     def create_tray(cls):

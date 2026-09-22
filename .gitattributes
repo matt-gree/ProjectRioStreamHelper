@@ -1,0 +1,21 @@
+# Vendored third-party trees. Checked in deliberately (see the commits that
+# added them), but they are not PRSH source and should not be read as such.
+#
+#   linguist-vendored — keeps them out of GitHub's language stats and collapses
+#                       them by default in PR review.
+#   -diff             — `git diff` reports "Binary files differ" instead of
+#                       printing the body. Override per-command with --text.
+#
+# Between them these three trees are ~185k lines, about two thirds of the
+# 2.0.0 branch diff, and none of it is hand-written here.
+
+# impeccable — the design-quality skill + post-edit hook. Two near-identical
+# copies on purpose: the tool's installer hardcodes a skill path next to each
+# agent's own config, so Claude Code and GitHub Copilot each get their own.
+# ~65k lines apiece.
+.claude/skills/impeccable/** linguist-vendored -diff
+.github/skills/impeccable/** linguist-vendored -diff
+
+# three.js — vendored rather than bundled because layouts under public/layout/
+# are static files served straight to OBS with no build step. ~56k lines.
+public/layout/lib/three/** linguist-vendored -diff

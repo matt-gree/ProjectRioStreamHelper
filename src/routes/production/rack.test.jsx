@@ -1,0 +1,855 @@
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
+import { TooltipProvider } from '../../components/ui/tooltip';
+import { useSettingsStore, useStateStore } from '../../context/store';
+import { useObsStore } from '../../context/obs';
+import { commitPending, useStagingStore } from '../../context/staging';
+import { DESKS, RAIL_SEED, Rack } from './rack';
+import { withContainers } from '../../test/containers';
+
+// The test env's localStorage (Node's experimental stub) has no working
+// methods — usePersistentState silently no-ops against it. Stub a real one so
+// selection/rail persistence is observable.
+const store = new Map();
+const fakeLocalStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    clear: () => store.clear(),
+};
+
+beforeEach(() => {
+    store.clear();
+    vi.stubGlobal('localStorage', fakeLocalStorage);
+    useSettingsStore.setState({ scoreboards: {}, production: withContainers() });
+});
+afterEach(() => {
+    cleanup();
+    useStagingStore.getState().discardAll();
+    while (restoreObs.length) restoreObs.pop()();
+    vi.unstubAllGlobals();
+    useObsStore.setState({
+        status: 'disconnected', studioMode: false, programScene: null,
+        previewScene: null, sceneItems: {}, scenes: [], mirroredScenes: [],
+    });
+});
+
+const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
+
+// Swap in a spy for the OBS removal verb, restoring the real one afterwards so
+// it can't leak into a later test in this file.
+const mockRemove = () => {
+    const real = useObsStore.getState().removeSceneItem;
+    const spy = vi.fn(() => Promise.resolve());
+    useObsStore.setState({ removeSceneItem: spy });
+    restoreObs.push(() => useObsStore.setState({ removeSceneItem: real }));
+    return spy;
+};
+const restoreObs = [];
+
+const item = (id, sourceName, url, enabled = false) =>
+    ({ id, sourceName, url, enabled, inputKind: 'browser_source', isGroup: false, isPrsh: true });
+
+// An OBS mirror with the given scenes. First scene is program unless told
+// otherwise; every listed scene is mirrored (the rack only reads mirrored ones).
+const obs = (sceneItems, extra = {}) => useObsStore.setState({
+    status: 'connected',
+    programScene: Object.keys(sceneItems)[0] ?? null,
+    scenes: Object.keys(sceneItems),
+    mirroredScenes: Object.keys(sceneItems),
+    sceneItems,
+    ...extra,
+});
+
+const SB = 'http://x/layout/scoreboard1/scoreboard.html';
+const LOWER = 'http://x/layout/lowerthird/lowerthird.html';
+const CALLOUT = 'http://x/layout/shared/container.html?container=callout-stage';
+// The producer-built shell, told which definition to be — how every container
+// but the pre-2.0 named shells above reaches a scene.
+const PAIR = 'http://x/layout/shared/container.html?container=';
+
+// Rows read "<name><board?>"; several board-scoped elements share a board meta,
+// so rows are addressed structurally rather than by text. The row's select
+// button is name + board meta; the chip and pin glyphs around it aren't part of
+// what the row is called.
+const rowsNamed = (name) => [...document.querySelectorAll(`[data-rack-row="${name}"]`)]
+    .map(r => r.querySelector('button').textContent);
+const sectionRows = (scene) => [
+    ...document.querySelectorAll(`[data-rack-section="${scene}"] [data-rack-row]`),
+].map(r => r.getAttribute('data-rack-row'));
+const row = (name) => document.querySelector(`[data-rack-row="${name}"]`);
+const rowChip = (name) => row(name)?.querySelector('[data-chip-state]')?.getAttribute('data-chip-state');
+const rowNested = (name) => row(name)?.hasAttribute('data-rack-nested');
+
+/*
+ * Desks are permanent. They used to appear one at a time, keyed to a "phase"
+ * the producer picked — a rule that always needed a special case (Live owned no
+ * desk, so the section stood empty), which was the tell that desks were never
+ * phase-shaped.
+ *
+ * There is one left, and that is the point: a desk is a GLOBAL workflow with no
+ * other home. Capture was board-scoped (it opened with a Board picker) and is a
+ * region on the board panel; Bracket's two consumers already carried its picker
+ * and it moved onto the source that draws it. Both are pinned below, because a
+ * tier that accepts anything "not on air" grows those rows back.
+ */
+describe('Rack desks', () => {
+    it('racks the workflow desk, always, with its live meta default', () => {
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('Match')).toBeInTheDocument();
+        /*
+         * The meta is WHAT IS LEFT TO PUT ON A BOARD, not a fixture's id and
+         * series. `M1 · 0–0` named the first match ever authored — decided weeks
+         * ago on a long-running rig — and quoted a number that stays 0–0 all
+         * night on the Bo1 almost every night is.
+         */
+        expect(section.getByText('no matches')).toBeInTheDocument();
+    });
+
+    /*
+     * THE COLD START, on the row a producer lands on first.
+     *
+     * Opening the app the morning after a night, every fixture is decided and the
+     * board still carries last night's game — so the two rows at the top of the
+     * rack have to say that between them, or the console looks like a live rig
+     * and the producer has to reverse-engineer which parts are real.
+     */
+    it('says how much of tonight is left to put on a board', () => {
+        useStateStore.setState({
+            match: { 1: { decided: 1 }, 2: { decided: 2 } },
+            schedule: { queue: [1, 2] },
+            score: {},
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('all played')).toBeInTheDocument();
+    });
+
+    it('counts the fixtures still waiting for a board', () => {
+        useStateStore.setState({
+            match: { 1: { stage: 'draft' }, 2: { stage: 'draft' }, 3: { decided: 1 } },
+            schedule: { queue: [1, 2, 3] },
+            score: {},
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('2 waiting')).toBeInTheDocument();
+    });
+
+    /*
+     * `all played` and `none waiting` are kept apart because collapsing them
+     * would have the rack claim a match is played over one that is LIVE.
+     */
+    it('does not call an undecided match played just because nothing is waiting', () => {
+        useStateStore.setState({
+            match: { 1: { stage: 'live' } },
+            schedule: { queue: [1] },
+            score: { 1: { match: 1 } },
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.getByText('none waiting')).toBeInTheDocument();
+    });
+
+    // Board-scoped work is a REGION on the board, not a desk. Capture's board
+    // picker was the tell: a second board selector on a console whose rack has
+    // already asked which board you mean.
+    it('racks no desk for post-game capture', () => {
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.queryByText('Capture')).not.toBeInTheDocument();
+    });
+
+    // …and a control both of whose consumers already show it is not a workflow
+    // needing a permanent row. The bracket phase lives on the bracket source.
+    it('racks no desk for the bracket phase', () => {
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="desk"]'));
+        expect(section.queryByText('Bracket')).not.toBeInTheDocument();
+    });
+
+    it('collapses the desk tier and remembers it', () => {
+        ui(<Rack />);
+        expect(sectionRows('desk').length).toBe(DESKS.length);
+        fireEvent.click(screen.getByRole('button', { name: /DESK/ }));
+        expect(sectionRows('desk')).toEqual([]);
+        expect(JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.tiers'))).toEqual(['desk']);
+    });
+
+    // The DESK header has no + : the workflow desks are fixed. The one it used
+    // to carry added a BOARD, which is why the two tiers split.
+    it('offers nothing to add to the desk tier', () => {
+        ui(<Rack />);
+        const header = document.querySelector('[data-rack-section="desk"]');
+        expect(within(header).queryByRole('button', { name: /^Add/ })).not.toBeInTheDocument();
+    });
+
+    // Every desk the rack lists needs a body to select into and, when it says
+    // it's pinnable, a quick face for the rail — the three registries are
+    // written in three files and would otherwise drift apart silently. Boards
+    // are in the same contract, one tier over: their bodies and faces are
+    // resolved from the id rather than declared per row.
+    it('every desk row has a stage body, and a quick face iff it is pinnable', async () => {
+        const { DESK_BODIES, deskBodiesFor } = await import('./production');
+        const { DESK_QUICK_FACES, deskQuickFace } = await import('./quickface');
+        for (const desk of DESKS) {
+            expect(DESK_BODIES[desk.id], `${desk.id} has a stage body`).toBeTruthy();
+            expect(DESK_BODIES[desk.id].pinnable !== false, `${desk.id} body agrees on pinnable`)
+                .toBe(desk.pinnable !== false);
+            expect(DESK_QUICK_FACES[desk.id] != null, `${desk.id} quick face`)
+                .toBe(desk.pinnable !== false);
+            expect(deskQuickFace(desk.id) != null).toBe(desk.pinnable !== false);
+        }
+        expect(Object.keys(DESK_BODIES).length).toBe(DESKS.length);
+
+        const bodies = deskBodiesFor([1, 2]);
+        expect(Object.keys(bodies).length).toBe(DESKS.length + 2);
+        for (const id of ['desk:board:1', 'desk:board:2']) {
+            expect(bodies[id], `${id} has a stage body`).toBeTruthy();
+            expect(bodies[id].pinnable !== false, `${id} is pinnable`).toBe(true);
+            expect(deskQuickFace(id), `${id} quick face`).toBeTruthy();
+        }
+    });
+
+    it('carries no phase — the console has no phase axis to key one to', () => {
+        for (const d of DESKS) expect(d.phase).toBeUndefined();
+    });
+});
+
+/*
+ * The rig — the boards themselves, in a section of their own.
+ *
+ * They used to share the DESK header with Match/Capture/Bracket, and the give-away
+ * was its +: it added a BOARD, because a board is the only one of the two kinds
+ * under that header whose count the producer controls. Membership is the
+ * difference between the two tiers, so membership is what splits them.
+ */
+describe('Rack rig', () => {
+    const rig = (active, aliases = {}) => useSettingsStore.setState({
+        scoreboards: { active, aliases },
+        production: withContainers(),
+    });
+
+    it('rows one board per active scoreboard, above the desks, named by alias', () => {
+        rig([1, 2], { 2: 'Stream B' });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('Scoreboard 1')).toBeInTheDocument();
+        expect(section.getByText('Stream B')).toBeInTheDocument();
+        expect(sectionRows('rig')).toEqual(['Scoreboard 1', 'Stream B']);
+        expect(document.querySelectorAll('[data-chip-state="desk"]').length)
+            .toBe(DESKS.length + 2);
+    });
+
+    // Three boards put six rows above the first scene in a ~278px column, and a
+    // producer working one board all night has no use for the other two.
+    it('collapses, hiding the rows and the + with them', () => {
+        rig([1, 2]);
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: /BOARDS/ }));
+        expect(sectionRows('rig')).toEqual([]);
+        // No adding into a section you can't see the result in — same rule as a
+        // collapsed scene.
+        expect(screen.queryByRole('button', { name: 'Add a scoreboard' })).not.toBeInTheDocument();
+        expect(JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.tiers'))).toEqual(['rig']);
+    });
+
+    // Both tiers default OPEN, so the stored list has to name the CLOSED ones —
+    // a producer who has never touched a chevron must not find the top of their
+    // rack shut.
+    it('opens both tiers for a producer who has never collapsed one', () => {
+        rig([1, 2]);
+        ui(<Rack />);
+        expect(sectionRows('rig').length).toBe(2);
+        expect(sectionRows('desk').length).toBe(DESKS.length);
+    });
+
+    it('adds a board from the section header, where the row will appear', async () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
+        vi.stubGlobal('fetch', fetchMock);
+        rig([1]);
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Add a scoreboard' }));
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/scoreboards', { method: 'POST' });
+    });
+
+    /*
+     * Removing a board is rig membership too, so it sits on the row rather than
+     * four scrolls down the panel of the board it deletes — which is where it was,
+     * and where it could not be found.
+     */
+    it('removes a board from its own row, after a confirm', () => {
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }));
+        vi.stubGlobal('fetch', fetchMock);
+        rig([1, 2], { 2: 'Stream B' });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Stream B' }));
+        // The confirm states the consequence rather than asking whether you meant
+        // it — an overlay left pointed at the board is what a producer needs told.
+        expect(screen.getByText(/scoreboard=2 will have nothing to draw/)).toBeInTheDocument();
+        expect(fetchMock).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        expect(fetchMock).toHaveBeenCalledWith('/api/v1/scoreboards/2', { method: 'DELETE' });
+    });
+
+    // The rig always keeps one board, so the last row's remove is unavailable and
+    // says why, rather than being an error the producer discovers by clicking.
+    it('will not remove the last board', () => {
+        rig([1]);
+        ui(<Rack />);
+        const remove = screen.getByRole('button', { name: 'Remove Scoreboard 1' });
+        expect(remove).toBeDisabled();
+        expect(remove).toHaveAttribute('title', 'The rig always keeps one board');
+    });
+
+    /*
+     * A BOARD ROW IS ITS NAME. The row used to carry a one-line game summary
+     * beside the alias (`Alice 3–2 Bob`, `HUD · no game`, `rotating · 3`) and it
+     * did not fit: 218px of text against the 176px a 278px row leaves once the
+     * chip, the pin and the trash are paid for, so the widest case — a live game
+     * between two real usernames — was the one that overran. Everything it said
+     * is on the board's own panel at full length, one click away.
+     */
+    it('rows a board as its name alone, with no game summary beside it', () => {
+        useSettingsStore.setState({
+            scoreboards: {
+                active: [1, 2],
+                aliases: {},
+                binding: { 2: { playback: { mode: 'rotate' } } },
+            },
+            production: withContainers(),
+        });
+        useStateStore.setState({
+            score: {
+                1: { player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } }, score_left: 3, score_right: 2, inning: 5, half_inning: 'Bottom' },
+            },
+            scoreboards: { rotation: { 2: { game_ids: [1, 2, 3] } } },
+        });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('Scoreboard 1')).toBeInTheDocument();
+        expect(section.queryByText(/Alice/)).not.toBeInTheDocument();
+        expect(section.queryByText(/3–2/)).not.toBeInTheDocument();
+        expect(section.queryByText(/rotating/)).not.toBeInTheDocument();
+        expect(section.queryByText(/no game/)).not.toBeInTheDocument();
+    });
+
+    /*
+     * What the row DOES carry beside the name is the board's TYPE — three fixed
+     * words, the widest ~50px, saying what is true of the board rather than of
+     * whichever game is passing through it. HUD + rotating is not a real state
+     * (board 1 under the HUD toggle is single by construction), so the two axes
+     * collapse to three tags with nothing lost.
+     */
+    it('tags each board with its type', () => {
+        useSettingsStore.setState({
+            scoreboards: {
+                active: [1, 2, 3],
+                aliases: {},
+                binding: {
+                    2: { playback: { mode: 'rotate' } },
+                    3: { playback: { mode: 'single' } },
+                },
+            },
+            production: withContainers(),
+        });
+        ui(<Rack />);
+        const tagOf = (name) => within(document.querySelector(`[data-rack-row="${name}"]`));
+        // Board 1 carries the local HUD (the toggle defaults on).
+        expect(tagOf('Scoreboard 1').getByText('HUD')).toBeInTheDocument();
+        expect(tagOf('Scoreboard 2').getByText('ROTATING')).toBeInTheDocument();
+        expect(tagOf('Scoreboard 3').getByText('API')).toBeInTheDocument();
+    });
+
+    // HUD is a per-board derivation, not a label: turn the global toggle off and
+    // board 1 is an API board like any other.
+    it('drops the HUD tag when the HUD toggle is off', () => {
+        useSettingsStore.setState({
+            scoreboards: { active: [1], aliases: {}, binding: {} },
+            project_rio: { hud_enabled: false },
+            production: withContainers(),
+        });
+        ui(<Rack />);
+        const row = within(document.querySelector('[data-rack-row="Scoreboard 1"]'));
+        expect(row.getByText('API')).toBeInTheDocument();
+        expect(row.queryByText('HUD')).not.toBeInTheDocument();
+    });
+
+    /*
+     * What survives the summary is the DIM, which costs no width: a board with
+     * players on it reads at full strength and an empty one recedes. That is the
+     * monitoring half of the rack's job — which boards are carrying something —
+     * and it is the half a truncated sentence served worst.
+     */
+    it('dims a board with nothing on it and leaves a carrying one lit', () => {
+        useSettingsStore.setState({
+            scoreboards: { active: [1, 2], aliases: {} },
+            production: withContainers(),
+        });
+        useStateStore.setState({
+            score: { 1: { player: { 1: { rioName: 'Alice' }, 2: { rioName: 'Bob' } } } },
+        });
+        ui(<Rack />);
+        const row = (name) => document.querySelector(`[data-rack-row="${name}"]`);
+        expect(row('Scoreboard 1').className).not.toMatch(/opacity-60/);
+        expect(row('Scoreboard 2').className).toMatch(/opacity-60/);
+    });
+
+});
+
+/*
+ * Scenes are the grouping axis, and a row exists because a SOURCE exists. The
+ * rack lists nothing that isn't really in a scene: those were six dead "—" rows
+ * pretending to be a catalog, and the section's + is the honest version.
+ */
+/*
+ * A board row says where its GAME is up to, because the rack is what the app
+ * opens onto: a board holding last night's finished game was indistinguishable
+ * from one mid-inning without opening the panel.
+ */
+describe('Rack board rows', () => {
+    it('badges a board that booted holding an old game', () => {
+        useStateStore.setState({ score: { 1: { game_id: 'yesterday', restored: true } } });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('OLD')).toBeInTheDocument();
+    });
+
+    it('badges a live board as live', () => {
+        useStateStore.setState({ score: { 1: { game_id: 'now' } } });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.getByText('LIVE')).toBeInTheDocument();
+    });
+
+    // An empty board has no lifecycle to report, and GameStageChip renders
+    // nothing for it — which is what lets the row drop it in unguarded.
+    it('badges nothing on a board with no game', () => {
+        useStateStore.setState({ score: {} });
+        ui(<Rack />);
+        const section = within(document.querySelector('[data-rack-section="rig"]'));
+        expect(section.queryByText('OLD')).not.toBeInTheDocument();
+        expect(section.queryByText('LIVE')).not.toBeInTheDocument();
+    });
+});
+
+describe('Rack scene sections', () => {
+    it('lists a scene section per OBS scene, program first and labelled', () => {
+        obs({ Game: [item(1, 'SB', SB)], Break: [] });
+        ui(<Rack />);
+        const headers = [...document.querySelectorAll('[data-rack-section]')]
+            .map(s => s.getAttribute('data-rack-section'));
+        /*
+         * MATCH BEFORE BOARDS, and the order is the point rather than an
+         * accident of render sequence: a night is authored before any board
+         * matters, and the Match row is the one that can say how much of tonight
+         * is left — so it sits at the top of the surface the app opens onto.
+         * Boards used to lead on an argument ("the fixture, the capture and the
+         * bracket all act ON a board") that Capture and Bracket have since left.
+         */
+        expect(headers).toEqual(['desk', 'rig', 'Game', 'Break']);
+        expect(screen.getByText('PROGRAM · Game')).toBeInTheDocument();
+    });
+
+    it('rows only what is actually in the scene', () => {
+        obs({ Game: [item(1, 'SB', SB)] });
+        ui(<Rack />);
+        expect(sectionRows('Game')).toEqual(['Scoreboard']);
+        expect(screen.queryByText('Lower Third')).not.toBeInTheDocument();
+    });
+
+    /*
+     * The payoff, and the reason the scene is part of a row's identity: the
+     * same overlay in two scenes is two rows, with their own air state.
+     */
+    it('rows the same overlay once per scene, with a chip each', () => {
+        obs({
+            Game: [item(1, 'SB', SB, true)],
+            Break: [item(9, 'SB', SB, true)],
+        }, { mirroredScenes: ['Game', 'Break'] });
+        ui(<Rack />);
+        // The Break section is collapsed until expanded — expanding is also
+        // what mirrors it.
+        fireEvent.click(screen.getByRole('button', { name: /Break/ }));
+        expect(sectionRows('Game')).toEqual(['Scoreboard']);
+        expect(sectionRows('Break')).toEqual(['Scoreboard']);
+        // Enabled in program is AIR; enabled in a scene nobody cut to is not.
+        const chip = (scene) => document.querySelector(`[data-rack-section="${scene}"] [data-chip-state]`)
+            .getAttribute('data-chip-state');
+        expect(chip('Game')).toBe('air');
+        expect(chip('Break')).toBe('off');
+    });
+
+    it('keeps off-air scenes collapsed until the producer opens them', () => {
+        obs({ Game: [], Break: [item(9, 'SB', SB)] });
+        ui(<Rack />);
+        expect(sectionRows('Break')).toEqual([]);
+        fireEvent.click(screen.getByRole('button', { name: /Break/ }));
+        expect(sectionRows('Break')).toEqual(['Scoreboard']);
+    });
+
+    it('marks the studio preview scene, but only while studio mode is on', () => {
+        obs({ Game: [], Staging: [] }, { studioMode: true, previewScene: 'Staging' });
+        ui(<Rack />);
+        expect(screen.getByText('PREVIEW · Staging')).toBeInTheDocument();
+        cleanup();
+        obs({ Game: [], Staging: [] }, { studioMode: false, previewScene: 'Staging' });
+        ui(<Rack />);
+        expect(screen.queryByText('PREVIEW · Staging')).not.toBeInTheDocument();
+    });
+
+    it('says a scene is empty rather than leaving the producer guessing', () => {
+        obs({ Game: [] });
+        ui(<Rack />);
+        expect(screen.getByText(/No PRSH overlays here yet/)).toBeInTheDocument();
+    });
+
+    it('offers an Add button per open scene — the replacement for dead rows', () => {
+        const onAdd = vi.fn();
+        obs({ Game: [] });
+        ui(<Rack onAdd={onAdd} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Add an overlay to Game' }));
+        expect(onAdd).toHaveBeenCalledWith('Game');
+    });
+
+    /*
+     * The Add button's inverse, on the row rather than in the header — the same
+     * treatment the BOARDS tier gives its rows, because "what is in this scene"
+     * is one question and both halves of it should read the same way.
+     */
+    it('removes a source from its own row, after a confirm', () => {
+        const remove = mockRemove();
+        obs({ Game: [item(1, 'SB', SB, true)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(remove).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        expect(remove).toHaveBeenCalledWith('Game', 1);
+    });
+
+    /*
+     * A REMOVAL IS NOT A TWO-STATE CONTROL, and it used to be staged as if it
+     * were — under visibility's own key, with the item's enabled flag as its
+     * liveValue. On a HIDDEN source that made the staged value equal the live
+     * one, so the confirm buffer discarded it as a change that cancelled itself
+     * out: the producer confirmed, pressed Go Live, and the source stayed.
+     */
+    it('stages a hidden source’s removal instead of collapsing it to a no-op', async () => {
+        const remove = mockRemove();
+        useSettingsStore.setState({
+            scoreboards: {},
+            production: { ...withContainers(), confirm: { enabled: true } },
+        });
+        obs({ Game: [item(1, 'SB', SB, false)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        // Staged, not run — and the row says so before the commit does it.
+        expect(remove).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }))
+            .toHaveAttribute('title', 'Staged — goes live on confirm');
+        await commitPending();
+        expect(remove).toHaveBeenCalledWith('Game', 1);
+    });
+
+    /*
+     * The confirm states the CONSEQUENCE, and for this action the whole
+     * consequence is whether another scene still holds the source: one that does
+     * makes this free, and one that doesn't means OBS releases the input and the
+     * transform the producer set by hand goes with it.
+     */
+    it('says the source survives when another scene holds it', () => {
+        obs({ Game: [item(1, 'SB', SB, true)], Break: [item(9, 'SB', SB)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(screen.getByText('The source stays in Break.')).toBeInTheDocument();
+    });
+
+    it('warns that the OBS transform goes with the last copy', () => {
+        obs({ Game: [item(1, 'SB', SB, true)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(screen.getByText(/only scene/)).toBeInTheDocument();
+        expect(screen.getByText(/size and position in OBS go with it/)).toBeInTheDocument();
+    });
+
+    /*
+     * THE MIRROR IS LAZY, so "no other scene has it" is only ever "none that we
+     * can see" until every scene has been expanded. The confirm hedges rather
+     * than promising a producer they are deleting a spare copy.
+     */
+    it('hedges the last-copy claim while a scene is still unmirrored', () => {
+        obs({ Game: [item(1, 'SB', SB, true)] }, {
+            scenes: ['Game', 'Break'], mirroredScenes: ['Game'],
+        });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove Scoreboard from Game' }));
+        expect(screen.getByText(/If no other scene uses it/)).toBeInTheDocument();
+        expect(screen.queryByText(/only scene/)).not.toBeInTheDocument();
+    });
+});
+
+/*
+ * Instances. A board-scoped element is one row PER BOARD in a scene, because
+ * two `?scoreboard=N` sources are two independent things with their own air
+ * state.
+ */
+describe('Rack instances', () => {
+    /*
+     * The detail is a QUALIFIER on a name already printed, so an unnamed board
+     * contributes its number and not its default alias: "Scoreboard · Scoreboard
+     * 1 · Medium" said the word twice in a ~278px row, and the repeat carried
+     * nothing. See useBoardTag.
+     */
+    it('rows a board-scoped element once per board present, named apart', () => {
+        obs({ Game: [item(1, 'A', `${SB}?scoreboard=1`), item(2, 'B', `${SB}?scoreboard=2`)] });
+        ui(<Rack />);
+        expect(rowsNamed('Scoreboard')).toEqual(['ScoreboardB1', 'ScoreboardB2']);
+    });
+
+    // The suffix is the board mechanism charging rent: with one board there is
+    // nothing to tell apart, so "Scoreboard · Scoreboard 1" is noise.
+    it('drops the board suffix when there is only one of an element', () => {
+        obs({ Game: [item(1, 'SB', SB)] });
+        ui(<Rack />);
+        expect(rowsNamed('Scoreboard')).toEqual(['Scoreboard']);
+    });
+
+    // One board in three scenes is still one thing to tell apart from nothing.
+    it('does not suffix just because a board appears in several scenes', () => {
+        obs({ Game: [item(1, 'SB', SB)], Break: [item(9, 'SB', SB)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: /Break/ }));
+        expect(rowsNamed('Scoreboard')).toEqual(['Scoreboard', 'Scoreboard']);
+    });
+
+    // A named board keeps its name — the producer chose it to mean something,
+    // and it is not a repeat of the element above it.
+    it('uses the board ALIAS in the row, not a bare number', () => {
+        useSettingsStore.setState({ scoreboards: { aliases: { 2: 'Feature Court' } } });
+        obs({ Game: [item(1, 'A', `${SB}?scoreboard=1`), item(2, 'B', `${SB}?scoreboard=2`)] });
+        ui(<Rack />);
+        expect(rowsNamed('Scoreboard')).toContain('ScoreboardFeature Court');
+    });
+
+    it('leaves a global element as one row per scene', () => {
+        useSettingsStore.setState({ scoreboards: { active: [1, 2, 3] } });
+        obs({ Game: [item(1, 'L3', LOWER)] });
+        ui(<Rack />);
+        expect(rowsNamed('Lower Third')).toEqual(['Lower Third']);
+    });
+
+    it('clicking a row selects the PLACEMENT — element, board and scene', () => {
+        obs({ Game: [item(1, 'SB', `${SB}?scoreboard=2`)] });
+        ui(<Rack />);
+        fireEvent.click(screen.getByText('Scoreboard'));
+        expect(JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.selection')))
+            .toBe('scoreboard:2@Game');
+    });
+});
+
+describe('Rack pins', () => {
+    it('pinning a row appends it to the seeded rail order', () => {
+        obs({ Game: [item(1, 'SB', SB)] });
+        ui(<Rack />);
+        // A never-touched rail starts seeded, so the seeded row already reads
+        // as pinned and the first ◇ belongs to something else.
+        const pins = screen.getAllByRole('button', { name: 'Pin to quick rail' });
+        fireEvent.click(pins[0]);
+        const rail = JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.rail'));
+        expect(rail.slice(0, RAIL_SEED.length)).toEqual(RAIL_SEED);
+        expect(rail.length).toBe(RAIL_SEED.length + 1);
+    });
+
+    // A seed pin is stored pre-scene ('scoreboard'); the row it lights up is
+    // 'scoreboard:1@Game'. Unpinning has to remove the card the producer is
+    // looking at, whatever form it is stored in.
+    it('unpins a seeded pin through the row it resolves to', () => {
+        obs({ Game: [item(1, 'SB', SB)] });
+        ui(<Rack />);
+        const unpin = screen.getAllByRole('button', { name: 'Unpin from quick rail' });
+        expect(unpin.length).toBeGreaterThan(0);
+        fireEvent.click(unpin[0]);
+        const rail = JSON.parse(fakeLocalStorage.getItem('prsh.ui.production.rail'));
+        expect(rail).not.toContain('scoreboard');
+    });
+});
+
+/*
+ * Fed elements nest under the CONTAINER they feed, because that is what is
+ * really in the scene. They used to be top-level rows with no container row at
+ * all, which was wrong three ways: two rows shared one scene item so both chips
+ * read AIR when at most one could be on screen, either row's eye toggled the
+ * other's source, and the container appeared as a row only while nothing was
+ * aimed at it.
+ */
+describe('Rack fed containers', () => {
+    const feed = (element) => useStateStore.setState({
+        production: { feed: { container: { 'callout-stage': element ? { element } : undefined } } },
+    });
+
+    it('rows the container, with what can occupy it nested underneath', () => {
+        obs({ Game: [item(3, 'Callout', CALLOUT, true)] });
+        ui(<Rack />);
+        expect(sectionRows('Game')).toEqual(['Callout Stage', 'Character Spotlight', 'Game Summary']);
+        expect(rowNested('Callout Stage')).toBe(false);
+        expect(rowNested('Character Spotlight')).toBe(true);
+        expect(rowNested('Game Summary')).toBe(true);
+    });
+
+    /*
+     * The chip that used to lie. One container holds one feed, so only the fed
+     * element it is CARRYING is on the broadcast — the other is off, however
+     * visible the source is.
+     */
+    it('gives AIR to the container and to the one feed it is carrying', () => {
+        feed('postgamecallout');
+        obs({ Game: [item(3, 'Callout', CALLOUT, true)] });
+        ui(<Rack />);
+        expect(rowChip('Callout Stage')).toBe('air');
+        expect(rowChip('Character Spotlight')).toBe('air');
+        expect(rowChip('Game Summary')).toBe('off');
+    });
+
+    it('takes every fed row off air when the container is hidden', () => {
+        feed('postgamecallout');
+        obs({ Game: [item(3, 'Callout', CALLOUT, false)] });
+        ui(<Rack />);
+        expect(rowChip('Callout Stage')).toBe('off');
+        expect(rowChip('Character Spotlight')).toBe('off');
+    });
+
+    /*
+     * A FED ROW HAS NO TRASH. Its `item` is the CONTAINER's scene item — the
+     * members nest under one source — so a remove there would delete the
+     * container out from under every member on its roster while appearing to
+     * remove one of them. Roster membership is the container panel's.
+     */
+    it('offers remove on the container and on none of its members', () => {
+        obs({ Game: [item(3, 'Callout', CALLOUT, true)] });
+        ui(<Rack />);
+        expect(screen.getByRole('button', { name: 'Remove Callout Stage from Game' }))
+            .toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Remove Character Spotlight/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Remove Game Summary/ })).toBeNull();
+    });
+
+    // The eye belongs to the source; a fed row decides only whether its content
+    // is the one on the container, which is a choice among siblings.
+    it('gives the container an eye and its children a radio', () => {
+        obs({ Game: [item(3, 'Callout', CALLOUT, true)] });
+        ui(<Rack />);
+        const container = within(document.querySelector('[data-rack-row="Callout Stage"]'));
+        const child = within(document.querySelector('[data-rack-row="Game Summary"]'));
+        expect(container.getByRole('button', { name: /Hide source/ })).toBeInTheDocument();
+        expect(child.getByRole('button', { name: /container/ })).toBeInTheDocument();
+        expect(child.queryByRole('button', { name: /source/ })).not.toBeInTheDocument();
+    });
+
+    /*
+     * THE RADIO DRIVES ITS OWN ROW'S CONTAINER.
+     *
+     * It used to resolve the container by element, which answers with the first
+     * roster naming it — and the shipped mirrored pair puts Roster and Stat Card
+     * on BOTH `roster-stats-1` and `roster-stats-2`. So every row under the
+     * right-hand container fed the left one, and the row's chip (which reads the
+     * placement) disagreed with its own radio.
+     */
+    it('feeds the container the row is nested under, not the first roster', () => {
+        obs({
+            Game: [
+                item(4, 'Left', `${PAIR}roster-stats-1`, true),
+                item(5, 'Right', `${PAIR}roster-stats-2`, true),
+            ],
+        });
+        ui(<Rack />);
+        const cards = document.querySelectorAll('[data-rack-row="Stat Card"]');
+        expect(cards).toHaveLength(2);
+        fireEvent.click(within(cards[1]).getByRole('button', { name: /Put on container/ }));
+        const fed = useStateStore.getState()?.production?.feed?.container;
+        expect(fed?.['roster-stats-1']).toBeUndefined();
+        // …and in the RIGHT container's frame of reference, which is its side.
+        expect(fed?.['roster-stats-2']).toMatchObject({ element: 'statscard', team: 2 });
+    });
+});
+
+// With OBS disconnected the rack still renders: desks are content workflows
+// that never touched OBS, and the producer is told why the scene list is empty
+// rather than shown a blank column.
+/*
+ * With no OBS the rack becomes a CATALOG instead of a mirror (./sources/placements
+ * `catalogPlacements`). It used to collapse to three desk rows and an apology,
+ * which made every stage — lower-third authoring, container rosters, scorecard
+ * bands, all the previews — unreachable because of the one thing PRSH can't do
+ * without OBS. It monitors nothing and selects everything, which is the honest
+ * half of its job.
+ */
+describe('Rack without OBS', () => {
+    it('lists what PRSH can configure instead of what is in a scene', () => {
+        ui(<Rack />);
+        expect(screen.getByText('Match')).toBeInTheDocument();       // desks stay
+        expect(screen.getByText(/OBS not connected/)).toBeInTheDocument();
+        expect(document.querySelector('[data-rack-section="catalog"]')).toBeInTheDocument();
+
+        const rows = document.querySelectorAll('[data-rack-row]');
+        expect(rows.length).toBeGreaterThan(DESKS.length);
+        expect(screen.getAllByText('Scoreboard').length).toBeGreaterThan(0);
+        expect(screen.getByText('Lower Third')).toBeInTheDocument();
+    });
+
+    /*
+     * The scoreboard's sizes are different canvases and different browser
+     * sources, and with OBS closed there is no source to read a size off — so
+     * the catalog has to OFFER them or a producer building their scenes from
+     * copied URLs can only ever get the Large board.
+     *
+     * The default size keeps the bare row: a source with no ?size= IS large, so
+     * naming it anything else would mean a pin made here opens nothing once OBS
+     * is up (see the note in catalogPlacements).
+     */
+    it('offers the scoreboard’s sizes, with the default as the bare row', () => {
+        ui(<Rack />);
+        const scoreboards = [...document.querySelectorAll('[data-rack-row="Scoreboard"]')];
+        expect(scoreboards.length).toBe(2);
+        const details = scoreboards.map(r => r.textContent);
+        expect(details.some(t => t.includes('Small'))).toBe(true);
+        // The Large row carries no size detail — it is the canonical instance.
+        expect(details.some(t => !t.includes('Small'))).toBe(true);
+    });
+
+    // The producer's containers are definitions in Settings, so they are just as
+    // real with OBS closed — and their rostered members nest under them exactly
+    // as they do on air.
+    it('rows the producer’s containers with their members nested', () => {
+        ui(<Rack />);
+        expect(screen.getByText('Callout Stage')).toBeInTheDocument();
+        const nested = [...document.querySelectorAll('[data-rack-nested]')]
+            .map(n => n.getAttribute('data-rack-row'));
+        expect(nested).toContain('Game Summary');
+        expect(nested).toContain('Character Spotlight');
+    });
+
+    /*
+     * No eye: there is no scene item to show or hide, and a dead control is worse
+     * than an absent one. Every row still SELECTS, which is the whole point.
+     */
+    it('offers no visibility control, and every chip reads unbound', () => {
+        ui(<Rack />);
+        expect(screen.queryByRole('button', { name: /show source/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /hide source/i })).not.toBeInTheDocument();
+        const chips = [...document.querySelectorAll('[data-rack-section="catalog"] [data-chip-state]')];
+        expect(chips.length).toBeGreaterThan(0);
+        expect(chips.every(c => c.getAttribute('data-chip-state') === 'unbound')).toBe(true);
+    });
+
+    // The + still opens the picker — with no scene, for its Copy URL and its
+    // container builder, both of which need nothing from OBS.
+    it('keeps an Add affordance that opens the picker with no scene', () => {
+        const onAdd = vi.fn();
+        ui(<Rack onAdd={onAdd} />);
+        const add = screen.getByRole('button', { name: /copy an overlay url/i });
+        fireEvent.click(add);
+        expect(onAdd).toHaveBeenCalledWith(null);
+    });
+});

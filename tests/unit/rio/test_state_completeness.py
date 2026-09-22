@@ -11,16 +11,23 @@ Two concerns:
      a live game writes but a completed game doesn't provide (in-play display
      state, diamond positions, starred flags, etc.).
 
-  3. Reset — the key list expected after a manual reset (mirrors what
-     resetBaseballState in ScoreControls.jsx sends). Any key written by a live
-     game that the reset omits would leave stale data visible on overlays.
+  3. Reset — `clear_game_entries` is the INVERSE of apply_parsed_game_to_state,
+     so any key a live game writes that the clear omits leaves stale data visible
+     on overlays. It is tested here, next to the writer it inverts.
+
+     This section used to keep its own copy of the list, described as mirroring
+     what the board desk sent from the browser — a third copy of one contract. The
+     two copies had drifted on `player.{T}.name`, and both missed the six
+     resurface fields, so a clear left the previous player's pronouns and socials
+     on air. Assert against the function, never a re-listing.
 """
 import pytest
 
-from server.rio.provider import (
-    RioGameDataProvider as P,
+from server.rio.provider import RioGameDataProvider as P
+from server.rio.apply import (
     apply_parsed_game_to_state,
     apply_completed_game_to_state,
+    clear_game_entries,
 )
 from server.state import State
 from server.utils.deep_dict import deep_get, deep_set
@@ -210,63 +217,67 @@ async def test_completed_clears_is_starred_for_all_slots(mock_socket):
 # ---------------------------------------------------------------------------
 # 3. Reset key coverage
 #
-# These mirror what resetBaseballState in ScoreControls.jsx sends.
+# These mirror what `resetGame` in src/routes/production/board/data.js sends.
 # We apply a live game to State (giving everything a non-default value),
 # then apply the same key→value pairs the reset button would send, and
 # assert the resulting state matches what we'd expect from a clean slate.
 # ---------------------------------------------------------------------------
 
+EXEMPT_FROM_CLEAR: set[str] = set()
+EXEMPT_FROM_CLEAR_COMPLETED: set[str] = set()
+
+
 def apply_reset(sb: int):
-    """Simulate the key/value pairs that resetBaseballState sends via setItem."""
-    base = f"score.{sb}"
-    resets = {
-        f"{base}.score_left": 0,
-        f"{base}.score_right": 0,
-        f"{base}.inning": 1,
-        f"{base}.half_inning": "Top",
-        f"{base}.outs": 0,
-        f"{base}.strikes": 0,
-        f"{base}.balls": 0,
-        f"{base}.cbRioRunnerOn1": False,
-        f"{base}.cbRioRunnerOn2": False,
-        f"{base}.cbRioRunnerOn3": False,
-        f"{base}.runner1Name": "",
-        f"{base}.runner2Name": "",
-        f"{base}.runner3Name": "",
-        f"{base}.batter": "",
-        f"{base}.pitcher": "",
-        f"{base}.batter_hand": 0,
-        f"{base}.pitcher_hand": 0,
-        f"{base}.batterSide": "right",
-        f"{base}.batter_roster_index": -1,
-        f"{base}.pitcher_roster_index": -1,
-        f"{base}.star_chance": False,
-        f"{base}.game_completed": False,
-        f"{base}.game_id": None,
-        f"{base}.home_team": 2,
-        f"{base}.innings_selected": None,
-        f"{base}.stadium": "",
-        f"{base}.tag_set": None,
-        f"{base}.away_linescore": [],
-        f"{base}.home_linescore": [],
-    }
-    for pos in ("P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"):
-        resets[f"{base}.field.{pos}"] = ""
-    for t in (1, 2):
-        resets[f"{base}.player.{t}.rioName"] = ""
-        resets[f"{base}.player.{t}.msb_team"] = ""
-        resets[f"{base}.player.{t}.rio_captainIndex"] = -1
-        resets[f"{base}.player.{t}.logo"] = ""
-        resets[f"{base}.player.{t}.port"] = None
-        resets[f"{base}.player.{t}.team_stars"] = 0
-        resets[f"{base}.player.{t}.batting_hands"] = []
-        resets[f"{base}.player.{t}.fielding_hands"] = []
-        for i in range(9):
-            resets[f"{base}.player.{t}.character.{i}.name"] = ""
-            resets[f"{base}.player.{t}.character.{i}.is_starred"] = False
-            resets[f"{base}.player.{t}.character.{i}.position"] = ""
-    for key, val in resets.items():
+    """Apply the canonical clear — the same entries the endpoint writes.
+
+    Not a re-listing: `clear_game_entries` IS the contract (server/rio/apply.py),
+    and a test that restated it could only ever pin the restatement.
+    """
+    for key, val in clear_game_entries(sb):
         deep_set(State.state, key, val)
+
+
+async def test_the_clear_covers_every_key_a_live_frame_writes(mock_socket):
+    """The completeness rule as a set comparison, not a hand-checked list.
+
+    A key added to the live batch and not to the clear is stale data left on air,
+    and this fails the moment it is added rather than whenever someone notices.
+    """
+    await apply_parsed_game_to_state(P.parse_game_data(make_game()), 1)
+    written = flatten_keys(State.state.get("score", {}).get("1", {}), "score.1")
+    cleared = {k for k, _ in clear_game_entries(1)}
+    assert written - cleared == EXEMPT_FROM_CLEAR, written - cleared
+
+
+async def test_the_clear_covers_every_key_a_completed_game_writes(mock_socket):
+    """The API half of the same rule, and it is not the same key set.
+
+    `apply_completed_game_to_state` writes facts the live path never does
+    (`date_time_start`/`_end`, `innings_played`), and an API board holding a
+    finished record is exactly the board a producer clears before the next
+    fixture — so a key only this path writes is one only this test can catch.
+    """
+    await apply_completed_game_to_state(make_completed(), 1)
+    written = flatten_keys(State.state.get("score", {}).get("1", {}), "score.1")
+    cleared = {k for k, _ in clear_game_entries(1)}
+    assert written - cleared == EXEMPT_FROM_CLEAR_COMPLETED, written - cleared
+
+
+def test_the_clear_covers_the_resurface_fields():
+    """The six that nothing cleared.
+
+    `_apply_resurface` writes every RESURFACE_MAP target on every frame, and the
+    old hand-written lists covered two of the eight — so `pronoun`, `full_name`,
+    `country`, `state`, `twitter` and `youtube` survived a clear and sat under the
+    next player's name. Derived from the map now, and asserted from the map, so a
+    new address-book field cannot reintroduce this.
+    """
+    from server.rio.resurface import RESURFACE_MAP
+
+    keys = {k for k, _ in clear_game_entries(1)}
+    for team in (1, 2):
+        for target in RESURFACE_MAP.values():
+            assert f"score.1.player.{team}.{target}" in keys, target
 
 
 async def test_reset_clears_all_in_play_fields(mock_socket):
@@ -314,8 +325,9 @@ async def test_reset_covers_all_live_game_keys(mock_socket):
     """Every key written by a live game must be covered by the reset.
 
     The reset key list in apply_reset() above is the source of truth for what
-    resetBaseballState in ScoreControls.jsx sends. This test catches any key
-    a future live-game addition writes that the reset doesn't clear.
+    the board desk's `resetGame` sends (src/routes/production/board/data.js).
+    This test catches any key a future live-game addition writes that the reset
+    doesn't clear.
     """
     parsed = P.parse_game_data(make_game())
     await apply_parsed_game_to_state(parsed, 1)
@@ -328,5 +340,5 @@ async def test_reset_covers_all_live_game_keys(mock_socket):
     uncovered = live_keys - reset_keys
     assert not uncovered, (
         f"Live game writes keys not covered by reset:\n  {sorted(uncovered)}\n"
-        "Add them to resetBaseballState in ScoreControls.jsx and apply_reset() in this test."
+        "Add them to resetGame in board/data.js and apply_reset() in this test."
     )
