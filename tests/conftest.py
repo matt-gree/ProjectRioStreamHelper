@@ -144,6 +144,7 @@ def reset_singletons():
     # Sticky across games by design (it drives the next frame's mode retry), so
     # a test that leaves it raised makes the next one retry a mode it never set.
     Provider._game_mode_unresolved = False
+    Provider._game_mode_resync = False
     # asyncio.Lock binds to the loop it first awaits under — each test gets a
     # fresh event loop, so drop any lock created under a previous test's loop.
     Provider._update_lock = None

@@ -238,3 +238,64 @@ async def test_the_completer_warmup_still_happens(monkeypatch):
     await stats_api.prime_caches()
     assert client.warmed == 1
     assert client.refreshed == 0, "startup must not force a full rebuild"
+
+
+# --- an explicit re-read brings the mode back with the game ---------------
+
+async def test_re_reading_the_same_game_restores_its_mode(monkeypatch):
+    """Clear game blanks the mode (it goes with the game); Re-read HUD brings
+    the game back. The mode is only resolved on a NEW game, so re-reading the
+    SAME game used to come back with no mode at all."""
+    from pathlib import Path
+    import server.rio.provider as provider
+    from server.bindings import clear_stats_tag
+    from server.rio.provider import RioGameDataProvider as P
+    from server.settings import Settings
+
+    frame = {"inning": 4, "away_score": 3, "home_score": 1, "game_id": "g1", "tag_set": 7}
+
+    async def value(v):
+        return v
+
+    async def fast(_id, timeout=None):
+        return "Ranked"
+
+    class Watcher:
+        hud_file = Path("/tmp/decoded.hud.json")
+        latest_game_data = frame
+        last_error = None
+
+        def reload(self):
+            return value(dict(frame))
+
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", fast)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: True)
+    monkeypatch.setattr(provider, "get_user_hud_path", lambda: value(Watcher.hud_file))
+    P.hud_watcher = Watcher()
+
+    # The game is already on the board — not a new game on the next read.
+    await P._on_hud_game_update(dict(frame))
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "Ranked"
+
+    await clear_stats_tag(1)
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == ""
+
+    await P.FetchHUDGame()
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "Ranked"
+
+
+async def test_re_reading_never_overrides_a_producers_pick(monkeypatch):
+    from server.rio.provider import RioGameDataProvider as P
+    from server.settings import Settings
+
+    async def fast(_id, timeout=None):
+        return "Ranked"
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", fast)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: True)
+    await Settings.Set("scoreboards.binding.1.stats_tag", "My Season")
+    await Settings.Set("scoreboards.binding.1.stats_tag_manual", True)
+
+    await P._apply_hud_game_mode({"tag_set": 7})
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "My Season"

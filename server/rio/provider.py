@@ -198,6 +198,12 @@ class RioGameDataProvider:
     # mode list had not arrived yet (cold start). Makes the next frame try
     # again; see _apply_hud_game_mode.
     _game_mode_unresolved: bool = False
+    # One-shot: look the game mode up again on the next frame even though it is
+    # not a new game. Set by an explicit re-read (ReloadHudPath) — the mode is
+    # only resolved on a NEW game, so Clear game (which blanks the mode with the
+    # game, bindings.clear_stats_tag) then Re-read HUD brought the game back
+    # with no mode: same game id, same inning, nothing asked again.
+    _game_mode_resync: bool = False
 
     # Player side preservation state
     _prev_player_sides: dict = {}
@@ -294,8 +300,10 @@ class RioGameDataProvider:
 
         # Both callers are the producer asking for the feed (Re-read HUD, a new
         # HUD path), so a durable release ends here rather than holding the
-        # frame they just asked for.
+        # frame they just asked for — and the game mode is looked up again,
+        # since the mode is part of the game they asked to have back.
         await cls._forget_release()
+        cls._game_mode_resync = True
 
         if cls.hud_watcher:
             if cls.hud_watcher.hud_file == new_path:
@@ -809,10 +817,15 @@ class RioGameDataProvider:
         # selectbox visually reflects the mode actually being played. Mirrors
         # the live-API assignment path, which already does this from the game's
         # mode. Done before on_new_game so its stats fetch uses the new tag.
+        resync, cls._game_mode_resync = cls._game_mode_resync, False
         if is_new_game:
             # A fresh HUD game reverts every manual name override back to the
             # HUD value (the override is scoped to a single game).
             await cls._clear_name_overrides()
+            await cls._apply_hud_game_mode(game_json)
+        elif resync:
+            # An explicit re-read of the same game (see _game_mode_resync). A
+            # producer's own pick still stands — sync_stats_tag skips it.
             await cls._apply_hud_game_mode(game_json)
         elif cls._game_mode_unresolved:
             # The new-game frame gave up on the mode within its budget (cold
