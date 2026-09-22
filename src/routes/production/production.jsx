@@ -342,13 +342,36 @@ function useDeskBodies() {
  * where a column that is always too tall costs the whole page a scrollbar it
  * never needed.
  *
- * `document.body` is the observed element on purpose: the chrome above the grid
- * is not just the console band (the OBS bar and the announcement card come and
- * go above the page entirely), so anything narrower would miss a move. The
- * write-guard is what keeps that from looping — setting the height changes the
- * body's size and fires the observer again, which then measures the same top
- * and writes nothing.
+ * WHAT MOVES THE TOP, NOT JUST WHAT GROWS THE PAGE. `document.body` alone saw
+ * only half of it: chrome above the grid GROWING lengthens the page and fires
+ * it, but chrome SHRINKING on a page that fits the window changes nothing the
+ * body can report — the root is `min-h-screen`, so the page stays exactly one
+ * window tall and the observer stays silent. The column kept its old, shorter
+ * height and clipped its own list, which is what a first OBS connect did: the
+ * "not set up" line leaves the console band, the grid moves up, and the scenes
+ * at the foot of the rack were cut off until a window resize or a restart
+ * re-measured. So every element that sits ABOVE the grid — its ancestors' and
+ * its own earlier siblings — is observed too (an observed element that
+ * unmounts reports a zero size, so a card leaving is seen as well), plus a
+ * web-font swap, which reflows the band without resizing anything observed.
+ * The write-guard is what keeps this from looping — setting the height
+ * changes the body's size and fires the observer again, which then measures
+ * the same top and writes nothing.
+ *
+ * And the columns cap THEMSELVES at the window (`max-h`, ../rack, ../rail), so
+ * a measurement that is ever stale in the other direction costs a little of
+ * the list rather than putting its foot below the fold where a pinned column
+ * can never be scrolled to.
  */
+function aboveTheGrid(el) {
+    const out = [document.body];
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+        if (n !== el) out.push(n);
+        for (let s = n.previousElementSibling; s; s = s.previousElementSibling) out.push(s);
+    }
+    return out;
+}
+
 function useConsoleColumnHeight(ref) {
     useLayoutEffect(() => {
         const el = ref.current;
@@ -370,9 +393,12 @@ function useConsoleColumnHeight(ref) {
         measure();
         window.addEventListener('resize', measure);
         const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-        ro?.observe(document.body);
+        for (const n of aboveTheGrid(el)) ro?.observe(n);
+        const fonts = document.fonts;
+        fonts?.addEventListener?.('loadingdone', measure);
         return () => {
             ro?.disconnect();
+            fonts?.removeEventListener?.('loadingdone', measure);
             window.removeEventListener('resize', measure);
         };
     }, [ref]);

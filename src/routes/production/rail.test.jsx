@@ -74,6 +74,19 @@ describe('Rail', () => {
         expect(titles).toEqual(['Stat Bar · Side 1', 'Scoreboard · Large']);
     });
 
+    it('draws ONE card per source however many stored pins name it', () => {
+        // The old ◆ appended an exact copy instead of unpinning, and a legacy
+        // bare id sits beside its canonical form: both used to draw a card, and
+        // the shared React key then painted the wrong card into the next slot.
+        const pins = ['scoreboard', 'statsbar', 'statsbar', 'scoreboard:1@Game', 'desk:match'];
+        obs({ Game: [item(1, 'SB1', `${SB}?scoreboard=1`)] });
+        ui(<Rail pins={pins} onReorder={noop} onUnpin={noop} onOpen={noop} />);
+        const titles = [...document.querySelectorAll('header')]
+            .map(h => h.querySelector('button').textContent);
+        expect(titles.filter(t => t.startsWith('Scoreboard'))).toHaveLength(1);
+        expect(new Set(titles).size).toBe(titles.length);
+    });
+
     it('drops a pin naming an element that no longer exists', () => {
         ui(<Rail pins={['scoreboard', 'gone-in-a-later-build']} onReorder={noop} onUnpin={noop} onOpen={noop} />);
         expect(document.querySelectorAll('header').length).toBe(1);

@@ -475,6 +475,17 @@ describe('togglePin — compared by what a pin RESOLVES to', () => {
         expect(togglePin([], 'scoreboard:1@Game', all)).toEqual(['scoreboard:1@Game']);
     });
 
+    it('unpins from the rail, which passes the pin as STORED', () => {
+        // The rail's ◆ hands back the stored id, not the placement it renders
+        // as; this used to append a second copy instead of removing the card.
+        expect(togglePin(['scoreboard'], 'scoreboard', all)).toEqual([]);
+        expect(togglePin(['x', 'scoreboard', 'y'], 'scoreboard', all)).toEqual(['x', 'y']);
+    });
+
+    it('writes a legacy id canonical when it pins', () => {
+        expect(togglePin([], 'scoreboard', all)).toEqual(['scoreboard:1@Game']);
+    });
+
     it('passes through a pin placements do not own (a desk)', () => {
         expect(placementTarget('desk:board:2', all)).toBe('desk:board:2');
         expect(togglePin(['desk:board:2'], 'desk:board:2', all)).toEqual([]);

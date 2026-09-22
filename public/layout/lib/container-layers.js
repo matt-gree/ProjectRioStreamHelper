@@ -20,7 +20,7 @@
  *
  *   size      [w, h] native pixel size. Omit for a member that has no native
  *             size of its own and simply fills whatever it is given.
- *   mount     (box, ctx, sel) => { update, dispose, replay? }, sync or async —
+ *   mount     (box, ctx, sel) => { update, dispose, replay?, idle? }, sync or async —
  *             `container-members.js` reaches every real mount through a dynamic
  *             import, so a container loads only what it stands up. `box` is the
  *             sized, centered element to render into; `ctx` is whatever the
@@ -28,6 +28,12 @@
  *             that caused this layer to be built, for a member that binds its
  *             frame of reference at MOUNT time rather than per update. Pair
  *             that with `identity` or the layer outlives the scope it bound.
+ *             `idle` is called once the member has faded OUT (swapped for
+ *             another, or the feed cleared). A layer is retained, not torn down,
+ *             so a member that animates on its own clock — the spotlight's 3D
+ *             spray orbit renders every frame — would otherwise go on drawing,
+ *             invisibly, on the streamer's GPU for the rest of the night.
+ *             Returning, the member gets `update` then `replay` as usual.
  *   payload   (sel) => second argument for `mount.update`. Defaults to the
  *             selection itself; the hit visualizer takes a bare board number.
  *   identity  (sel) => layer key, when one member needs more than one layer.
@@ -285,7 +291,19 @@ export function createLayers({
         return entry;
     }
 
+    // Tell the member that just faded out that nobody can see it. After the
+    // fade, not at its start, so the outgoing frame doesn't jump mid-dissolve;
+    // skipped if it was brought back up in the meantime.
+    function idleLater(entry) {
+        if (typeof entry.mount.idle !== 'function') return;
+        setTimeout(() => {
+            if (disposed || activeKey === entry.key) return;
+            try { entry.mount.idle(); } catch (e) { warn(`"${entry.element}" failed to idle:`, e); }
+        }, fadeMs);
+    }
+
     function activate(key) {
+        const outgoing = activeKey !== null && activeKey !== key ? layers.get(activeKey) : null;
         for (const [k, entry] of layers) {
             const on = k === key;
             entry.layer.dataset.active = on ? '1' : '0';
@@ -295,6 +313,7 @@ export function createLayers({
             if (on) { zTop += 1; entry.layer.style.zIndex = String(zTop); }
         }
         activeKey = key;
+        if (outgoing) idleLater(outgoing);
     }
 
     /*
@@ -355,8 +374,10 @@ export function createLayers({
     // transparent, which is the honest rendering of an empty container.
     function clear() {
         if (activeKey === null) return;
+        const outgoing = layers.get(activeKey);
         for (const entry of layers.values()) entry.layer.dataset.active = '0';
         activeKey = null;
+        if (outgoing) idleLater(outgoing);
     }
 
     function dispose() {

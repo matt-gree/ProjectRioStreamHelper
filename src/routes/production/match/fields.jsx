@@ -1,4 +1,6 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { useParticipantsStore } from '../../../context/participants';
 import { updateMatch } from '../../../context/match';
 import { stageOrRun } from '../../../context/staging';
 import ParticipantPicker from '../../../components/ParticipantPicker';
@@ -32,8 +34,26 @@ export const DraftSide = memo(function DraftSide({ m, side, draft, className }) 
     const sides = useSideLabels();
     const live = draft.match?.player?.[side] ?? draft.match?.player?.[String(side)] ?? {};
     const pick = draft.val(`player.${side}.pick`, null);
-    const name = pick ? (pick._name || pick.rioName) : (live.rioName || '');
     const selectedId = pick ? pick.participantId : (live.participantId || null);
+    /*
+     * A PERSON WITH NO RIO ID IS STILL A PICK. The side stores `rioName: ''`
+     * for them, and the picker showed `live.rioName` — so a committed pick
+     * drew the "Pick participant…" placeholder and read as a selection that
+     * had not taken. The row is resolved by id so the name shows, and the
+     * missing Rio ID is SAID, because it is a real fault: the Rio ID is what
+     * every live path joins on (sides, stats, the identity check), so this
+     * person can be named on the fixture but never recognised in a game.
+     */
+    const loadPeople = useParticipantsStore(s => s.load);
+    const person = useParticipantsStore(s => (selectedId
+        ? s.participants.find(p => p.id === selectedId) ?? null
+        : null));
+    useEffect(() => { if (selectedId) loadPeople(); }, [selectedId, loadPeople]);
+    const personName = person?.display?.tag || person?.identities?.rioName || '';
+    const name = pick ? (pick._name || pick.rioName) : (live.rioName || personName);
+    const noRioId = pick
+        ? !pick.rioName
+        : !!person && !person.identities?.rioName;
     const captain = draft.val(`player.${side}.captain`, live.captain || '');
     const port = draft.val(`player.${side}.port`, live.port ?? null);
 
@@ -88,10 +108,18 @@ export const DraftSide = memo(function DraftSide({ m, side, draft, className }) 
                         onResolve={onPick}
                         placeholder="Pick participant…"
                         className={cn('h-10 rounded-md border-border/70 bg-muted/40 px-2.5 text-base',
-                            name && 'font-semibold')}
+                            name && 'font-semibold', noRioId && 'border-amber-500/50')}
                     />
                 </div>
             </Group>
+            {noRioId && (
+                <Text size="xs" className="text-amber-200/90" data-no-rio-id={side}>
+                    No Rio ID — live games can’t recognise {name || 'this player'}.{' '}
+                    <Link to="/player_list" className="underline underline-offset-2 hover:text-amber-100">
+                        Add one in the Address Book
+                    </Link>
+                </Text>
+            )}
             {/* Loadout — two one-touch boards on a matched 24px cell, so they
                 stand the same height and read as one row, centred under the
                 name they belong to.

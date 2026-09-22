@@ -23,6 +23,8 @@ def _reset_module_cache(monkeypatch):
     monkeypatch.setattr(stats_api, "_game_modes", {}, raising=False)
     monkeypatch.setattr(stats_api, "_game_modes_lock", None, raising=False)
     monkeypatch.setattr(stats_api, "_cache_refresh_lock", None, raising=False)
+    monkeypatch.setattr(stats_api, "_modes_task", None, raising=False)
+    monkeypatch.setattr(stats_api, "_modes_failed_at", None, raising=False)
     yield
 
 
@@ -238,3 +240,160 @@ async def test_the_completer_warmup_still_happens(monkeypatch):
     await stats_api.prime_caches()
     assert client.warmed == 1
     assert client.refreshed == 0, "startup must not force a full rebuild"
+
+
+# --- an explicit re-read brings the mode back with the game ---------------
+
+async def test_re_reading_the_same_game_restores_its_mode(monkeypatch):
+    """Clear game blanks the mode (it goes with the game); Re-read HUD brings
+    the game back. The mode is only resolved on a NEW game, so re-reading the
+    SAME game used to come back with no mode at all."""
+    from pathlib import Path
+    import server.rio.provider as provider
+    from server.bindings import clear_stats_tag
+    from server.rio.provider import RioGameDataProvider as P
+    from server.settings import Settings
+
+    frame = {"inning": 4, "away_score": 3, "home_score": 1, "game_id": "g1", "tag_set": 7}
+
+    async def value(v):
+        return v
+
+    async def fast(_id, timeout=None):
+        return "Ranked"
+
+    class Watcher:
+        hud_file = Path("/tmp/decoded.hud.json")
+        latest_game_data = frame
+        last_error = None
+
+        def reload(self):
+            return value(dict(frame))
+
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", fast)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: True)
+    monkeypatch.setattr(provider, "get_user_hud_path", lambda: value(Watcher.hud_file))
+    P.hud_watcher = Watcher()
+
+    # The game is already on the board — not a new game on the next read.
+    await P._on_hud_game_update(dict(frame))
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "Ranked"
+
+    await clear_stats_tag(1)
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == ""
+
+    await P.FetchHUDGame()
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "Ranked"
+
+
+async def test_re_reading_never_overrides_a_producers_pick(monkeypatch):
+    from server.rio.provider import RioGameDataProvider as P
+    from server.settings import Settings
+
+    async def fast(_id, timeout=None):
+        return "Ranked"
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", fast)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: True)
+    await Settings.Set("scoreboards.binding.1.stats_tag", "My Season")
+    await Settings.Set("scoreboards.binding.1.stats_tag_manual", True)
+
+    await P._apply_hud_game_mode({"tag_set": 7})
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "My Season"
+
+
+# --- a Project Rio that is down must not be asked once per frame ----------
+
+class _Failing(_Client):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
+    def list_game_modes(self, active=False):
+        self.calls += 1
+        raise ConnectionError("rio is down")
+
+
+async def test_a_failed_mode_fetch_is_not_repeated_by_every_caller(monkeypatch):
+    """Each HUD frame of a cold-start game and each ongoing-pool tick finds the
+    cache empty. Without a backoff every one of them re-asked a Rio that had
+    just failed — one request per frame per streamer while it was down."""
+    client = _Failing()
+    monkeypatch.setattr(stats_api, "_get_client", lambda: client)
+
+    for _ in range(10):
+        assert await stats_api.fetch_game_modes() == {}
+    assert client.calls == 1
+
+    # Past the backoff it asks again — once.
+    monkeypatch.setattr(stats_api, "MODES_RETRY_AFTER", 0.0)
+    await stats_api.fetch_game_modes()
+    assert client.calls == 2
+
+
+async def test_an_explicit_refresh_ignores_the_backoff(monkeypatch):
+    client = _Failing()
+    monkeypatch.setattr(stats_api, "_get_client", lambda: client)
+    monkeypatch.setattr(stats_api, "refresh_completer_cache", _noop)
+    await stats_api.fetch_game_modes()
+    await stats_api.fetch_game_modes(force=True)   # the producer's Refresh
+    assert client.calls == 2
+
+
+async def _noop():
+    return None
+
+
+async def test_budgeted_resolves_share_one_in_flight_fetch(monkeypatch):
+    """A run of HUD frames waits on ONE request, not one queued per frame."""
+    client = _Client(list_delay=0.2)
+    calls = []
+    real = client.list_game_modes
+
+    def counted(active=False):
+        calls.append(1)
+        return real(active)
+    client.list_game_modes = counted
+    monkeypatch.setattr(stats_api, "_get_client", lambda: client)
+
+    for _ in range(5):
+        assert await stats_api.resolve_tag_set_name(7, timeout=0) == ""
+    await asyncio.sleep(0.4)
+    assert len(calls) == 1
+    assert await stats_api.resolve_tag_set_name(7, timeout=0) == "Ranked"
+
+
+async def test_a_retry_frame_does_not_wait_on_the_api(monkeypatch):
+    """The new-game frame spends the budget; the frames after it must not each
+    spend it again, or an unreachable Rio is a stall on every frame."""
+    from server.rio.provider import RioGameDataProvider as P
+
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    seen = []
+
+    async def resolve(_id, timeout=None):
+        seen.append(timeout)
+        return ""
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", resolve)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: False)
+
+    await P._apply_hud_game_mode({"tag_set": 7}, budget=0)
+    assert seen == [0]
+
+
+def test_the_rio_session_carries_a_default_timeout():
+    """pyrio builds its session with none, so a hung Rio held a worker thread —
+    from the pool the HUD file read shares — forever."""
+    seen = {}
+
+    class _Session:
+        def request(self, method, url, **kw):
+            seen.update(kw)
+
+    s = _Session()
+    stats_api._with_default_timeout(s)
+    s.request("GET", "u")
+    assert seen["timeout"] == stats_api.HTTP_TIMEOUT
+    s.request("GET", "u", timeout=3)
+    assert seen["timeout"] == 3

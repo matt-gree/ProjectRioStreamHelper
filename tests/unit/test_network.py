@@ -43,3 +43,36 @@ def test_addresses_never_offer_loopback():
     for ip in lan_addresses():
         assert not ip.startswith("127.")
         assert ip != "0.0.0.0"
+
+
+class _FakeSock:
+    def __init__(self, ip): self.ip = ip
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def connect(self, addr): pass
+    def getsockname(self): return (self.ip, 0)
+
+
+def _hostname_resolves_to(monkeypatch, *ips):
+    import server.network as net
+    monkeypatch.setattr(net.socket, "getaddrinfo",
+                        lambda *a, **k: [(2, 2, 17, "", (ip, 0)) for ip in ips])
+
+
+def test_a_machine_on_two_interfaces_offers_one_address(monkeypatch):
+    # Wi-Fi and Ethernet on the same subnet: the hostname resolves to both,
+    # and the card must still show one URL — the routed one.
+    import server.network as net
+    monkeypatch.setattr(net.socket, "socket", lambda *a, **k: _FakeSock("192.168.1.75"))
+    _hostname_resolves_to(monkeypatch, "127.0.0.1", "192.168.1.78", "192.168.1.75")
+    assert lan_addresses() == ["192.168.1.75"]
+
+
+def test_hostname_lookup_is_only_the_fallback(monkeypatch):
+    import server.network as net
+
+    def no_route(*a, **k):
+        raise OSError("no route")
+    monkeypatch.setattr(net.socket, "socket", no_route)
+    _hostname_resolves_to(monkeypatch, "127.0.0.1", "10.0.0.4", "10.0.0.9")
+    assert lan_addresses() == ["10.0.0.4"]

@@ -26,28 +26,34 @@ class Network:
 
 
 def lan_addresses() -> list[str]:
-    """This machine's LAN IPv4 address(es), best first.
+    """The address a phone on this network should open — ONE of them.
 
     The UDP-connect trick asks the OS which interface would route outward —
-    no packet is sent. Hostname resolution is the fallback (and on a machine
-    with no route it is all there is). Loopback is never an answer: it is the
-    one address a phone cannot use.
+    no packet is sent — and that is the answer. Hostname resolution is only
+    the fallback (on a machine with no route it is all there is), never a
+    second answer beside it: a laptop on Wi-Fi AND Ethernet resolves its
+    hostname to both, both on the same subnet, and the card listed two URLs
+    for one computer with nothing saying why or which to use. Loopback is
+    never an answer: it is the one address a phone cannot use.
+
+    A list, still, so "none found" stays an empty one.
     """
-    found: list[str] = []
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("10.255.255.255", 1))
-            found.append(s.getsockname()[0])
+            ip = s.getsockname()[0]
+        if _usable(ip):
+            return [ip]
     except OSError:
         pass
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            found.append(info[4][0])
+            if _usable(info[4][0]):
+                return [info[4][0]]
     except OSError:
         pass
-    out: list[str] = []
-    for ip in found:
-        if ip.startswith("127.") or ip == "0.0.0.0" or ip in out:
-            continue
-        out.append(ip)
-    return out
+    return []
+
+
+def _usable(ip: str) -> bool:
+    return not (ip.startswith("127.") or ip == "0.0.0.0")

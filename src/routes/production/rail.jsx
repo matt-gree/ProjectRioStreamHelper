@@ -133,19 +133,36 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
     // is how a pin written before scenes were the axis, or against a board or
     // scene since removed, still draws a working card. Pins naming a source that
     // no longer exists anywhere resolve to nothing and drop out.
-    const entries = useMemo(() => pins.map((id) => {
-        // A pin outlives the board it was made against, so a removed board's
-        // card drops out exactly as a placement that no longer resolves does —
-        // resolved at read time, never rewritten (the stored pin stays
-        // removable).
-        const sb = boardOfDeskId(id);
-        if (sb != null) return active.includes(sb) ? { id, title: boardLabel(sb) } : null;
-        if (deskQuickFace(id)) return { id, title: DESK_TITLES[id] ?? id };
-        const placement = resolvePlacement(id, placements, defs);
-        if (!placement || !isPinnable(placement.element)) return null;
-        const { name, detail } = label(placement);
-        return { id, placement, title: detail ? `${name} · ${detail}` : name };
-    }).filter(Boolean), [pins, placements, label, boardLabel, active, defs]);
+    //
+    // ONE CARD PER TARGET, KEYED BY THE TARGET. A stored rail can hold the same
+    // source twice — the rail's ◆ used to APPEND a copy rather than unpin
+    // (togglePin, ../placements), and a legacy `scoreboard` beside a canonical
+    // `scoreboard:1@Game` is two strings for one card. Rendered as-is, two cards
+    // shared a React key, and React then reconciled the wrong card into the
+    // neighbouring slot: `lowerthird, lowerthird, desk:match` drew three Lower
+    // Thirds and no Match, and every unpin reshuffled which card looked doubled.
+    // The first stored pin for a target wins the slot; unpinning it removes
+    // every copy, since togglePin compares by target too.
+    const entries = useMemo(() => {
+        const seen = new Set();
+        return pins.map((id) => {
+            // A pin outlives the board it was made against, so a removed board's
+            // card drops out exactly as a placement that no longer resolves does —
+            // resolved at read time, never rewritten (the stored pin stays
+            // removable).
+            const sb = boardOfDeskId(id);
+            if (sb != null) return active.includes(sb) ? { id, key: id, title: boardLabel(sb) } : null;
+            if (deskQuickFace(id)) return { id, key: id, title: DESK_TITLES[id] ?? id };
+            const placement = resolvePlacement(id, placements, defs);
+            if (!placement || !isPinnable(placement.element)) return null;
+            const { name, detail } = label(placement);
+            return { id, key: placement.id, placement, title: detail ? `${name} · ${detail}` : name };
+        }).filter((e) => {
+            if (!e || seen.has(e.key)) return false;
+            seen.add(e.key);
+            return true;
+        });
+    }, [pins, placements, label, boardLabel, active, defs]);
 
     // Reorder by pin ID. `pins` holds every stored pin; `entries` holds only the
     // ones that still resolve, so the two index differently the moment a pin goes
@@ -209,7 +226,7 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
             className={cn(
                 'flex flex-col h-[calc(100vh-13rem)]',
                 'lg:col-start-2 lg:h-auto',
-                'xl:col-start-3 xl:sticky xl:top-4 xl:h-[var(--console-h)]',
+                'xl:col-start-3 xl:sticky xl:top-4 xl:h-[var(--console-h)] xl:max-h-[calc(100dvh-2rem)]',
             )}
         >
             <ScrollArea className="min-h-0 flex-1">
@@ -233,7 +250,7 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
                         </div>
                     ) : entries.map((entry, i) => (
                         <div
-                            key={entry.id}
+                            key={entry.key}
                             draggable
                             onDragStart={() => setDragging(entry.id)}
                             onDragEnd={() => setDragging(null)}

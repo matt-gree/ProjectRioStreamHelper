@@ -31,8 +31,9 @@
  * sameness something a producer had to maintain by hand: two names framing a
  * scoreboard matched only while their OBS dimensions matched, and the stage's
  * "make this the same size as the other one" row existed to repair one pair at
- * a time. There is nothing left to repair, because there is no longer any
- * per-source input to the size.
+ * a time. There is nothing left to repair, because the only per-source input
+ * to the size is one a producer makes on purpose: a Redraw of a stretched
+ * source, which keeps the size the name looked (see SIZE_PARAMS).
  *
  * THE FRAME ONLY EVER CLAMPS DOWN. `fitToHeight` and `fitToWidth` shrink a
  * requested size that will not fit the box, and neither one can grow it. So the
@@ -340,6 +341,77 @@ export function resolvePrefixSize(setting) {
     return Math.min(Math.max(n, MIN_PREFIX_SIZE), MAX_PREFIX_SIZE);
 }
 
+/*
+ * ── ONE SOURCE MAY CARRY ITS OWN SIZE, AND IT RIDES THE SOURCE'S URL ──
+ *
+ * The shared size is still the rule; this is the exception a producer makes by
+ * DRAGGING a source bigger and pressing Redraw. Before the redraw OBS was
+ * resampling the texture, so the name looked 1.5× bigger; a redraw that put the
+ * type back to the shared 48px in the bigger box read as the app undoing the
+ * drag. So the redraw keeps what was on screen — it multiplies this source's
+ * sizes by the stretch and writes them here (stage/resolution.jsx) — and the
+ * other Player Names keep the shared size.
+ *
+ * On the URL rather than in Settings for the same reason as `?intro=0`: it is a
+ * fact about ONE OBS source, it survives restarts with that source, and it goes
+ * away with it. A container member has no URL of its own and never carries one.
+ */
+export const SIZE_PARAMS = { nameSize: 'nameSize', prefixSize: 'prefixSize' };
+
+// This source's own sizes, or null for each it doesn't carry.
+export function sourceSizeOverride(search) {
+    const params = new URLSearchParams(search || '');
+    const read = (key, resolve) => {
+        const raw = params.get(key);
+        return raw == null || raw === '' ? null : resolve(raw);
+    };
+    return {
+        nameSize: read(SIZE_PARAMS.nameSize, resolveNameSize),
+        prefixSize: read(SIZE_PARAMS.prefixSize, resolvePrefixSize),
+    };
+}
+
+function withSearch(url, edit) {
+    try {
+        const u = new URL(url);
+        edit(u.searchParams);
+        return u.toString();
+    } catch {
+        return null;
+    }
+}
+
+/*
+ * The URL a Player Name source should have after a redraw that scales it by
+ * `factor`: whatever it draws at NOW (its own size, else the shared one) times
+ * the factor, so a second drag-and-redraw compounds from what is on screen.
+ * Rounded to whole px (the setting's step) and clamped like any typed value.
+ *
+ * Exact under a clamp, which is why this is a multiply and not a measurement:
+ * both clamps are linear in the frame, and the redraw scales the frame by the
+ * same factor, so a name that was clamped before is clamped by the same
+ * proportion after — the drawn size still comes out ×factor.
+ */
+export function scaleSourceSizes(url, factor, shared = {}) {
+    const f = Number(factor);
+    if (!url || !(f > 0)) return null;
+    return withSearch(url, (q) => {
+        const own = sourceSizeOverride(q.toString());
+        const name = own.nameSize ?? resolveNameSize(shared.nameSize ?? DEFAULT_NAME_SIZE);
+        const prefix = own.prefixSize ?? resolvePrefixSize(shared.prefixSize ?? DEFAULT_PREFIX_SIZE);
+        q.set(SIZE_PARAMS.nameSize, String(Math.round(resolveNameSize(name * f))));
+        q.set(SIZE_PARAMS.prefixSize, String(Math.round(resolvePrefixSize(prefix * f))));
+    });
+}
+
+// The URL with this source's own sizes removed — back to the shared ones.
+export function clearSourceSizes(url) {
+    return withSearch(url, (q) => {
+        q.delete(SIZE_PARAMS.nameSize);
+        q.delete(SIZE_PARAMS.prefixSize);
+    });
+}
+
 /**
  * The prefix as a PROPORTION of the name — the one number the card is drawn
  * from once the two sizes are known.
@@ -488,7 +560,10 @@ export function previewScale(frameHeight, nativeHeight) {
     return h / n;
 }
 
-export function mountPlayerName({ host, sb = 1, team = 1 }) {
+export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
+    // This source's own sizes, when it carries them (see SIZE_PARAMS). They
+    // beat the shared settings for this source alone.
+    const own = sizes || { nameSize: null, prefixSize: null };
     injectCss();
     const SCOREBOARD = Number(sb) || 1;
     const TEAM = Number(team) === 2 ? 2 : 1;
@@ -607,8 +682,10 @@ export function mountPlayerName({ host, sb = 1, team = 1 }) {
         if (tagColor) document.documentElement.style.setProperty('--tag-color', tagColor);
         else document.documentElement.style.removeProperty('--tag-color');
 
-        nameSize = resolveNameSize(g(settings, 'overlays.playername.nameSize', DEFAULT_NAME_SIZE));
-        prefixSize = resolvePrefixSize(g(settings, 'overlays.playername.prefixSize', DEFAULT_PREFIX_SIZE));
+        nameSize = own.nameSize
+            ?? resolveNameSize(g(settings, 'overlays.playername.nameSize', DEFAULT_NAME_SIZE));
+        prefixSize = own.prefixSize
+            ?? resolvePrefixSize(g(settings, 'overlays.playername.prefixSize', DEFAULT_PREFIX_SIZE));
         const align = resolveAlign(g(settings, 'overlays.playername.align', 'auto'), TEAM);
         prefixPosition = resolvePrefixPosition(g(settings, 'overlays.playername.prefixPosition', 'above'));
         box.className = `pn-box pn-a-${align} pn-p-${prefixPosition}`;

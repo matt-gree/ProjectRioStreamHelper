@@ -92,7 +92,12 @@ async def main() -> int:
         host=host,
         port=port,
         reload=Settings.Get("dev", False),
-        loop=asyncio.get_event_loop()
+        loop=asyncio.get_event_loop(),
+        # Without a bound, uvicorn waits on every open connection before the
+        # lifespan shutdown runs — and OBS keeps browser sources connected, so
+        # the tray's 5s join expired first and the shutdown (gc-overlay stop,
+        # the final state save) never ran at all.
+        timeout_graceful_shutdown=2,
     ))
     global _uvicorn_server
     _uvicorn_server = uvi
@@ -306,6 +311,14 @@ if __name__ == '__main__':
             # before forcing exit. Without this, macOS shows "Not Responding"
             # while the daemon thread is forcibly torn down.
             t.join(timeout=5.0)
+            # A shutdown that overran the join never reached ControllerOverlay.
+            # Stop — and os._exit runs nothing — so end the child here or it is
+            # orphaned holding its port (a no-op if shutdown already stopped it).
+            try:
+                from server.controller_overlay import ControllerOverlay
+                ControllerOverlay.KillNow()
+            except Exception:
+                pass
             os._exit(0)
         else:
             # Windows: show a persistent taskbar window instead of a tray icon.

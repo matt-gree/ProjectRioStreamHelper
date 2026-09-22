@@ -190,6 +190,12 @@ export default function ParticipantPicker({
                                             {rowSub(p) && (
                                                 <span className="truncate text-xs text-muted-foreground">{rowSub(p)}</span>
                                             )}
+                                            {/* Still pickable — the Rio ID is what live games
+                                                join on, so say it is missing before the pick
+                                                rather than after. */}
+                                            {!p.identities?.rioName && (
+                                                <span className="truncate text-xs text-amber-300/80">No Rio ID</span>
+                                            )}
                                         </span>
                                     </CommandItem>
                                 ))}

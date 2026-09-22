@@ -553,7 +553,14 @@ export function createTheater({ stage }) {
     });
   }
 
-  function stopShow() { runSeq++; killBeat(); }
+  // Park the camera too: once the finale reaches the spray chart its idle
+  // orbit renders EVERY frame, and a stopped show that left it running kept a
+  // hidden spotlight drawing WebGL until the source was unloaded.
+  function stopShow() {
+    runSeq++;
+    killBeat();
+    if (renderer) { try { renderer.clearHit(); } catch { /* ignore */ } }
+  }
 
   function dispose() {
     stopShow();

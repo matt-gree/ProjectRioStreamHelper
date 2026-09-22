@@ -14,6 +14,9 @@ import {
     previewScale,
     sizeNote,
     heightForNameSize,
+    sourceSizeOverride,
+    scaleSourceSizes,
+    clearSourceSizes,
     DEFAULT_NAME_SIZE,
     MIN_NAME_SIZE,
     MAX_NAME_SIZE,
@@ -380,5 +383,64 @@ describe('NOTHING is reserved for a prefix that is off', () => {
      */
     it('still reserves the row for a participant with no tag, while the setting is on', () => {
         expect(stackHeight('above')).toBeGreaterThan(stackHeight('off'));
+    });
+});
+
+
+/*
+ * ONE SOURCE MAY CARRY ITS OWN SIZE. A redraw of a stretched Player Name keeps
+ * the size the name LOOKED — the producer dragged the box bigger to get a bigger
+ * name — by multiplying this source's sizes by the stretch onto its URL. The
+ * shared setting stays the rule for every other source.
+ */
+describe('a source’s own size, on its URL', () => {
+    const URL_ = 'http://127.0.0.1:5260/layout/scoreboard1/playername.html?scoreboard=1&team=1';
+
+    it('reads nothing off a URL that carries none', () => {
+        expect(sourceSizeOverride('?scoreboard=1&team=1')).toEqual({ nameSize: null, prefixSize: null });
+    });
+
+    it('reads, and clamps like a typed value', () => {
+        expect(sourceSizeOverride('?nameSize=72&prefixSize=36')).toEqual({ nameSize: 72, prefixSize: 36 });
+        expect(sourceSizeOverride('?nameSize=9999').nameSize).toBe(MAX_NAME_SIZE);
+    });
+
+    it('scales the SHARED size by the stretch when the source has none of its own', () => {
+        const next = new URL(scaleSourceSizes(URL_, 1.5, { nameSize: 48, prefixSize: 24 }));
+        expect(next.searchParams.get('nameSize')).toBe('72');
+        expect(next.searchParams.get('prefixSize')).toBe('36');
+        // Everything else on the URL is left exactly as it was.
+        expect(next.searchParams.get('team')).toBe('1');
+        expect(next.searchParams.get('scoreboard')).toBe('1');
+    });
+
+    it('compounds from its OWN size on a second drag-and-redraw', () => {
+        const once = scaleSourceSizes(URL_, 1.5, { nameSize: 48, prefixSize: 24 });
+        const twice = new URL(scaleSourceSizes(once, 2, { nameSize: 48, prefixSize: 24 }));
+        expect(twice.searchParams.get('nameSize')).toBe('144');
+    });
+
+    it('shrinks with a source dragged smaller, and rounds to whole px', () => {
+        const next = new URL(scaleSourceSizes(URL_, 0.7, { nameSize: 48, prefixSize: 24 }));
+        expect(next.searchParams.get('nameSize')).toBe('34');
+        expect(next.searchParams.get('prefixSize')).toBe('17');
+    });
+
+    it('falls back to the defaults with no shared settings', () => {
+        const next = new URL(scaleSourceSizes(URL_, 2));
+        expect(next.searchParams.get('nameSize')).toBe(String(DEFAULT_NAME_SIZE * 2));
+    });
+
+    it('declines what it cannot do', () => {
+        expect(scaleSourceSizes('', 1.5)).toBeNull();
+        expect(scaleSourceSizes('not a url', 1.5)).toBeNull();
+        expect(scaleSourceSizes(URL_, null)).toBeNull();
+    });
+
+    it('clears back to the shared size, touching nothing else', () => {
+        const cleared = new URL(clearSourceSizes(`${URL_}&nameSize=72&prefixSize=36`));
+        expect(cleared.searchParams.has('nameSize')).toBe(false);
+        expect(cleared.searchParams.has('prefixSize')).toBe(false);
+        expect(cleared.searchParams.get('team')).toBe('1');
     });
 });

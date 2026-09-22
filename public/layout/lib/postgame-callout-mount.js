@@ -707,6 +707,10 @@ export function mountPostgameCallout({ host }) {
   // decides WHEN — one show, on a frame that is actually painted.
   function replay() { gate.requestReveal(); }
   function setShown(shown) { gate.setShown(shown); }
+  // Faded out of a container (container-layers.js): stop the walkthrough and the
+  // 3D orbit behind it. Forgetting the key makes the next `update` rebuild, so
+  // coming back plays the show from the top rather than from a parked camera.
+  function idle() { theater.stopShow(); prevKey = ''; }
 
   // Snap dark on hide, one clean show per reveal — the same sequencing the band
   // elements get. `restingIsShown: false`: the walkthrough IS the graphic, so
@@ -724,7 +728,7 @@ export function mountPostgameCallout({ host }) {
     if (root.parentNode) root.parentNode.removeChild(root);
   }
 
-  return { update, dispose, replay, setShown };
+  return { update, dispose, replay, setShown, idle };
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────

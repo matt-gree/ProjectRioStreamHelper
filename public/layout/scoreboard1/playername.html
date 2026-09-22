@@ -34,7 +34,7 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
   <script type="module">
-    import { mountPlayerName } from '/layout/lib/playername-mount.js';
+    import { mountPlayerName, sourceSizeOverride } from '/layout/lib/playername-mount.js';
 
     const params = new URLSearchParams(window.location.search);
     const SB = parseInt(params.get('scoreboard')) || 1;
@@ -43,7 +43,12 @@
     document.body.dataset.refW = 800;
     document.body.dataset.refH = 200;
 
-    const pn = mountPlayerName({ host: document.getElementById('host'), sb: SB, team: TEAM });
+    // ?nameSize= / ?prefixSize= — this source's own sizes, written by a Redraw
+    // (see SIZE_PARAMS in the mount). Absent, the shared settings apply.
+    const pn = mountPlayerName({
+      host: document.getElementById('host'), sb: SB, team: TEAM,
+      sizes: sourceSizeOverride(window.location.search),
+    });
 
     OverlayBase.init({
       render: () => pn.update(OverlayBase.state, OverlayBase.settings),

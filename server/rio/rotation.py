@@ -14,6 +14,11 @@ from server.settings import Settings
 from server.state import State
 from server.utils.tasks import spawn
 
+# The console's fields clamp to these (`board/rotating.jsx`); the server holds
+# the same floor so no settings value can turn a loop into a spin.
+MIN_ADVANCE_INTERVAL = 5.0
+MIN_REFRESH_INTERVAL = 10.0
+
 
 async def _mirror_to_state(sb_id: int, **fields):
     """Mirror pool/playback fields into State so overlays can subscribe to
@@ -409,6 +414,10 @@ class PoolState:
         """
         refresh_interval = self.pool_cfg.get("refresh_interval", 0) or 0
         if refresh_interval > 0:
+            # Floored here as well as in the console's field: a hand-edited or
+            # scripted 1 would be one Project Rio query per filter chip per
+            # second, per board, all night.
+            refresh_interval = max(refresh_interval, MIN_REFRESH_INTERVAL)
             self.refresh_task = asyncio.create_task(self._refresh_loop(refresh_interval))
 
         try:
@@ -420,7 +429,9 @@ class PoolState:
                     self.sb_id, self.game_ids[self.current_index] if self.game_ids else None,
                 )
             while True:
-                await asyncio.sleep(self.interval)
+                # A 0 here is a loop that re-applies and rewrites settings.json
+                # as fast as the event loop turns — floor it like the field does.
+                await asyncio.sleep(max(self.interval or 0, MIN_ADVANCE_INTERVAL))
                 try:
                     await self.advance(1)
                 except Exception:
