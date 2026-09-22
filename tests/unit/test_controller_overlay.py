@@ -284,3 +284,49 @@ def test_the_child_runs_unbuffered():
 def test_the_child_inherits_the_rest_of_the_environment(monkeypatch):
     monkeypatch.setenv("PRSH_TEST_MARKER", "kept")
     assert co._child_env()["PRSH_TEST_MARKER"] == "kept"
+
+
+# ── 4. the orphan a previous PRSH left on the port ──────────────────────────
+#
+# gc-overlay outlives a PRSH that exits without its lifespan shutdown, and then
+# holds the configured port against the next launch. A pidfile names the process
+# PRSH started, so a port held by THAT process is reclaimed, and nothing else is.
+
+async def test_a_port_held_by_our_own_orphan_is_reclaimed(monkeypatch):
+    co._write_pidfile(4242, 8069)
+    free = {"now": False}
+    killed = []
+    monkeypatch.setattr(co, "_pid_is_gc_overlay", lambda pid: pid == 4242)
+    monkeypatch.setattr(co, "_terminate_pid", lambda pid: (killed.append(pid), free.update(now=True)))
+    monkeypatch.setattr(co, "_port_free", lambda port: free["now"])
+    assert await co._reclaim_orphan(8069) is True
+    assert killed == [4242]
+    assert co._read_pidfile() is None
+
+
+async def test_a_recycled_pid_is_never_killed(monkeypatch):
+    # The pidfile outlived its process and the pid now belongs to something
+    # else: identity fails, nothing is signalled, the stale record is dropped.
+    co._write_pidfile(4242, 8069)
+    killed = []
+    monkeypatch.setattr(co, "_pid_is_gc_overlay", lambda pid: False)
+    monkeypatch.setattr(co, "_terminate_pid", killed.append)
+    assert await co._reclaim_orphan(8069) is False
+    assert killed == []
+    assert co._read_pidfile() is None
+
+
+async def test_an_orphan_on_another_port_is_not_this_ports_holder(monkeypatch):
+    co._write_pidfile(4242, 8070)
+    killed = []
+    monkeypatch.setattr(co, "_pid_is_gc_overlay", lambda pid: True)
+    monkeypatch.setattr(co, "_terminate_pid", killed.append)
+    assert await co._reclaim_orphan(8069) is False
+    assert killed == []
+
+
+async def test_no_pidfile_means_nothing_to_reclaim(monkeypatch):
+    killed = []
+    monkeypatch.setattr(co, "_terminate_pid", killed.append)
+    assert await co._reclaim_orphan(8069) is False
+    assert killed == []

@@ -37,6 +37,13 @@ class WinWindow:
         def _exit():
             logger.debug("[WinWindow] User requested exit")
             root.destroy()
+            # os._exit runs no lifespan shutdown, so the gc-overlay child would
+            # otherwise outlive PRSH and hold its port against the next launch.
+            try:
+                from server.controller_overlay import ControllerOverlay
+                ControllerOverlay.KillNow()
+            except Exception:
+                pass
             os._exit(0)
 
         root.protocol("WM_DELETE_WINDOW", _exit)

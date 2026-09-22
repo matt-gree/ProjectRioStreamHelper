@@ -50,6 +50,8 @@ def isolate_user_data(tmp_path, monkeypatch):
     monkeypatch.setattr(Participants, "_out",
                         AsyncPath(str(tmp_path / "participants.json")))
     monkeypatch.setattr(Participants, "_logos_dir", tmp_path / "branding" / "leagues")
+    from server import controller_overlay
+    monkeypatch.setattr(controller_overlay, "_pidfile", lambda: tmp_path / "gc-overlay.pid")
     return tmp_path
 
 

@@ -15,6 +15,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from server.paths import user_data_dir
 from server.settings import Settings
 
 # There is no platform gate. gc-overlay carries two peer transports as of
@@ -68,6 +69,96 @@ def _find_free_port_near(start: int, count: int = 10) -> int | None:
         if _port_free(p):
             return p
     return None
+
+
+# ── The orphan PRSH left behind ─────────────────────────────────────────────
+#
+# gc-overlay is a separate process, and nothing in the OS ties its life to
+# PRSH's: when PRSH ends without running its lifespan shutdown — Windows' exit
+# is an `os._exit`, the macOS tray gives shutdown five seconds and then does the
+# same, and a crash or Force Quit gives it nothing — the child is reparented to
+# init and keeps the configured port. The NEXT launch then found 8069 taken by
+# its own previous self and could only offer "Use port 8070", which moves every
+# Controller source in OBS off the port it was built against. A pidfile is the
+# one record that survives the parent: it names the process PRSH started, so a
+# port held by THAT process is reclaimed rather than routed around.
+
+def _pidfile() -> Path:
+    return user_data_dir() / "gc-overlay.pid"
+
+
+def _write_pidfile(pid: int, port: int) -> None:
+    try:
+        _pidfile().write_text(f"{pid} {port}\n")
+    except OSError:
+        logger.debug("[controller_overlay] could not write pidfile")
+
+
+def _clear_pidfile() -> None:
+    try:
+        _pidfile().unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _read_pidfile() -> tuple[int, int] | None:
+    try:
+        pid, port = _pidfile().read_text().split()[:2]
+        return int(pid), int(port)
+    except (OSError, ValueError):
+        return None
+
+
+def _pid_is_gc_overlay(pid: int) -> bool:
+    """True only if `pid` is alive AND is a gc-overlay.
+
+    The identity check is what makes killing it safe: a pidfile outlives its
+    process, and a recycled pid belongs to somebody else. No psutil — `ps` and
+    `tasklist` answer this on every platform PRSH ships, and a failure to ask is
+    an answer of False (never kill what you could not identify).
+    """
+    try:
+        if os.name == "nt":
+            out = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5, creationflags=_NO_WINDOW,
+            ).stdout
+        else:
+            out = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "command="],
+                capture_output=True, text=True, timeout=5,
+            ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "gc-overlay" in out.lower() or "gc_overlay" in out.lower()
+
+
+def _terminate_pid(pid: int) -> None:
+    """SIGTERM on POSIX; TerminateProcess on Windows (os.kill's meaning there)."""
+    try:
+        import signal
+        os.kill(pid, signal.SIGTERM)
+    except (OSError, ProcessLookupError):
+        pass
+
+
+async def _reclaim_orphan(port: int) -> bool:
+    """Kill a gc-overlay a previous PRSH left on `port`. True if the port is now free."""
+    record = _read_pidfile()
+    if record is None:
+        return False
+    pid, recorded_port = record
+    if recorded_port != port or pid == os.getpid() or not _pid_is_gc_overlay(pid):
+        _clear_pidfile()
+        return False
+    logger.info("[controller_overlay] reclaiming port {} from orphaned gc-overlay (pid {})", port, pid)
+    _terminate_pid(pid)
+    for _ in range(30):
+        if _port_free(port):
+            _clear_pidfile()
+            return True
+        await asyncio.sleep(0.1)
+    return _port_free(port)
 
 
 def _gc_binary(gc_dir: Path) -> Path | None:
@@ -228,10 +319,11 @@ class ControllerOverlay:
         # Kill any existing process
         await cls._kill_process()
 
-        # Pre-flight port check: if the configured port is in use, return a
-        # structured error with a suggested free port. The UI shows a one-click
-        # "Use port X" affordance.
-        if not _port_free(cls._port):
+        # Pre-flight port check. A port held by the gc-overlay a previous PRSH
+        # orphaned is taken back first; only a port held by something ELSE gets
+        # the structured error with a suggested free port (the UI's one-click
+        # "Use port X" affordance).
+        if not _port_free(cls._port) and not await _reclaim_orphan(cls._port):
             suggestion = _find_free_port_near(cls._port + 1)
             logger.warning(
                 "[controller_overlay] port {} in use (suggested free: {})",
@@ -261,6 +353,7 @@ class ControllerOverlay:
             )
 
             cls._running = True
+            _write_pidfile(cls._process.pid, cls._port)
 
             # Start a background task to monitor the process
             cls._task = asyncio.create_task(cls._monitor())
@@ -313,6 +406,21 @@ class ControllerOverlay:
         await Settings.Set("controller_overlay.port", port)
 
     @classmethod
+    def KillNow(cls) -> None:
+        """Terminate the child synchronously, from any thread.
+
+        For the exits that never reach the lifespan shutdown — Windows' window
+        close and the macOS tray's post-timeout — both of which end in
+        `os._exit`, which runs no cleanup at all. A signal by pid rather than
+        the asyncio Process, whose methods belong to the loop's thread. The
+        pidfile is left in place on purpose: if the signal is somehow not
+        enough, it is what lets the next launch take the port back.
+        """
+        proc = cls._process
+        if proc is not None and proc.returncode is None:
+            _terminate_pid(proc.pid)
+
+    @classmethod
     async def _kill_process(cls):
         """Terminate the subprocess gracefully."""
         cls._running = False
@@ -337,6 +445,8 @@ class ControllerOverlay:
                 pass
             logger.info("[controller_overlay] process stopped")
 
+        if cls._process is not None:
+            _clear_pidfile()
         cls._process = None
 
     @classmethod
