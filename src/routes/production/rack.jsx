@@ -941,7 +941,7 @@ export const Rack = memo(function Rack({
             title="Rack"
             className={cn(
                 'flex flex-col h-[calc(100vh-13rem)]',
-                'lg:sticky lg:top-4 lg:row-span-2 lg:h-[var(--console-h)] xl:row-span-1',
+                'lg:sticky lg:top-4 lg:row-span-2 lg:h-[var(--console-h)] lg:max-h-[calc(100dvh-2rem)] xl:row-span-1',
             )}
         >
             <ScrollArea className="min-h-0 flex-1">

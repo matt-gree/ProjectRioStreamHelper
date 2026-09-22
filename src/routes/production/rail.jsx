@@ -209,7 +209,7 @@ export const Rail = memo(function Rail({ pins, onReorder, onUnpin, onOpen }) {
             className={cn(
                 'flex flex-col h-[calc(100vh-13rem)]',
                 'lg:col-start-2 lg:h-auto',
-                'xl:col-start-3 xl:sticky xl:top-4 xl:h-[var(--console-h)]',
+                'xl:col-start-3 xl:sticky xl:top-4 xl:h-[var(--console-h)] xl:max-h-[calc(100dvh-2rem)]',
             )}
         >
             <ScrollArea className="min-h-0 flex-1">
