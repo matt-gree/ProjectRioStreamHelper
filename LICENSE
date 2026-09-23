@@ -1,13 +1,16 @@
 MIT License
 
-Copyright (c) 2024 João Ribeiro Bezerra (TournamentStreamHelper)
+Copyright (c) 2024 Samantha Chalker (TournamentStreamHelper, web version)
+Copyright (c) 2024 João Ribeiro Bezerra (TournamentStreamHelper, Qt version)
 Copyright (c) 2026 Matt Greene (ProjectRioStreamHelper)
 
-ProjectRioStreamHelper is a fork of TournamentStreamHelper
-(https://github.com/joaorb64/TournamentStreamHelper), rebuilt as a
-single-game web application for Mario Superstar Baseball via Project Rio.
-The upstream copyright notice above is retained as the MIT License
-requires; the second notice covers this fork's own work.
+ProjectRioStreamHelper is a fork of the web version of TournamentStreamHelper
+(https://github.com/TournamentStreamHelper/TournamentStreamHelper), rebuilt as
+a single-game web application for Mario Superstar Baseball via Project Rio. It
+also carries code adapted from the earlier Qt version
+(https://github.com/joaorb64/TournamentStreamHelper). Both upstream copyright
+notices above are retained as the MIT License requires; the third notice covers
+this fork's own work.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
