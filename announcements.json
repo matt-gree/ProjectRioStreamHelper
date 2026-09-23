@@ -1,8 +1,8 @@
 [
   {
-    "id": "v1-0-0-released-20260421",
-    "title": "v1.0.0 Released!",
+    "id": "v2-0-0-released-20260922",
+    "title": "PRSH 2.0.0 is out",
     "severity": "success",
-    "body": "Thanks for using this app!"
+    "body": "The update boasts a rebuilt production console, match queues, new elements (including gc inputs!) address books with league logos, and a new default theme. Thanks for streaming with PRSH!"
   }
 ]
