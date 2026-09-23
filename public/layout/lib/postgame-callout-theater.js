@@ -367,9 +367,16 @@ export function createTheater({ stage }) {
     // the collapsed max-width — so a four-digit SLG (1.000) never clips in a
     // face wider than the one a fixed pixel guess was sized for. The padding
     // animates in with it so the spacing matches the other minis.
+    //
+    // Then RELEASE it. The width is measured at the start of the tween, through
+    // the collapse, and in practice that reading comes up short — measured on a
+    // real finale it was 41px against a settled 78 for ".750", so the finished
+    // graphic held ".75" and a sliver, and "1.500" lost its "1". The cap only
+    // exists to animate the opening; once open, the cell sizes to its content.
     gsap.to(rates, {
       maxWidth: (i, el) => Math.ceil(el.scrollWidth) + 1,
       opacity: 1, paddingLeft: 8, paddingRight: 8, duration: 0.65, ease: 'power2.inOut', stagger: 0.12,
+      onComplete: () => rates.forEach((el) => { el.style.maxWidth = 'none'; }),
     });
   }
 
