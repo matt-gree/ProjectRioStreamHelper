@@ -211,6 +211,21 @@ See gc-overlay's own CLAUDE.md (`dolphin_process.py` / `_prepare_hook`) — the
 env var it works through is captured in a C static on the first hook attempt,
 so the ordering there is load-bearing.
 
+### The child follows PRSH out — PRSH's own cleanup is not enough
+
+`_child_env()` also sets **`GC_OVERLAY_PARENT_PID`** (gc-overlay ≥ 1.4.1), and
+gc-overlay exits once that pid is gone (`parent_watch.py` in the submodule).
+PRSH's cleanup — the lifespan's `Stop`, `KillNow` before each `os._exit` — only
+runs on the exits PRSH *chooses*. SIGKILL, Force Quit, a crash and logout's
+SIGTERM run no PRSH code at all, and each one orphaned gc-overlay (measured on
+the v2.0.0 build: tray Exit cleaned up; SIGTERM and SIGKILL both orphaned). An
+orphan holds its port (the next launch could only offer `Use port 8070`) **and,
+on macOS, the App Translocation mount of the `.app` it was launched from** — so
+replacing PRSH.app in `~/Downloads` with a new release made the new one fail to
+open with `-47` until the orphan was killed. The pidfile reclaim
+(`_reclaim_orphan`) stays as the second line: it only helps the *next* launch,
+and only once the app can launch at all.
+
 ### The previews, and the off-by-one they exist to catch
 
 The Connections card iframes gc-overlay directly at `?port=1..4&bg=transparent`,

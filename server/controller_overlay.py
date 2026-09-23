@@ -46,9 +46,17 @@ def _child_env() -> dict:
     messages) sit in an 8 KB buffer and reach `_drain_output` long after the
     producer needed them, or never. Honoured by a frozen build too: the
     bootloader runs an ordinary CPython, which reads this at init.
+
+    GC_OVERLAY_PARENT_PID because every cleanup PRSH can run on the way out
+    (the lifespan's Stop, `KillNow` before each `os._exit`) is skipped by the
+    exits that matter most — SIGKILL, Force Quit, a crash, logout's SIGTERM —
+    and an orphan holds its port and, on macOS, the translocated .app, so the
+    next PRSH failed to open with -47. gc-overlay watches this pid and exits
+    after it. A variable, not a flag: an older gc-overlay ignores it.
     """
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    env["GC_OVERLAY_PARENT_PID"] = str(os.getpid())
     return env
 
 

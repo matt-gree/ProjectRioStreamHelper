@@ -281,6 +281,14 @@ def test_the_child_runs_unbuffered():
     assert co._child_env()["PYTHONUNBUFFERED"] == "1"
 
 
+def test_the_child_is_told_which_process_to_follow_out():
+    """Exits that skip PRSH's cleanup (SIGKILL, Force Quit, a crash, logout's
+    SIGTERM) orphaned gc-overlay on its port and, on macOS, pinned the
+    translocated .app so the next launch failed with -47. gc-overlay watches
+    this pid and exits after it."""
+    assert co._child_env()["GC_OVERLAY_PARENT_PID"] == str(os.getpid())
+
+
 def test_the_child_inherits_the_rest_of_the_environment(monkeypatch):
     monkeypatch.setenv("PRSH_TEST_MARKER", "kept")
     assert co._child_env()["PRSH_TEST_MARKER"] == "kept"
