@@ -279,6 +279,14 @@ export const LAYOUT_SETTINGS = {
     // under them whatever the active package declares. Don't bring a
     // per-element copy back.
     postgamecallout: [],
+    // Game Summary (`summary.html`, so `overlays.summary.*` — the console calls
+    // the element `postgamevs`; see settingsTypeOf) — what stands for each team beside the data well: the
+    // captain art with the team logo ghosted behind it (the default), or the
+    // logo itself as the team's image (postgame-vs-mount.js `sideCrest`, sized
+    // to the gutter between the cards so it can never overlap one).
+    summary: [
+        { key: 'sideArt', type: 'select', label: 'Team Art', description: 'What stands for each team beside the stats: the captain, or the team logo (a league logo when the game was a league game)', options: [{ value: 'captains', label: 'Captains' }, { value: 'logos', label: 'Team Logos' }], defaultValue: 'captains' },
+    ],
     // Lower Third (Break) — a re-themable SVG band. The mount reads these under
     // overlays.lowerthird.*; the theme SVG comes from the active Design Package
     // (lowerthird.svg — overlays.global.designPackage picks the package),

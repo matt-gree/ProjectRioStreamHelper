@@ -497,6 +497,9 @@ export const ELEMENTS = [
         // scopes it.
         flavor: 'direct',
         feed: 'postgamevs',
+        // Its settings namespace is its layout file's (summary.html), as every
+        // mount's is — the element id is the console's name for it.
+        settingsType: 'summary',
         url: '/layout/postgame/summary.html',
         width: 1920,
         height: 1080,

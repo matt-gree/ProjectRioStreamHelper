@@ -129,6 +129,9 @@ export function mountMatchup({ host }) {
   // gap.
   function charIconUrl(name) { return name && window.RioData ? RioData.charIconUrl(name) : ''; }
   function teamLogoUrl(team) { return team && window.RioData ? RioData.teamLogoUrl(team) : ''; }
+  // A card's league logo (server/matchup.py, per that game's mode) leads its
+  // well, as a league logo does everywhere; "" on a game that was no league's.
+  function leagueLogoUrl(path) { return path ? `${OverlayBase.BASE_URL}${path}` : ''; }
 
   // Try each candidate URL in order; bind the first that loads, else hide the
   // slot. Used for card logos (team logo → captain icon fallback: the user's
@@ -170,8 +173,8 @@ export function mountMatchup({ host }) {
     engine.setText(`${p}-side1-score`, game.side1Score ?? '');
     engine.setText(`${p}-side2-score`, game.side2Score ?? '');
 
-    setImageFallback(`${p}-side1-logo`, [teamLogoUrl(game.side1Team), charIconUrl(game.side1Captain)]);
-    setImageFallback(`${p}-side2-logo`, [teamLogoUrl(game.side2Team), charIconUrl(game.side2Captain)]);
+    setImageFallback(`${p}-side1-logo`, [leagueLogoUrl(game.side1LeagueLogo), teamLogoUrl(game.side1Team), charIconUrl(game.side1Captain)]);
+    setImageFallback(`${p}-side2-logo`, [leagueLogoUrl(game.side2LeagueLogo), teamLogoUrl(game.side2Team), charIconUrl(game.side2Captain)]);
 
     // Away/home-oriented mirror of the two sides — for themes (the Slice26 intro
     // band) that stack the AWAY team on top and HOME on the bottom, per game.
@@ -181,12 +184,13 @@ export function mountMatchup({ host }) {
     const sideScore = (s) => (s === 1 ? game.side1Score : game.side2Score) ?? '';
     const sideTeam = (s) => (s === 1 ? game.side1Team : game.side2Team);
     const sideCaptain = (s) => (s === 1 ? game.side1Captain : game.side2Captain);
+    const sideLeague = (s) => (s === 1 ? game.side1LeagueLogo : game.side2LeagueLogo);
     const awaySide = game.awaySide === 2 ? 2 : 1;
     const roles = [['away', awaySide], ['home', awaySide === 1 ? 2 : 1]];
     for (const [role, side] of roles) {
       engine.setText(`${p}-${role}-name`, sideName(side), { optional: true });
       engine.setText(`${p}-${role}-score`, sideScore(side), { optional: true });
-      setImageFallback(`${p}-${role}-logo`, [teamLogoUrl(sideTeam(side)), charIconUrl(sideCaptain(side))]);
+      setImageFallback(`${p}-${role}-logo`, [leagueLogoUrl(sideLeague(side)), teamLogoUrl(sideTeam(side)), charIconUrl(sideCaptain(side))]);
     }
 
     // The outcome LAST, in both orientations: setText clears (or sets) opacity,

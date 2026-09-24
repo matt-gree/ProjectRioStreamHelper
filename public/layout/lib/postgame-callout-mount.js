@@ -235,7 +235,9 @@ export function mountPostgameCallout({ host }) {
     const b = char.batting || {};
     const p = char.pitching;
     const d = char.defense || {};
-    const logo = sideData.teamName ? teamLogoUrl(sideData.teamName) : '';
+    // A league logo (frozen on the capture) outranks the MSB team's.
+    const logo = (sideData.leagueLogo ? `${OverlayBase.BASE_URL}${sideData.leagueLogo}` : '')
+      || (sideData.teamName ? teamLogoUrl(sideData.teamName) : '');
 
     // header context: event name up top; bracket · phase · round beneath the
     // player identity (round emphasized). Empty pieces simply don't render.

@@ -12,6 +12,7 @@ Everything derivable is computed here, once, at fetch time — the overlay binds
 plain values into theme slots and never re-derives (scores are already oriented
 to the match's authored sides, captains resolved, default team names attached).
 """
+import copy
 from datetime import datetime, timezone
 
 from loguru import logger
@@ -112,6 +113,22 @@ def build_matchup(games: list[dict], side1_rio: str, side2_rio: str,
     }
 
 
+def attach_league_logos(payload: dict) -> None:
+    """Each card's league logo per side (`side{T}LeagueLogo`), by THAT game's
+    mode — a head-to-head reaches back seasons, so one card may be a league
+    game and the next not. Resolved here, like everything else on the band;
+    "" when the game is no league's or the player has no logo in it."""
+    names = {t: (payload.get(f"side{t}") or {}).get("rioName") or "" for t in (1, 2)}
+    for card in payload.get("games") or []:
+        mode = card.get("gameMode") or ""
+        for t in (1, 2):
+            try:
+                url = Participants.league_logo(mode, names[t])[1] if names[t] else ""
+            except Exception:
+                url = ""
+            card[f"side{t}LeagueLogo"] = url
+
+
 def _display_tag(player: dict | None, rio: str) -> str:
     """The participant's Address Book tag, or "" when none is set. Prefers the
     match side's participantId join key, falling back to a rioName lookup."""
@@ -151,6 +168,7 @@ class Matchup:
         # match's participantId is the join key, rioName the fallback lookup.
         payload["side1"]["tag"] = _display_tag(p1, rio1)
         payload["side2"]["tag"] = _display_tag(p2, rio2)
+        attach_league_logos(payload)
         payload["fetchedAt"] = datetime.now(timezone.utc).isoformat()
 
         await State.Set("matchup", payload)
@@ -187,6 +205,12 @@ class Matchup:
             p = players.get(str(side)) or players.get(side)
             rio = (payload.get(f"side{side}") or {}).get("rioName") or ""
             entries.append((f"matchup.side{side}.tag", _display_tag(p, rio)))
+        # The cards' league logos come out of the book too.
+        # A copy: mutating the State dict in place would hide the change from
+        # the Save() diff.
+        fresh = copy.deepcopy(payload)
+        attach_league_logos(fresh)
+        entries.append(("matchup.games", fresh.get("games") or []))
         await State.SetBatch(entries)
         await State.Save()
 

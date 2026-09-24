@@ -200,6 +200,46 @@ async def test_a_replaced_logo_reaches_a_board_already_showing_it():
     assert State.state["score"]["1"]["player"]["1"]["league_logo"].endswith("?v=2")
 
 
+async def test_a_capture_carries_the_logo_of_the_league_its_game_was_in():
+    """The Game Summary and the Spotlight outlive the board's game, so the
+    capture freezes each side's league logo by the CAPTURED game's mode — and a
+    book edit afterwards still reaches it."""
+    from server.postgame.capture import PostGame
+
+    book = await _league()
+    alice = await _player(book, "Alice")
+    payload = {
+        "meta": {"gameMode": "NNL Season 7"},
+        "player": {"1": {"rioName": "Alice"}, "2": {"rioName": "Bob"}},
+    }
+    PostGame._attach_league_logos(1, payload)
+    assert payload["player"]["1"]["leagueLogo"] == Participants.logo_url(alice)
+    assert payload["player"]["2"]["leagueLogo"] == ""
+
+    ranked = {"meta": {"gameMode": "Ranked"}, "player": {"1": {"rioName": "Alice"}}}
+    PostGame._attach_league_logos(1, ranked)
+    assert ranked["player"]["1"]["leagueLogo"] == ""
+
+    State.state["postgame"] = {"1": {"present": True, **payload}}
+    await Participants.SetLogo(alice["id"], b"\x89PNG-2", "image/png")
+    assert State.state["postgame"]["1"]["player"]["1"]["leagueLogo"].endswith("?v=2")
+
+
+async def test_a_head_to_head_card_carries_the_logo_of_its_own_games_league():
+    from server.matchup import attach_league_logos
+
+    book = await _league()
+    alice = await _player(book, "Alice")
+    payload = {
+        "side1": {"rioName": "Alice"}, "side2": {"rioName": "Bob"},
+        "games": [{"gameMode": "NNL Season 7"}, {"gameMode": "Ranked"}],
+    }
+    attach_league_logos(payload)
+    league, ranked = payload["games"]
+    assert (league["side1LeagueLogo"], league["side2LeagueLogo"]) == (Participants.logo_url(alice), "")
+    assert (ranked["side1LeagueLogo"], ranked["side2LeagueLogo"]) == ("", "")
+
+
 def test_resurface_uses_the_leagues_own_row_in_its_games():
     """Its tag AND its prefix — the prefix is how a league shows a team name."""
     from server.rio.apply import _apply_resurface

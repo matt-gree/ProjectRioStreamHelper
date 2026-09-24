@@ -457,6 +457,11 @@ class Participants:
         from server.matchup import Matchup
 
         await run_startup_projection("Participants→Matchup", Matchup.refresh_tags())
+        # A capture freezes each side's league logo (it outlives the board's
+        # game), so it re-resolves its own copy.
+        from server.postgame.capture import PostGame
+
+        await run_startup_projection("Participants→PostGame", PostGame.refresh_league_logos())
         # A league logo is resolved per write by a State hook, which only fires
         # when a board's player or mode changes — a logo swapped or a person
         # added to a league book changes neither. Settle every board.

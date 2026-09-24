@@ -240,6 +240,7 @@ class PostGame:
             path, stat, payload = result["path"], result["stat"], result["payload"]
 
             payload["capturedBy"] = by if by in ("auto", "manual") else "manual"
+            cls._attach_league_logos(sb, payload)
             cls._captured[sb] = payload
             cls._stat_objs[sb] = stat
             cls._contacts.pop(sb, None)  # rebuilt lazily for the new capture
@@ -257,6 +258,74 @@ class PostGame:
                 "winnerSide": payload["meta"]["winnerSide"],
                 "eventCount": len(payload["events"]),
             }
+
+    # ----- league logos ----------------------------------------------------
+    #
+    # A capture is shown after the board has moved on, so it cannot borrow the
+    # board's live `score.{N}.player.{T}.league_logo` (server/league_logos.py):
+    # by then that names the NEXT game's players, or nobody. It resolves its own,
+    # by the mode the CAPTURED game was played in, onto each side's block as
+    # `leagueLogo` — the same (person, league) lookup the board uses.
+
+    @classmethod
+    def _league_mode(cls, sb: int, payload: dict) -> str:
+        """The captured game's mode, else what the board says it is playing
+        (a mode the capture could not resolve from the mode cache)."""
+        mode = ((payload.get("meta") or {}).get("gameMode") or "")
+        if mode:
+            return mode
+        from server.league_logos import board_mode
+
+        return board_mode(sb)
+
+    @classmethod
+    def _league_logos(cls, sb: int, payload: dict) -> dict[str, str]:
+        from server.participants import Participants
+
+        mode = cls._league_mode(sb, payload)
+        out = {}
+        for t in ("1", "2"):
+            rio = ((payload.get("player") or {}).get(t) or {}).get("rioName") or ""
+            out[t] = Participants.league_logo(mode, rio)[1] if rio else ""
+        return out
+
+    @classmethod
+    def _attach_league_logos(cls, sb: int, payload: dict) -> None:
+        try:
+            logos = cls._league_logos(sb, payload)
+        except Exception:
+            logger.exception("[PostGame] sb{} league logo lookup failed", sb)
+            return
+        for t, url in logos.items():
+            block = (payload.get("player") or {}).get(t)
+            if isinstance(block, dict):
+                block["leagueLogo"] = url
+
+    @classmethod
+    async def refresh_league_logos(cls) -> None:
+        """Re-resolve every capture's league logos after an Address Book edit
+        (`Participants.reproject_dependents`) — a logo swapped or a person added
+        to a league book changes nothing a capture would otherwise re-read."""
+        entries = []
+        for key, pg in list((State.state.get("postgame", {}) or {}).items()):
+            if not isinstance(pg, dict) or not pg.get("present"):
+                continue
+            try:
+                sb = int(key)
+            except (TypeError, ValueError):
+                continue
+            for t, url in cls._league_logos(sb, pg).items():
+                if ((pg.get("player") or {}).get(t) or {}).get("leagueLogo", "") != url:
+                    entries.append((f"postgame.{sb}.player.{t}.leagueLogo", url))
+                # Replaced, never mutated: the cached block is the same object
+                # the projection put in State, and an in-place write would hide
+                # the change from the Save() diff.
+                players = (cls._captured.get(sb) or {}).get("player") or {}
+                if isinstance(players.get(t), dict):
+                    players[t] = {**players[t], "leagueLogo": url}
+        if entries:
+            await State.SetBatch(entries)
+            await State.Save()
 
     @classmethod
     def _load(cls, sb: int, seated: tuple[str, str], file: str | None, game_id) -> dict:

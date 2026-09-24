@@ -183,6 +183,44 @@ const CSS = `
   filter: blur(1px) saturate(0.85);
 }
 
+/* ── team crests (sideArt = 'logos') ──
+   The producer's alternative to the captain heroes: each side's logo at FULL
+   strength as the team's one image, in place of the captain art AND the
+   ghosted logo behind it (one fact, one place — a crest over a ghost of itself
+   is the same mark twice).
+
+   THE BOX IS THE SIDE GUTTER, SOLVED AGAINST THE CARDS, NOT A TASTE. Every
+   card here is fixed geometry on the 1920×1080 stage: the plate ends at
+   y≈223 with WINNER under it, the data well spans x 480..1440 from y 268, and
+   the linescore's widest case (a 290px name column and fifteen innings) starts
+   at x≈354 from y≈874. So the gutter is x 0..480 between y 223 and 874, and a
+   440px square at 20px from the stage edge (20..460) sits 20px clear of the
+   well; vertically it is centred on the well's own middle (y≈526), so it lands
+   306..746 — 83px under the plate and 128px over the linescore. Bigger means
+   overlapping a card in some state, which is the one thing this may not do.
+   contain + centre keeps a wide or tall mark inside that square whole. */
+.pv-crest {
+  position: absolute; top: 306px; width: 440px; height: 440px; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+}
+.pv-crest.s1 { left: 20px; }
+.pv-crest.s2 { right: 20px; }
+.pv-crest img {
+  /* FILLS the box rather than capping at it: a league logo is whatever a
+     producer uploaded, and a 128px file drawn at its own size would be a
+     postage stamp where the team's image belongs. */
+  position: relative; width: 100%; height: 100%; object-fit: contain;
+  filter: drop-shadow(0 18px 36px rgba(0,0,0,0.6));
+}
+/* The side's colour pooled behind the mark, the same bloom the heroes stand
+   in — so the crest reads as that side's, not as a sticker on the backdrop. */
+.pv-crest .bloom {
+  position: absolute; left: 50%; top: 50%; width: 440px; height: 440px;
+  transform: translate(-50%, -50%); border-radius: 50%; filter: blur(26px);
+}
+.pv-crest.s1 .bloom { background: radial-gradient(circle, rgba(var(--s1-rgb), 0.42) 0%, transparent 64%); }
+.pv-crest.s2 .bloom { background: radial-gradient(circle, rgba(var(--s2-rgb), 0.42) 0%, transparent 64%); }
+
 /* ── identity plates (port glass + outer rail), top corners ──
 
    BOTH PLATES ARE THE SAME WIDTH, ALWAYS. They used to be inline-block under a
@@ -527,8 +565,30 @@ export function mountPostgameVs({ host }) {
 
   function sideLogo(side, p) {
     const cls = side === 1 ? 's1' : 's2';
-    const logo = p?.teamName ? teamLogoUrl(p.teamName) : '';
+    // A league logo (frozen on the capture by server/postgame/capture.py)
+    // outranks the MSB team's, as it does in every logo well.
+    const logo = sideLogoUrl(p);
     return `<div class="pv-logo ${cls}">${logo ? `<img src="${logo}" onerror="this.style.display='none'" alt="" />` : ''}</div>`;
+  }
+
+  // The side's crest (sideArt = 'logos'): the same logo the ghost draws, at
+  // full strength and in the gutter beside the data well. A side with no logo
+  // to draw — no team resolved, or a pack missing that file — falls back to its
+  // captain art inside the same box, so the frame never has a hole on one side.
+  function sideLogoUrl(p) {
+    return (p?.leagueLogo ? `${OverlayBase.BASE_URL}${p.leagueLogo}` : '')
+      || (p?.teamName ? teamLogoUrl(p.teamName) : '');
+  }
+  function sideCrest(side, p) {
+    const cls = side === 1 ? 's1' : 's2';
+    const chain = [sideLogoUrl(p), captainArtUrl(p?.captain), charArtUrl(p?.captain)].filter(Boolean);
+    const [first, ...rest] = chain;
+    return `
+      <div class="pv-crest ${cls}">
+        <div class="bloom"></div>
+        ${first ? `<img src="${first}" data-fb="${escapeHtml(rest.join('|'))}"
+          onerror="const f=(this.dataset.fb||'').split('|').filter(Boolean);if(f.length){this.src=f.shift();this.dataset.fb=f.join('|');}else{this.style.opacity=0;}" alt="" />` : ''}
+      </div>`;
   }
 
   // Every captain is framed individually — see captain-framing.js for why, and
@@ -647,12 +707,15 @@ export function mountPostgameVs({ host }) {
         <div class="pv-theme-svg">${ctx.themeSvg}</div>
         <div class="pv-vignette"></div>
       </div>
+      ${ctx.sideArt === 'logos' ? `
+      ${sideCrest(1, ctx.p1)}
+      ${sideCrest(2, ctx.p2)}` : `
       <div class="pv-logo-clip">
         ${sideLogo(1, ctx.p1)}
         ${sideLogo(2, ctx.p2)}
       </div>
       ${sideHero(1, ctx.p1)}
-      ${sideHero(2, ctx.p2)}
+      ${sideHero(2, ctx.p2)}`}
       ${sidePlate(1, ctx.p1, ctx.winnerSide)}
       ${sidePlate(2, ctx.p2, ctx.winnerSide)}
       ${matchStrip(ctx)}
@@ -725,15 +788,23 @@ export function mountPostgameVs({ host }) {
       { clipPath: 'inset(0% 50% 0% 50%)' },
       { clipPath: 'inset(0% 0% 0% 0%)', duration: 0.7, ease: 'power4.inOut' });
 
-    // 2 · captains stride in from their edges, logos ghost up behind them.
-    t.fromTo(q('.pv-hero.s1'), { x: -240, autoAlpha: 0, scale: 1.05 },
-      { x: 0, autoAlpha: 1, scale: 1, duration: 0.75, ease: 'power2.out' }, '-=0.35');
-    t.fromTo(q('.pv-hero.s2'), { x: 240, autoAlpha: 0, scale: 1.05 },
-      { x: 0, autoAlpha: 1, scale: 1, duration: 0.75, ease: 'power2.out' }, '<');
-    qa('.pv-logo img').forEach((el, i) => {
-      t.fromTo(el, { autoAlpha: 0, scale: 1.25, rotate: i === 0 ? -6 : 6 },
-        { autoAlpha: 0.16, scale: 1, rotate: 0, duration: 1.1, ease: 'power2.out' }, '<');
-    });
+    // 2 · crests settle in from their edges (sideArt = 'logos') — or the
+    //     captains stride in and the logos ghost up behind them.
+    if (q('.pv-crest')) {
+      t.fromTo(q('.pv-crest.s1'), { x: -160, autoAlpha: 0, scale: 0.86 },
+        { x: 0, autoAlpha: 1, scale: 1, duration: 0.8, ease: 'power3.out' }, '-=0.35');
+      t.fromTo(q('.pv-crest.s2'), { x: 160, autoAlpha: 0, scale: 0.86 },
+        { x: 0, autoAlpha: 1, scale: 1, duration: 0.8, ease: 'power3.out' }, '<');
+    } else {
+      t.fromTo(q('.pv-hero.s1'), { x: -240, autoAlpha: 0, scale: 1.05 },
+        { x: 0, autoAlpha: 1, scale: 1, duration: 0.75, ease: 'power2.out' }, '-=0.35');
+      t.fromTo(q('.pv-hero.s2'), { x: 240, autoAlpha: 0, scale: 1.05 },
+        { x: 0, autoAlpha: 1, scale: 1, duration: 0.75, ease: 'power2.out' }, '<');
+      qa('.pv-logo img').forEach((el, i) => {
+        t.fromTo(el, { autoAlpha: 0, scale: 1.25, rotate: i === 0 ? -6 : 6 },
+          { autoAlpha: 0.16, scale: 1, rotate: 0, duration: 1.1, ease: 'power2.out' }, '<');
+      });
+    }
 
     // 3 · identity plates: rail wipes, name rises.
     qa('.pv-plate').forEach((plate, i) => {
@@ -827,12 +898,15 @@ export function mountPostgameVs({ host }) {
 
     const gameId = g(state, `postgame.${sb}.gameId`, '');
     const capturedAt = g(state, `postgame.${sb}.capturedAt`, '');
-    const key = `${sb}:${gameId}:${capturedAt}`;
+    // What stands for each team: the captain art (default) or the team's logo.
+    const sideArt = g(OverlayBase.settings, 'overlays.summary.sideArt', 'captains') === 'logos'
+      ? 'logos' : 'captains';
+    const key = `${sb}:${gameId}:${capturedAt}:${sideArt}`;
     if (key === prevKey && root.style.display !== 'none') return; // no churn on unrelated ticks
     prevKey = key;
 
     const ctx = {
-      p1, p2,
+      p1, p2, sideArt,
       t1: p1.totals || fallbackTotals(p1),
       t2: p2.totals || fallbackTotals(p2),
       meta: g(state, `postgame.${sb}.meta`, {}),
