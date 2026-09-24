@@ -232,7 +232,11 @@ const StatFilePicker = memo(function StatFilePicker({ onPick, disabled }) {
                     Pick a file
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[22rem] p-1" align="end">
+            <PopoverContent
+                className="w-[22rem] max-h-[min(24rem,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain p-1"
+                align="end"
+                collisionPadding={8}
+            >
                 {files === null && (
                     <div className="flex items-center gap-2 px-2 py-3">
                         <Loader size="xs" />
