@@ -14,7 +14,7 @@ import { Button } from '../../components/ui/button';
 import { Switch } from '../../components/ui/switch';
 import { cn } from '../../lib/utils';
 import { runObs } from './controls';
-import { Rack, seededRail, useRackSelection, useRailPins } from './rack';
+import { Rack, seededRail, useHiddenScenes, useRackSelection, useRailPins } from './rack';
 import {
     togglePin as togglePinIn, useConsolePlacements, useConsoleScenes,
 } from './sources/placements';
@@ -129,8 +129,22 @@ const ConnectionPill = memo(function ConnectionPill() {
     );
 });
 
-// Compact, labelled scene dropdown for the top bar.
+/*
+ * Compact, labelled scene dropdown for the top bar.
+ *
+ * It lists what the RACK lists: a scene the producer hid from the rack (Edit
+ * scenes, ./rack useHiddenScenes) is one they have said they don't cut to from
+ * here, so offering it in the one control that cuts would undo half the edit.
+ * The scene the dropdown is SHOWING always stays in, hidden or not — the same
+ * never-hide-what-is-on-air rule the rack follows, and a <select> whose value is
+ * not among its options renders as the first option, i.e. names the wrong scene.
+ */
 const SceneSelect = memo(function SceneSelect({ label, value, scenes, onChange }) {
+    const [hiddenScenes] = useHiddenScenes();
+    const options = useMemo(() => {
+        const hidden = new Set(hiddenScenes ?? []);
+        return scenes.filter(name => name === value || !hidden.has(name));
+    }, [scenes, hiddenScenes, value]);
     return (
         <label className="flex items-center gap-1.5">
             <Text size="xs" className="text-muted-foreground">{label}</Text>
@@ -140,7 +154,7 @@ const SceneSelect = memo(function SceneSelect({ label, value, scenes, onChange }
                 className="max-w-[180px] rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
             >
                 {!value && <option value="" disabled>—</option>}
-                {scenes.map((name) => <option key={name} value={name}>{name}</option>)}
+                {options.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
         </label>
     );

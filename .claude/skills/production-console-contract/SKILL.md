@@ -92,7 +92,7 @@ before proceeding.
   surface that dies without OBS. → `obs-mirror-and-offline.md`
 - **OBS control runs browser-side** (`src/context/obs.jsx`, localhost:4455) so it
   reaches the producer's OBS in dual-machine setups. Don't move it server-side.
-- **Selection, rail pins and expanded scenes are browser-local**
+- **Selection, rail pins, expanded scenes and hidden scenes are browser-local**
   (`usePersistentState`, `prsh.ui.production.*`) — per-producer workspace layout,
   never server Settings. Stored ids are **resolved at read time, never
   rewritten**. → `row-kit.md`

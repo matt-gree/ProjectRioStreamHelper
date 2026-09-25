@@ -54,6 +54,18 @@ whichever `find()` reached first. Read out before the board and variant axes, so
   two-state control, and sharing visibility's key made a hidden source's removal
   `value === liveValue`, which the buffer discarded as a change that cancelled
   itself out.
+- **A producer can take a scene OFF the rack** (`useHiddenScenes`,
+  `prsh.ui.production.hiddenScenes`), from **Edit scenes** at the foot of the
+  scene list. Edit mode lists every scene as a bare header with an eye — no rows,
+  no `+`, and nothing mirrored — and the footer says how many are hidden, or a
+  hidden scene is one the producer forgot they hid. Three rules: it is a **rack
+  preference, never an OBS write**; it is stored by NAME and resolved at read
+  time (a stale name is never counted); and **a hidden scene still lists while
+  it is program or preview** — the rack never hides what is on air. The
+  `StretchNotice` counts only listed scenes, so it keeps agreeing with the rows.
+  The band's Program/Preview **scene picker reads the same list** (`SceneSelect`,
+  `production.jsx`), keeping the scene it currently shows so the `<select>`
+  never names the wrong one.
 - **Members are NOT discovered from sources, and they NEST under their
   container.** Character Spotlight and Game Summary can share one Callout Stage
   source; a source→row scan alone would collapse two separately-driven elements

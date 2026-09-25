@@ -595,6 +595,72 @@ describe('Rack scene sections', () => {
  * two `?scoreboard=N` sources are two independent things with their own air
  * state.
  */
+/*
+ * A scene collection carries scenes PRSH has no business in, and the rack
+ * listed every one. Hiding is a rack preference — browser-local, by name, and
+ * never an OBS write — and it never hides what is on air.
+ */
+describe('Rack hidden scenes', () => {
+    const section = (scene) => document.querySelector(`[data-rack-section="${scene}"]`);
+    const edit = () => fireEvent.click(screen.getByRole('button', { name: 'Edit scenes' }));
+    const done = () => fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    it('hides a scene from edit mode, and remembers it', () => {
+        obs({ Game: [], 'Starting Soon': [] });
+        ui(<Rack />);
+        edit();
+        fireEvent.click(screen.getByRole('button', { name: 'Hide Starting Soon from the rack' }));
+        // Still listed while editing, so it can be brought back.
+        expect(section('Starting Soon')).toHaveAttribute('data-rack-scene-hidden');
+        done();
+        expect(section('Starting Soon')).toBeNull();
+        expect(screen.getByText('1 scene hidden')).toBeInTheDocument();
+        expect(JSON.parse(store.get('prsh.ui.production.hiddenScenes'))).toEqual(['Starting Soon']);
+        cleanup();
+        ui(<Rack />);
+        expect(section('Starting Soon')).toBeNull();
+    });
+
+    it('brings a hidden scene back', () => {
+        store.set('prsh.ui.production.hiddenScenes', JSON.stringify(['Break']));
+        obs({ Game: [], Break: [] });
+        ui(<Rack />);
+        expect(section('Break')).toBeNull();
+        edit();
+        fireEvent.click(screen.getByRole('button', { name: 'Show Break on the rack' }));
+        done();
+        expect(section('Break')).not.toBeNull();
+        expect(screen.queryByText(/hidden/)).not.toBeInTheDocument();
+    });
+
+    it('never hides the program scene', () => {
+        store.set('prsh.ui.production.hiddenScenes', JSON.stringify(['Game']));
+        obs({ Game: [item(1, 'SB', SB)] });
+        ui(<Rack />);
+        expect(sectionRows('Game')).toEqual(['Scoreboard']);
+    });
+
+    it('lists names only while editing — no rows, nothing to add, nothing mirrored', () => {
+        obs({ Game: [item(1, 'SB', SB)] });
+        ui(<Rack onAdd={vi.fn()} />);
+        edit();
+        expect(sectionRows('Game')).toEqual([]);
+        expect(screen.queryByRole('button', { name: 'Add an overlay to Game' })).not.toBeInTheDocument();
+    });
+
+    it('does not count a stored name for a scene that no longer exists', () => {
+        store.set('prsh.ui.production.hiddenScenes', JSON.stringify(['Deleted Scene']));
+        obs({ Game: [] });
+        ui(<Rack />);
+        expect(screen.queryByText(/hidden/)).not.toBeInTheDocument();
+    });
+
+    it('offers no scene editing without OBS, where there are no scenes', () => {
+        ui(<Rack />);
+        expect(screen.queryByRole('button', { name: 'Edit scenes' })).not.toBeInTheDocument();
+    });
+});
+
 describe('Rack instances', () => {
     /*
      * The detail is a QUALIFIER on a name already printed, so an unnamed board

@@ -60,6 +60,7 @@ export const SELECTION_KEY = 'prsh.ui.production.selection';
 export const RAIL_KEY = 'prsh.ui.production.rail';
 export const OPEN_SCENES_KEY = 'prsh.ui.production.scenes';
 export const SHUT_TIERS_KEY = 'prsh.ui.production.tiers';
+export const HIDDEN_SCENES_KEY = 'prsh.ui.production.hiddenScenes';
 
 export function useRackSelection() {
     return usePersistentState(SELECTION_KEY, 'desk:match', v => typeof v === 'string');
@@ -89,6 +90,25 @@ export function useOpenScenes() {
  */
 export function useShutTiers() {
     return usePersistentState(SHUT_TIERS_KEY, [], v => Array.isArray(v));
+}
+
+/*
+ * Which OBS scenes the producer has taken OFF the rack — a scene collection
+ * carries scenes PRSH has no business in (a "Starting Soon" card, a webcam
+ * test, a nested source scene), and the rack listed every one of them.
+ *
+ * Browser-local like every other rack layout preference: hiding a scene is how
+ * THIS producer reads their console, not a fact about the broadcast, and it
+ * never touches OBS. Stored by scene NAME and resolved at read time — a name
+ * that no longer exists is simply never matched, and comes back into force if
+ * the scene does.
+ *
+ * A hidden scene still appears while it is PROGRAM or PREVIEW: the rack never
+ * hides what is on air, and those two sections are how a producer finds out
+ * what is.
+ */
+export function useHiddenScenes() {
+    return usePersistentState(HIDDEN_SCENES_KEY, [], v => Array.isArray(v));
 }
 
 // First-run seed: an empty rail undersells the surface, so a producer who has
@@ -736,6 +756,56 @@ const CatalogSection = memo(function CatalogSection({
 });
 
 /*
+ * Edit mode's one control per scene: listed on the rack, or not. An eye,
+ * because it is the rack's word for "visible" — but on the HEADER, never a row,
+ * so it cannot be mistaken for the source eye that changes what OBS draws. This
+ * one changes only what the rack lists.
+ */
+const SceneVisibilityToggle = memo(function SceneVisibilityToggle({ scene, hidden, onToggle }) {
+    const onAir = scene.where !== 'other';
+    const tip = hidden
+        ? (onAir ? 'Hidden — listed anyway while it is on air' : 'Show on the rack')
+        : 'Hide from the rack (OBS is not changed)';
+    const Icon = hidden ? EyeOff : Eye;
+    return (
+        <SimpleTooltip label={tip}>
+            <Button
+                variant="ghost" size="icon" className="h-5 w-5 shrink-0"
+                aria-label={hidden ? `Show ${scene.scene} on the rack` : `Hide ${scene.scene} from the rack`}
+                aria-pressed={!hidden}
+                onClick={onToggle}
+            >
+                <Icon size={13} className={hidden ? 'text-muted-foreground/60' : 'text-foreground'} />
+            </Button>
+        </SimpleTooltip>
+    );
+});
+
+/*
+ * The foot of the scene list: the way into edit mode, and the one line that
+ * admits scenes are missing. Without the count a hidden scene is one the
+ * producer forgot they hid — "why isn't Break on my rack?" — so the footer says
+ * how many it is holding back.
+ */
+const SceneEditFooter = memo(function SceneEditFooter({ editing, onToggle, hiddenCount }) {
+    return (
+        <div className="flex items-center gap-2 px-2 pt-2" data-rack-scene-edit>
+            <Text size="xs" dimmed className="min-w-0 flex-1">
+                {editing
+                    ? 'Choose which scenes the rack lists. OBS is not changed.'
+                    : hiddenCount ? `${hiddenCount} scene${hiddenCount === 1 ? '' : 's'} hidden` : null}
+            </Text>
+            <Button
+                variant={editing ? 'default' : 'ghost'} size="sm" className="h-6 shrink-0 px-2 text-xs"
+                onClick={onToggle}
+            >
+                {editing ? 'Done' : 'Edit scenes'}
+            </Button>
+        </div>
+    );
+});
+
+/*
  * One scene's rows.
  *
  * Program and preview are always open and eagerly mirrored. Every other scene
@@ -746,22 +816,29 @@ const CatalogSection = memo(function CatalogSection({
  */
 const SceneSection = memo(function SceneSection({
     scene, rows, open, onToggle, selection, onSelect, pinned, onPinToggle, onAdd, label,
+    editing = false, hidden = false, onToggleHidden,
 }) {
-    const { loading } = useMirrorScene(open ? scene.scene : null);
+    // Edit mode is a list of scene NAMES and nothing else: no rows under them
+    // and so nothing to mirror, which is what lets a producer open it on a
+    // collection of thirty scenes without asking OBS for thirty scene lists.
+    const shown = open && !editing;
+    const { loading } = useMirrorScene(shown ? scene.scene : null);
     const meta = ROLE_META[scene.where] ?? ROLE_META.other;
-    const collapsible = scene.where === 'other';
+    const collapsible = scene.where === 'other' && !editing;
 
     return (
-        <div data-rack-section={scene.scene}>
+        <div data-rack-section={scene.scene} data-rack-scene-hidden={hidden ? '' : undefined}>
             <SectionHeader
                 label={meta.tag ? `${meta.tag} · ${scene.scene}` : scene.scene}
-                accent={meta.accent}
-                count={open && rows.length ? rows.length : null}
-                open={open}
+                accent={editing && hidden ? 'text-muted-foreground/50 line-through' : meta.accent}
+                count={shown && rows.length ? rows.length : null}
+                open={shown}
                 onToggle={collapsible ? onToggle : undefined}
-                action={open ? <AddButton scene={scene.scene} onAdd={onAdd} /> : null}
+                action={editing
+                    ? <SceneVisibilityToggle scene={scene} hidden={hidden} onToggle={onToggleHidden} />
+                    : shown ? <AddButton scene={scene.scene} onAdd={onAdd} /> : null}
             />
-            {open && (loading
+            {shown && (loading
                 ? <Text size="xs" dimmed className="px-2">Reading scene…</Text>
                 : rows.length
                     ? rows.map((p) => {
@@ -859,6 +936,10 @@ export const Rack = memo(function Rack({
     const [ownRail, setOwnRail] = useRailPins();
     const [openScenes, setOpenScenes] = useOpenScenes();
     const [shutTiers, setShutTiers] = useShutTiers();
+    const [hiddenScenes, setHiddenScenes] = useHiddenScenes();
+    // Momentary, not persisted: a producer who reloads mid-edit should land on
+    // their console, not on a list of eyes.
+    const [editingScenes, setEditingScenes] = useState(false);
 
     const selection = selectionProp ?? ownSelection;
     const setSelection = onSelect ?? setOwnSelection;
@@ -880,6 +961,32 @@ export const Rack = memo(function Rack({
         }
         return m;
     }, [placements]);
+
+    /*
+     * What the rack actually lists. A hidden scene drops out unless it is on
+     * air (see useHiddenScenes) — or while editing, where every scene is listed
+     * so a hidden one can be brought back.
+     */
+    const hidden = useMemo(() => new Set(hiddenScenes ?? []), [hiddenScenes]);
+    const listedScenes = useMemo(
+        () => (editingScenes ? scenes : scenes.filter(sc => sc.where !== 'other' || !hidden.has(sc.scene))),
+        [scenes, hidden, editingScenes],
+    );
+    // Counted against scenes that EXIST, so a stored name for a scene since
+    // deleted or renamed does not haunt the footer.
+    const hiddenCount = scenes.filter(sc => hidden.has(sc.scene)).length;
+    // The yell agrees with the rows below it, so a hidden scene's stretched
+    // source is not counted — it is not on the rack to be fixed from.
+    const listedPlacements = useMemo(() => {
+        if (offline) return placements;
+        const names = new Set(listedScenes.map(sc => sc.scene));
+        return placements.filter(p => names.has(p.scene));
+    }, [placements, listedScenes, offline]);
+    const toggleHidden = (name) => setHiddenScenes(prev => (
+        (prev ?? []).includes(name)
+            ? (prev ?? []).filter(s => s !== name)
+            : [...(prev ?? []), name]
+    ));
 
     const toggleScene = (name) => setOpenScenes(prev => (
         (prev ?? []).includes(name)
@@ -946,7 +1053,7 @@ export const Rack = memo(function Rack({
         >
             <ScrollArea className="min-h-0 flex-1">
                 <div className="flex flex-col gap-1 p-2">
-                    <StretchNotice placements={placements} onSelect={setSelection} />
+                    <StretchNotice placements={listedPlacements} onSelect={setSelection} />
                     {/* MATCH FIRST. See DESKS for why the order flipped. */}
                     <DeskSection
                         open={!shut.has('desk')} onToggle={() => toggleTier('desk')}
@@ -967,7 +1074,7 @@ export const Rack = memo(function Rack({
                                 onAdd={onAdd} label={label}
                             />
                         )
-                        : scenes.map(sc => (
+                        : listedScenes.map(sc => (
                             <SceneSection
                                 key={sc.scene} scene={sc} rows={byScene.get(sc.scene) ?? []}
                                 open={sc.where !== 'other' || (openScenes ?? []).includes(sc.scene)}
@@ -975,8 +1082,16 @@ export const Rack = memo(function Rack({
                                 selection={selection} onSelect={setSelection}
                                 pinned={pinned} onPinToggle={togglePin}
                                 onAdd={onAdd} label={label}
+                                editing={editingScenes} hidden={hidden.has(sc.scene)}
+                                onToggleHidden={() => toggleHidden(sc.scene)}
                             />
                         ))}
+                    {!offline && scenes.length > 0 && (
+                        <SceneEditFooter
+                            editing={editingScenes} hiddenCount={hiddenCount}
+                            onToggle={() => setEditingScenes(e => !e)}
+                        />
+                    )}
                     {status !== 'connected' && (
                         <Text size="xs" dimmed className="px-2 pt-2">
                             {status === 'connecting'

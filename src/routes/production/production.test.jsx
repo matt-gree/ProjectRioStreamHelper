@@ -201,3 +201,32 @@ describe('the OBS error line', () => {
         expect(screen.getByText('OBS not set up')).toBeInTheDocument();
     });
 });
+
+/*
+ * The top bar's scene picker lists what the rack lists — a scene hidden from
+ * the rack is gone from the dropdown too — except the scene it is showing,
+ * which stays so the <select> never names the wrong one.
+ */
+describe('the scene picker', () => {
+    const connect = (extra = {}) => useObsStore.setState({
+        status: 'connected', scenes: ['Game', 'Break', 'Webcam Test'],
+        programScene: 'Game', mirroredScenes: [], sceneItems: {}, ...extra,
+    });
+    const options = () => [...screen.getByRole('combobox').querySelectorAll('option')]
+        .map(o => o.textContent);
+
+    it('leaves out scenes hidden from the rack', () => {
+        store.set('prsh.ui.production.hiddenScenes', JSON.stringify(['Webcam Test']));
+        connect();
+        ui();
+        expect(options()).toEqual(['Game', 'Break']);
+    });
+
+    it('keeps a hidden scene while it is the one on air', () => {
+        store.set('prsh.ui.production.hiddenScenes', JSON.stringify(['Game']));
+        connect();
+        ui();
+        expect(options()).toEqual(['Game', 'Break', 'Webcam Test']);
+        expect(screen.getByRole('combobox')).toHaveValue('Game');
+    });
+});
