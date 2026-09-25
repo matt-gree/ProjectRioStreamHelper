@@ -17,6 +17,7 @@ import {
     sourceSizeOverride,
     scaleSourceSizes,
     clearSourceSizes,
+    resolveLetterSpacing,
     DEFAULT_NAME_SIZE,
     MIN_NAME_SIZE,
     MAX_NAME_SIZE,
@@ -217,6 +218,14 @@ describe('the settings this element has', () => {
         expect(resolveAlign('auto', 2)).toBe('right');
         expect(resolveAlign('sideways', 2)).toBe('right');
         expect(resolveAlign('center', 2)).toBe('center');
+    });
+
+    it('reads letter spacing as a number, and anything else as none', () => {
+        expect(resolveLetterSpacing(3)).toBe(3);
+        expect(resolveLetterSpacing('2.5')).toBe(2.5);
+        expect(resolveLetterSpacing(-1)).toBe(-1);
+        expect(resolveLetterSpacing(undefined)).toBe(0);
+        expect(resolveLetterSpacing('wide')).toBe(0);
     });
 
     it('defaults the prefix above the name', () => {

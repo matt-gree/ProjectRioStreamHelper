@@ -200,6 +200,20 @@ export const LAYOUT_SETTINGS = {
           * (playername-mount.js `stackHeight`).
           */
         { key: 'prefixSize', type: 'number-override', label: 'Prefix Size', description: 'Type size of the Address Book prefix (sponsor / tag), in pixels — independent of the name. The source has to be tall enough for both runs together.', defaultValue: 24, min: 8, max: 200, step: 1, suffix: 'px' },
+        /*
+         * ADDED TRACKING, in px at the Name Size, on top of the face's own.
+         *
+         * It exists for the FONT BORDER. The border is drawn outside each letter
+         * (paint-order: stroke fill) and the browser still advances every glyph
+         * by its bare width, so each gap loses a border's width from the letter
+         * on either side — a heavy border closes the gaps and the name reads as
+         * one fat shape. OBS's own Text (FreeType 2) outline does exactly the
+         * same (eight 2px-offset copies, advances untouched); it just can't be
+         * made thicker than 2px. Spacing is the producer's way to give the gaps
+         * back. Scaled with the type like the border is, so a clamped or
+         * redrawn source keeps the same proportions.
+         */
+        { key: 'letterSpacing', type: 'number-override', label: 'Letter Spacing', description: 'Extra space between letters, in pixels — raise it to reopen the gaps a thick Font Border closes. Negative tightens.', defaultValue: 0, min: -10, max: 40, step: 0.5, suffix: 'px' },
         { key: 'align', type: 'select', label: 'Alignment', description: 'Which edge the name sits on. Mirror Sides puts side 1 left and side 2 right — the pair that frames a scoreboard.', options: [{ value: 'auto', label: 'Mirror Sides' }, { value: 'left', label: 'Left' }, { value: 'center', label: 'Middle' }, { value: 'right', label: 'Right' }], defaultValue: 'auto' },
         { key: 'prefixPosition', type: 'select', label: 'Prefix Position', description: 'Where the Address Book prefix (sponsor / tag) sits relative to the name. Off hides it without editing the Address Book.', options: [{ value: 'above', label: 'Above Name' }, { value: 'below', label: 'Below Name' }, { value: 'inline', label: 'Before Name' }, { value: 'off', label: 'Off' }], defaultValue: 'above' },
     ],
@@ -400,6 +414,10 @@ export const LAYOUT_SETTINGS = {
         // walks fontScale -> fontSize -> the pair against the same 34.
         { key: 'headerFontSize', group: 'Both bands', type: 'number-override', label: 'Top Font Size', description: 'Type size for the header row; its band grows with it', defaultValue: 34, min: 16, max: 72, step: 1, suffix: 'px' },
         { key: 'footerFontSize', group: 'Both bands', type: 'number-override', label: 'Bottom Font Size', description: 'Type size for the footer row; its band grows with it', defaultValue: 34, min: 16, max: 72, step: 1, suffix: 'px' },
+        // For the FONT BORDER, as on Player Name: the border grows outside each
+        // letter while the advances stay put, so a thick one closes the gaps.
+        // Absolute px like the border itself (not scaled by the band's type).
+        { key: 'letterSpacing', group: 'Both bands', type: 'number-override', label: 'Letter Spacing', description: 'Extra space between letters in both rows, in pixels — raise it to reopen the gaps a thick Font Border closes. Negative tightens.', defaultValue: 0, min: -10, max: 40, step: 0.5, suffix: 'px' },
         { key: 'bgStyle',       group: 'Both bands', type: 'select', label: 'Band Background', description: 'Optional readability plate behind each row: none (transparent), a soft scrim, or a solid bar', options: [{ value: 'none', label: 'None' }, { value: 'scrim', label: 'Scrim' }, { value: 'bar', label: 'Bar' }], defaultValue: 'none' },
         // `short`: the whole value is one glyph, so the field says so rather
         // than stretching the width of its column.

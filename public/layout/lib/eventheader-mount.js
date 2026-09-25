@@ -119,7 +119,9 @@ const CSS = `
   /* Same size top and bottom. */
   font-size: calc(34px * var(--font-scale, 1));
   font-weight: 700;
-  letter-spacing: 0.01em;
+  /* Plus the producer's Letter Spacing, absolute px like the border it exists
+     to make room for (see the next comment). */
+  letter-spacing: calc(0.01em + var(--eh-letter-spacing, 0px));
   /*
    * The text shadow and the font border, both pinnable per element from this
    * element's Style Overrides section. On the ROW so the separators between
@@ -152,8 +154,10 @@ const CSS = `
   -webkit-text-stroke: var(--text-stroke-width, 0px) var(--text-stroke-color, transparent);
   paint-order: stroke fill;
 }
-/* No overflow clip here — that was cropping glyph descenders. */
-.eh-field { flex: 0 0 auto; }
+/* No overflow clip here — that was cropping glyph descenders. The end margin
+   cancels the letter spacing the browser adds after a field's last letter, so
+   the gap either side of a separator stays even. */
+.eh-field { flex: 0 0 auto; margin-inline-end: calc(-1 * var(--eh-letter-spacing, 0px)); }
 /*
  * The platform mark, sized off the TYPE rather than the band: it is a character
  * of the handle it belongs to, so it has to grow with the handle and not with
@@ -519,6 +523,8 @@ export function mountEventHeader({ host, sb = 1 }) {
         const fOff = Number(s('footerOffsetY', 2));
         const bg = s('bgStyle', 'none');
 
+        const spacing = Number(s('letterSpacing', 0));
+        stage.style.setProperty('--eh-letter-spacing', `${Number.isFinite(spacing) ? spacing : 0}px`);
         header.style.setProperty('--font-scale', size.header / BASE_FONT_PX);
         footer.style.setProperty('--font-scale', size.footer / BASE_FONT_PX);
         typeSize = size;

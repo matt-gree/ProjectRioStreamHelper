@@ -201,7 +201,8 @@ const CSS = `
   font-size: calc(${NAME_SIZE}px * var(--pn-scale, 1) * var(--pn-tag-ratio, ${DEFAULT_TAG_RATIO}));
   font-weight: 800;
   line-height: 1;
-  letter-spacing: 0.06em;
+  letter-spacing: calc(0.06em + var(--pn-letter-spacing, 0px) * var(--pn-scale, 1) * var(--pn-tag-ratio, ${DEFAULT_TAG_RATIO}));
+  margin-inline-end: calc(-1 * var(--pn-letter-spacing, 0px) * var(--pn-scale, 1) * var(--pn-tag-ratio, ${DEFAULT_TAG_RATIO}));
   text-transform: uppercase;
   color: var(--tag-color, var(--accent, #f59f00));
   /*
@@ -250,6 +251,12 @@ const CSS = `
   font-size: calc(${NAME_SIZE}px * var(--pn-scale, 1));
   font-weight: 700;
   line-height: ${NAME_LINE};
+  /* LETTER SPACING scales with the type exactly as the border beside it does,
+     which is the whole job: it gives back the gap a border closes. The
+     negative end margin cancels the spacing the browser also adds after the
+     LAST letter, or a right-aligned name would sit one gap in from its edge. */
+  letter-spacing: calc(var(--pn-letter-spacing, 0px) * var(--pn-scale, 1));
+  margin-inline-end: calc(-1 * var(--pn-letter-spacing, 0px) * var(--pn-scale, 1));
   color: var(--text-primary, #ffffff);
   filter: drop-shadow(0px 0px calc(var(--text-shadow-blur, 0px) * var(--pn-scale, 1)) var(--text-shadow-color, transparent));
   -webkit-text-stroke: calc(var(--text-stroke-width, 0px) * var(--pn-scale, 1)) var(--text-stroke-color, transparent);
@@ -562,6 +569,16 @@ export function previewScale(frameHeight, nativeHeight) {
     return h / n;
 }
 
+/*
+ * The producer's added tracking, in px at the Name Size. A value the store
+ * cannot read as a number (PUT /settings takes strings) draws the face's own
+ * spacing rather than NaN, which would drop the whole declaration.
+ */
+export function resolveLetterSpacing(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
 export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
     // This source's own sizes, when it carries them (see SIZE_PARAMS). They
     // beat the shared settings for this source alone.
@@ -690,6 +707,7 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
             ?? resolveNameSize(sideSetting('nameSize', DEFAULT_NAME_SIZE));
         prefixSize = own.prefixSize
             ?? resolvePrefixSize(sideSetting('prefixSize', DEFAULT_PREFIX_SIZE));
+        root.style.setProperty('--pn-letter-spacing', `${resolveLetterSpacing(sideSetting('letterSpacing', 0))}px`);
         const align = resolveAlign(sideSetting('align', 'auto'), TEAM);
         prefixPosition = resolvePrefixPosition(sideSetting('prefixPosition', 'above'));
         box.className = `pn-box pn-a-${align} pn-p-${prefixPosition}`;
