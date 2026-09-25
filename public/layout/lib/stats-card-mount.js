@@ -52,6 +52,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
 import { lineTextBox, layoutStatCells } from './mount-utils.js';
+import { styleNs, styleSetting } from './side-styles.js';
 
 const ELEMENT = 'statsbar';
 const DEFAULT_PACKAGE = 'default';
@@ -124,9 +125,12 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   ensureGsap().then(lib => { if (!disposed) gsap = lib; });
 
   const g = OverlayBase.deepGet;
+  // This side's copy when Separate side styles is on, else the shared one
+  // (./side-styles.js).
+  const sideSetting = (settings, key, def) => styleSetting(settings, SETTINGS_TYPE, TEAM, key, def);
 
   function useFade(settings) {
-    return g(settings, `overlays.${SETTINGS_TYPE}.transitionType`, 'fade') === 'fade';
+    return sideSetting(settings, 'transitionType', 'fade') === 'fade';
   }
 
   // Resolve the bottom line from the producer's choice:
@@ -135,10 +139,10 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   //   'custom'             — a fixed user string (hidden + compact when blank)
   //   'off'                — always hidden; card shrinks to data-h-compact
   function resolveLine(info, settings) {
-    const mode = g(settings, `overlays.${SETTINGS_TYPE}.subLine`, 'gameLine');
+    const mode = sideSetting(settings, 'subLine', 'gameLine');
     if (mode === 'off') return { show: false, label: '', text: '' };
     if (mode === 'custom') {
-      const text = String(g(settings, `overlays.${SETTINGS_TYPE}.subLineText`, '') || '').trim();
+      const text = String(sideSetting(settings, 'subLineText', '') || '').trim();
       return { show: !!text, label: '', text };
     }
     const text = info.gameLine || info.bottomLabel || '';
@@ -159,9 +163,9 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
    * "Stats" — a board with no game loaded has no stat set to name.
    */
   function resolveHead(info, settings) {
-    const mode = g(settings, `overlays.${SETTINGS_TYPE}.topLine`, 'off');
+    const mode = sideSetting(settings, 'topLine', 'off');
     if (mode === 'custom') {
-      const text = String(g(settings, `overlays.${SETTINGS_TYPE}.topLineText`, '') || '').trim();
+      const text = String(sideSetting(settings, 'topLineText', '') || '').trim();
       return { show: !!text, text };
     }
     if (mode === 'auto') {
@@ -339,8 +343,8 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
       rootSvg.setAttribute('data-team', String(TEAM));
     }
 
-    if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE);
-    else OverlayBase.clearDesignSettings(SETTINGS_TYPE);
+    if (engine.usesAppVars) OverlayBase.applyDesignSettings(SETTINGS_TYPE, styleNs(settings, SETTINGS_TYPE, TEAM));
+    else OverlayBase.clearDesignSettings(SETTINGS_TYPE, styleNs(settings, SETTINGS_TYPE, TEAM));
 
     const info = window.RioData ? RioData.getStatsLine(state, SB, TEAM) : null;
     host.style.display = info ? '' : 'none';

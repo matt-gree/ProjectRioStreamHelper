@@ -19,6 +19,8 @@ import SizeMatchRow from './sizematch';
 import RedrawRow from './resolution';
 import BoardSwitchRow from './boardswitch';
 import { PlayerNameStage } from './playername';
+import { useStyleSide } from './side-scope';
+import { useSideLabels } from '../sides';
 import StagePreview from './preview';
 import HitVisualizerStage from './hitvisualizer';
 import MatchupStage from './matchup';
@@ -118,10 +120,15 @@ const ElementStage = memo(function ElementStage({
        `matchuphistory` here and `overlays.matchup.*` in its mount, and a panel
        keyed on the id writes where nothing reads (see settingsTypeOf). */
     const settingsType = settingsTypeOf(element);
-    const settingsBoard = element.scope === 'board' ? board : null;
+    /* A per-side element under Separate side styles edits ITS side's copy
+       (`overlays.{type}.side{T}.*`) — the same slot a board-scoped element's
+       board takes, so both style sections below need nothing new. */
+    const styleSide = useStyleSide(element, placement);
+    const sides = useSideLabels();
+    const settingsBoard = element.scope === 'board' ? board : styleSide.segment;
     const settingsLabel = element.scope === 'board'
         ? `${element.name} ${board ?? ''}`.trim()
-        : element.name;
+        : styleSide.segment ? `${element.name} ${sides.label(styleSide.side)}` : element.name;
     const Body = stageBodyComponent(element, placement);
     const dims = useContainerDims(placement);
     /* The source's ?size=, read once: it picks the theme file an override has

@@ -92,6 +92,8 @@
 // and `--pn-scale` is the one number the whole card is drawn from — so the type
 // size the producer asks for reaches the CSS as `nameSize / NAME_SIZE` and
 // nothing else in this block has to know the setting exists.
+import { styleNs, styleSetting } from './side-styles.js';
+
 const NAME_SIZE = 36;
 const NAME_LINE = 1.05;
 const STACK_GAP = 2;
@@ -674,8 +676,10 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
     const SLICE26_SIDE_COLOR = { 1: '#C5F707', 2: '#57E0E7' };
 
     function update(state, settings) {
-        OverlayBase.applyDesignSettings('playername');
+        // Its own side's namespace when Separate side styles is on (styleNs).
+        OverlayBase.applyDesignSettings('playername', styleNs(settings, 'playername', TEAM));
         const g = OverlayBase.deepGet;
+        const sideSetting = (key, def) => styleSetting(settings, 'playername', TEAM, key, def);
 
         const designPackage = g(settings, 'overlays.global.designPackage', 'default');
         const tagColor = designPackage === 'slice26' ? SLICE26_SIDE_COLOR[TEAM] : null;
@@ -683,11 +687,11 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
         else document.documentElement.style.removeProperty('--tag-color');
 
         nameSize = own.nameSize
-            ?? resolveNameSize(g(settings, 'overlays.playername.nameSize', DEFAULT_NAME_SIZE));
+            ?? resolveNameSize(sideSetting('nameSize', DEFAULT_NAME_SIZE));
         prefixSize = own.prefixSize
-            ?? resolvePrefixSize(g(settings, 'overlays.playername.prefixSize', DEFAULT_PREFIX_SIZE));
-        const align = resolveAlign(g(settings, 'overlays.playername.align', 'auto'), TEAM);
-        prefixPosition = resolvePrefixPosition(g(settings, 'overlays.playername.prefixPosition', 'above'));
+            ?? resolvePrefixSize(sideSetting('prefixSize', DEFAULT_PREFIX_SIZE));
+        const align = resolveAlign(sideSetting('align', 'auto'), TEAM);
+        prefixPosition = resolvePrefixPosition(sideSetting('prefixPosition', 'above'));
         box.className = `pn-box pn-a-${align} pn-p-${prefixPosition}`;
 
         nameEl.textContent = g(state, NAME_KEY, '');

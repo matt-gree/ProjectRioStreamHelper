@@ -84,6 +84,7 @@
         || key === `score.${SCOREBOARD}.game_completed`,
       shouldRenderSettings: (key) =>
         key.startsWith('overlays.roster.')
+        || key === 'overlays.global.splitSides'
         || key === 'project_rio.hud_enabled',
     });
   </script>

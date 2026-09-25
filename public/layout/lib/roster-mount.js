@@ -15,6 +15,8 @@
 
 // Reference roster icon sizes — trailing icons match captain, all scale
 // uniformly to fit the 452×140 frame.
+import { styleSetting } from './side-styles.js';
+
 const REF_W = 452, REF_H = 140;
 const CHAR_SIZE = 52;
 const CAPTAIN_SIZE = 104;
@@ -103,15 +105,16 @@ export function renderRoster(container, { state, settings, sb, team }) {
   injectCss();
   if (!container) return;
   container.classList.add('roster-container');
-  const { deepGet } = OverlayBase;
   container.innerHTML = '';
 
   // settingOn, not `!== false` — see the note in scoreboard-mount's readToggles.
   const on = OverlayBase.settingOn;
-  const showSuperstars = on(deepGet(settings, 'overlays.roster.showSuperstars', true), true);
-  const showRole = on(deepGet(settings, 'overlays.roster.showRoleIcon', true), true);
-  const showTeamLogo = on(deepGet(settings, 'overlays.roster.showTeamLogo', true), true);
-  container.dataset.portraits = resolvePortraitStyle(deepGet(settings, 'overlays.roster.pixelPortraits'));
+  // This side's copy when Separate side styles is on (./side-styles.js).
+  const side = (key, def) => styleSetting(settings, 'roster', team, key, def);
+  const showSuperstars = on(side('showSuperstars', true), true);
+  const showRole = on(side('showRoleIcon', true), true);
+  const showTeamLogo = on(side('showTeamLogo', true), true);
+  container.dataset.portraits = resolvePortraitStyle(side('pixelPortraits'));
 
   const slots = RioData.getRosterSlots(state, sb, team, {
     includeRole: showRole,

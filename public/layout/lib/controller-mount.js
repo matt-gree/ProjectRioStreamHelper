@@ -45,6 +45,8 @@
  * diagnostic previews, which deliberately draw the reader's own look rather
  * than the broadcast's.
  */
+import { styleSetting } from './side-styles.js';
+
 const GC_PLUMBING = 'bg=transparent&gear=0&portlabel=0&status=0';
 
 /*
@@ -72,13 +74,16 @@ const DISPLAY_KEYS = [
 // Settings keys that change what this mount draws — everything else is somebody
 // else's overlay, and waking on it would reload the iframe for nothing.
 export function watchesSetting(key) {
-    return key === 'overlays.controller' || key.startsWith('overlays.controller.');
+    return key === 'overlays.controller' || key.startsWith('overlays.controller.')
+        // Flipping Separate side styles moves which namespace this side reads.
+        || key === 'overlays.global' || key === 'overlays.global.splitSides';
 }
 
-// The appearance half of the query string.
-function displayParams(settings) {
+// The appearance half of the query string — this side's copy when Separate
+// side styles is on (OverlayBase.styleNs), else the shared one.
+function displayParams(settings, team) {
     return DISPLAY_KEYS.map(({ param, key, kind, fallback }) => {
-        const raw = OverlayBase.deepGet(settings, `overlays.controller.${key}`, null);
+        const raw = styleSetting(settings, 'controller', team, key, null);
         if (kind === 'bool') {
             return `${param}=${(typeof raw === 'boolean' ? raw : fallback) ? 1 : 0}`;
         }
@@ -178,7 +183,7 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
          * tab's per-port previews already speak gc-overlay's convention; only
          * this path needed it.
          */
-        const display = displayParams(OverlayBase.settings);
+        const display = displayParams(OverlayBase.settings, team);
         const src = `${gcBaseUrl}/?port=${port + 1}&${GC_PLUMBING}&${display}`;
         if (src !== lastSrc) {
             lastSrc = src;

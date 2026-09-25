@@ -9,6 +9,8 @@ import { FieldRow } from '../kit';
 import { StagedDot } from '../controls';
 import { stretchOfPlacement } from '../sources/placements';
 import { useSettingsStore } from '../../../context/store';
+import { sideOfVariant } from '../sources/instances';
+import { styleSetting } from '../../../../public/layout/lib/side-styles.js';
 import {
     scaleSourceSizes, sourceSizeOverride,
 } from '../../../../public/layout/lib/playername-mount.js';
@@ -75,11 +77,20 @@ const pendingKey = (placement) => `obs:redraw:${placement.scene}:${placement.ite
  * size. Read at run time, like the size, so a staged redraw scales by the drag
  * that is on screen when it goes live.
  */
+// The sizes this source follows: its side's copy over the shared one under
+// Separate side styles — the mount's own resolver, imported.
+function playerNameSizes(placement) {
+    const settings = useSettingsStore.getState();
+    const side = sideOfVariant(placement.variant);
+    return {
+        nameSize: styleSetting(settings, 'playername', side, 'nameSize'),
+        prefixSize: styleSetting(settings, 'playername', side, 'prefixSize'),
+    };
+}
+
 function typeRewrite(placement) {
     if (placement?.element?.id !== 'playername') return null;
-    return (url, factor) => scaleSourceSizes(
-        url, factor, useSettingsStore.getState()?.overlays?.playername ?? {},
-    );
+    return (url, factor) => scaleSourceSizes(url, factor, playerNameSizes(placement));
 }
 
 function landedOn(done) {

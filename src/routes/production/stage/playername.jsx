@@ -9,6 +9,8 @@ import { DirectStage } from './generic';
 import { FieldRow, StatusLine } from '../kit';
 import { StagedDot } from '../controls';
 import { OverlaySettingGroups, useOverlaySettings } from './overlay-settings';
+import { useStyleSide } from './side-scope';
+import { useSideLabels } from '../sides';
 import {
     clearSourceSizes, heightForNameSize, resolveNameSize, resolvePrefixPosition,
     resolvePrefixSize, sourceSizeOverride,
@@ -69,9 +71,14 @@ function sourceFrame(placement) {
  * reads this line before pressing Go Live — a line describing the value that is
  * about to be replaced would be worse than no line.
  */
-function useLiveSetting(key, fallback) {
-    const stored = useSettingsStore(s => s?.overlays?.playername?.[key]);
-    const pending = usePending(`settings:overlays.playername.${key}`);
+function useLiveSetting(key, fallback, segment) {
+    // Side → shared, the order the mount reads them in (OverlayBase.styleSetting).
+    const stored = useSettingsStore(s => {
+        const bag = s?.overlays?.playername;
+        return (segment ? bag?.[segment]?.[key] : null) ?? bag?.[key];
+    });
+    const ns = segment ? `playername.${segment}` : 'playername';
+    const pending = usePending(`settings:overlays.${ns}.${key}`);
     return pending ? pending.value : (stored ?? fallback);
 }
 
@@ -130,12 +137,12 @@ export const OwnSizeRow = memo(function OwnSizeRow({ placement }) {
     );
 });
 
-export const NameSizeNote = memo(function NameSizeNote({ placement }) {
+export const NameSizeNote = memo(function NameSizeNote({ placement, segment = null }) {
     const own = useOwnSizes(placement);
-    const sharedSize = useLiveSetting('nameSize', 48);
-    const sharedTag = useLiveSetting('prefixSize', 24);
+    const sharedSize = useLiveSetting('nameSize', 48, segment);
+    const sharedTag = useLiveSetting('prefixSize', 24, segment);
     const size = own.nameSize ?? resolveNameSize(sharedSize);
-    const prefix = resolvePrefixPosition(useLiveSetting('prefixPosition', 'above'));
+    const prefix = resolvePrefixPosition(useLiveSetting('prefixPosition', 'above', segment));
     const tag = own.prefixSize ?? resolvePrefixSize(sharedTag);
     const frame = sourceFrame(placement);
     /*
@@ -203,18 +210,24 @@ export const NameSizeNote = memo(function NameSizeNote({ placement }) {
 
 export function PlayerNameStage({ element, board, placement }) {
     /*
-     * NOT board-scoped, and it is the only per-side element that isn't: the
-     * namespace is a flat `overlays.playername.*` shared by both sides and every
-     * board, which is the whole reason one typed size is one size across the
-     * show. A `playername.{N}` namespace here would quietly undo that.
+     * NOT board-scoped: the namespace is a flat `overlays.playername.*` shared
+     * by both sides and every board, which is the whole reason one typed size
+     * is one size across the show. A `playername.{N}` namespace here would
+     * quietly undo that. The one split is BY SIDE, and only when the producer
+     * turns on Separate side styles (`playername.side{T}`, see side-scope.js).
      */
-    const os = useOverlaySettings('playername', 'playername', 'Player Name', null);
+    const { side, segment } = useStyleSide(element, placement);
+    const sides = useSideLabels();
+    const os = useOverlaySettings(
+        'playername', segment ? `playername.${segment}` : 'playername',
+        segment ? `Player Name ${sides.label(side)}` : 'Player Name', segment,
+    );
     return (
         <>
             <DirectStage element={element} board={board} placement={placement} />
             <OverlaySettingGroups os={os} type="playername" keys={FIT_KEYS} />
             <OwnSizeRow placement={placement} />
-            <NameSizeNote placement={placement} />
+            <NameSizeNote placement={placement} segment={segment} />
         </>
     );
 }

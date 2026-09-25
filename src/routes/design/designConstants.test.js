@@ -406,7 +406,9 @@ describe('overrideReaches', () => {
     it('keys the stat vars on the type the mount actually passes', () => {
         const mount = readFileSync('public/layout/lib/stats-card-mount.js', 'utf8');
         expect(mount).toContain("settingsType || 'statsbar'");
-        expect(mount).toContain('OverlayBase.applyDesignSettings(SETTINGS_TYPE)');
+        // The type is SETTINGS_TYPE; the second argument is only its side's
+        // namespace under Separate side styles (side-styles.js).
+        expect(mount).toContain('OverlayBase.applyDesignSettings(SETTINGS_TYPE, styleNs(settings, SETTINGS_TYPE, TEAM))');
         for (const type of ['statsbar', 'statscard']) {
             expect(varMap, `${type} missing from LAYOUT_VAR_MAP`).toContain(`${type}: STATS_VARS`);
             expect(overrideReaches('cardBg', type)).toBe(true);

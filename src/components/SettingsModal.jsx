@@ -12,6 +12,7 @@ import { useSettingsStore, useConfigStore } from '../context/store';
 import { comboFromEvent } from '../context/staging';
 import { SupportLinks } from './SupportLinks';
 import { SIDE_LABEL_MODES, useSideLabels } from '../routes/production/sides';
+import { setSplitSides, useSplitSides } from '../routes/design/sideStyles';
 
 // Click-to-record hotkey field: focus it, press a combo, done. Esc cancels.
 function HotkeyInput({ id, value, onChange }) {
@@ -81,7 +82,7 @@ function exportEnabled(disabled) {
 export default function SettingsModal({ opened, onClose }) {
     const ids = {
         confirm: useId(), hotkey: useId(),
-        capture: useId(), labels: useId(),
+        capture: useId(), labels: useId(), sides: useId(),
     };
     const setSetting = useSettingsStore(state => state.setItem);
 
@@ -99,6 +100,7 @@ export default function SettingsModal({ opened, onClose }) {
     // The stat file Project Rio writes at the final out is the end-of-game
     // signal for a local board (server/postgame/watch.py).
     const autoCapture = useSettingsStore(state => state?.postgame?.auto_capture) !== false;
+    const splitSides = useSplitSides();
 
     // ── Output ──
     const labelsEnabled = exportEnabled(useSettingsStore(state => state?.general?.disable_export));
@@ -243,6 +245,17 @@ export default function SettingsModal({ opened, onClose }) {
                                 id={ids.capture}
                                 checked={autoCapture}
                                 onCheckedChange={(v) => setSetting('postgame.auto_capture', !!v)}
+                            />
+                        </SettingRow>
+                        <SettingRow
+                            htmlFor={ids.sides}
+                            label="Separate side styles"
+                            hint="Player Name, Stats, Roster and Controller get a style per side, starting from the shared one."
+                        >
+                            <Switch
+                                id={ids.sides}
+                                checked={splitSides}
+                                onCheckedChange={(v) => setSplitSides(!!v).catch(() => notifications.show({ message: "Couldn’t change separate side styles", color: "red" }))}
                             />
                         </SettingRow>
                     </Section>
