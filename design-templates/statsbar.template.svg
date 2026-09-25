@@ -5,8 +5,9 @@
     Do not hand-edit this file; edit it in Figma, or regenerate it.
 
     Round trip: import this into Figma, restyle, export as SVG (layer names as
-    ids, text NOT outlined, frame kept at exactly 452x118), then run
+    ids, text NOT outlined, the whole canvas exported as-is), then run
     scripts/compile-theme.py on the export to get an installable theme back.
+    
 
     LAYER NAMES ARE THE CONTRACT. Figma keeps names, not attributes, so every
     binding the app needs rides in the layer name:
@@ -20,6 +21,11 @@
                            ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
+      frame=WxH            invisible marker: the element's native size
+      at=X,Y               where this file PLACED a layer for editing; the
+                           compiler takes it back out (a nudge on top is kept)
+      defs                 a prototype the app keeps in <defs>; lifted onto the
+                           canvas so you can see it, put back on compile
     Keep them. Rename freely otherwise.
 
     RUNTIME SEAM COLOURS keep these literal hues on their layers; the compiler
@@ -34,13 +40,20 @@
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
 
-    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    PREVIEW COPIES (scaffold=preview-*) show the slots a prototype is cloned
+    into at runtime (ticker cards, schedule rows) and the rest of the card
+    around an alternate. They are COPIES: they do not follow your edits and are
+    stripped on compile. Edit the original (the slot=/tpl= layer) and check
+    the spacing against the copies.
+
+    STACK ROWS (slot=row-* / slot=el-*) have been moved to the offsets the app stacks them
     to, so this file shows the assembled card rather than every band piled on
     the frame origin. `at=N` in the name records where each was put and the
-    compiler takes it back out; anything you move ON TOP of that is kept. Two
-    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
-    never both - so they are drawn overlapping on purpose. Toggle one off in
-    the layers panel to work on the other, and design each to fill the band.
+    compiler takes it back out; anything you move ON TOP of that is kept.
+    ALTERNATES - rows the app never shows together (a live game or a completed
+    one; the Scorecard's full / rosters / condensed score block) - each get a
+    column of their own beside the frame, with the rest of the card previewed
+    around them. Design each to fill the same band.
 
     CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
     runtime, labelled with the row that triggers each. The card GROWS to enclose
@@ -50,10 +63,57 @@
     editing only and never ship.
     --><!--
     DEFAULT package - Stats bar (452x118): the per-team batter/pitcher stat
-    card (stats-card-mount.js). Full roster width so the four numerals get room
-    and never overlap; each value auto-fits via data-maxw. card-bg swaps between
-    data-h-full and data-h-compact when the bottom line row is hidden. Fixed Rio
+    card (stats-card-mount.js). Character well on the left, four value/label
+    cells across the rest, and an optional bottom line. card-bg swaps between
+    data-h-full and data-h-compact when that line row is hidden. Fixed Rio
     palette.
+
+    EVERY var() CARRIES A LITERAL FALLBACK, for the reason statscard.svg spells
+    out: an unresolved custom property in a presentation style computes to the
+    property's INITIAL value - black fill on a black stroke - so a shell that
+    forgot the token layer renders this bar as a black rectangle with black
+    text on it, silently.
+
+    == THE CELLS ARE NOT EQUAL, AND THAT IS THE POINT ========================
+    stat-row declares the BAND (64..442, the character well ends at 60 and the
+    right edge mirrors its inset) and the mount divides it in the ratio of what
+    each category needs - `width` on each stat, in characters, from
+    RioData.getStatsLine; see layoutStatCells in mount-utils.js. Batting is
+    AB 3 / AVG 5 / SLG 5 / SO% 4 and pitching IP 5 / ERA 4 / K% 4 / AVG 5, so
+    the columns differ between the two sets and move under the batter-change
+    cross-fade.
+
+    Equal columns were the bug: measured at weight 700, Chivo Mono's advance is
+    0.600em for EVERY glyph, so at 30px a two-character AB is 36 units and a
+    ".429" is 72 - and a 95-wide cell built for the second leaves the first
+    floating in 59 units of air, which on the batting set is most of the row.
+
+    NOTHING AUTO-FITS AT 30px IN EITHER SET, because the budgets are maxima and
+    the cells are sized from them: the tightest pairs are "128.1" at 90 units in
+    an IP cell bounded at 90.3 and "12.0" at 72 in an ERA cell bounded at 72.24.
+    That headroom is what the dropped precision bought - a percentage to a tenth
+    is six characters at "100.0%" and an ERA to a hundredth five at "12.00",
+    and at those budgets the numerals come down to about 28px to fit.
+
+    == THE BOTTOM LINE IS LEFT-ALIGNED, AND THAT IS WHAT MAKES IT BIG ========
+    "Game" sits at the left and the line runs from x=56 to the card's right
+    content edge (442) - 386 units, against the 330 a CENTRED line could claim
+    while dodging that label. Measured in Inter 700: an ordinary pitching line
+    ("10.0 IP, 12 H, 2 R, 2 ER, 0 BB, 10 K, 1 HR, 75 P") is 383.8 units at 18px,
+    so the common heavy case renders at full size where centred-at-13.5px it was
+    the SMALLEST type on a card whose other numbers are 30. It clears the bound
+    by 2.2 units and used to clear it by 23: the innings gained their unit on
+    2026-09-13 (format_pitching_line), and a line long enough to need it - the
+    worst realistic case, 396.2 - now auto-fits to about 17.5px, which is the
+    mechanism working rather than a budget being overrun.
+
+    The label is not always there - `line-label` is bound only for a HUD game's
+    line, and an API board's "Tournament Stats" arrives as the line itself - so
+    line-text authors BOTH left edges (data-x-labelled / data-x-bare) against
+    one right bound (data-maxr) and the mount picks, the same shape as
+    card-bg's four edges above. A theme declaring none of the three keeps
+    whatever geometry it authored, which is how classic's centred bar is
+    untouched by this.
   -->
   <rect x="2" y="2" width="448" height="114" rx="12" fill="#0b0b12" stroke="#1f1f30" stroke-width="1.5" id="slot=card-bg hfull=114 hcompact=76" />
 
@@ -62,19 +122,25 @@
     <rect x="10" y="14" width="3" height="50" rx="1.5" fill="#E60012" />
     <rect id="scaffold=char-icon" x="13" y="17" width="44" height="44" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="13" y="17" width="44" height="44" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=char-icon hidden" />
 
-    <text x="114" y="43" text-anchor="middle" font-size="24" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-0-value maxw=86">0</text>
-    <text x="114" y="61" text-anchor="middle" font-size="12" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-0-label">AB</text>
-    <text x="209" y="43" text-anchor="middle" font-size="24" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-1-value maxw=86">.000</text>
-    <text x="209" y="61" text-anchor="middle" font-size="12" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-1-label">AVG</text>
-    <text x="304" y="43" text-anchor="middle" font-size="24" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-2-value maxw=86">.000</text>
-    <text x="304" y="61" text-anchor="middle" font-size="12" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-2-label">SLG</text>
-    <text x="399" y="43" text-anchor="middle" font-size="24" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-3-value maxw=86">0%</text>
-    <text x="399" y="61" text-anchor="middle" font-size="12" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-3-label">SO%</text>
+    <!-- Authored at the BATTING allocation; the mount re-divides the band per
+         stat set (data-span-x/data-span-w below). -->
+    <g id="slot=stat-row spanx=64 spanw=378">
+      <text x="97.35" y="43" text-anchor="middle" font-size="30" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-0-value maxw=57.37">0</text>
+      <text x="97.35" y="59" text-anchor="middle" font-size="14" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-0-label">AB</text>
+      <text x="186.29" y="43" text-anchor="middle" font-size="30" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-1-value maxw=95.61">.000</text>
+      <text x="186.29" y="59" text-anchor="middle" font-size="14" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-1-label">AVG</text>
+      <text x="297.47" y="43" text-anchor="middle" font-size="30" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-2-value maxw=95.61">.000</text>
+      <text x="297.47" y="59" text-anchor="middle" font-size="14" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-2-label">SLG</text>
+      <text x="397.53" y="43" text-anchor="middle" font-size="30" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=stat-3-value maxw=76.49">0%</text>
+      <text x="397.53" y="59" text-anchor="middle" font-size="14" font-weight="600" letter-spacing="0.8" fill="#8f8fa3" font-family="Rajdhani" id="slot=stat-3-label">SO%</text>
+    </g>
 
+    <!-- Bottom line: rule 10..442, one shared baseline at 103 (the band runs
+         77.5..115.25, and the label+line ink centres on 96.4 together). -->
     <g id="slot=line-group">
-      <rect x="14" y="76" width="424" height="1.5" fill="#1f1f30" />
-      <text x="16" y="101" font-size="13" font-weight="700" fill="#8f8fa3" font-family="Rajdhani" id="slot=line-label">LAST</text>
-      <text x="226" y="101" text-anchor="middle" font-size="13.5" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=line-text maxw=330">2-run HR to left, 3 RBI</text>
+      <rect x="10" y="76" width="432" height="1.5" fill="#1f1f30" />
+      <text x="12" y="103" font-size="14" font-weight="600" fill="#8f8fa3" font-family="Rajdhani" id="slot=line-label">LAST</text>
+      <text x="56" y="103" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Inter" id="slot=line-text maxw=386 xlabelled=56 xbare=12 maxr=442">2-run HR to left, 3 RBI</text>
     </g>
   </g>
 </svg>

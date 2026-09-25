@@ -5,8 +5,9 @@
     Do not hand-edit this file; edit it in Figma, or regenerate it.
 
     Round trip: import this into Figma, restyle, export as SVG (layer names as
-    ids, text NOT outlined, frame kept at exactly 800x460), then run
+    ids, text NOT outlined, the whole canvas exported as-is), then run
     scripts/compile-theme.py on the export to get an installable theme back.
+    
 
     LAYER NAMES ARE THE CONTRACT. Figma keeps names, not attributes, so every
     binding the app needs rides in the layer name:
@@ -20,6 +21,11 @@
                            ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
+      frame=WxH            invisible marker: the element's native size
+      at=X,Y               where this file PLACED a layer for editing; the
+                           compiler takes it back out (a nudge on top is kept)
+      defs                 a prototype the app keeps in <defs>; lifted onto the
+                           canvas so you can see it, put back on compile
     Keep them. Rename freely otherwise.
 
     RUNTIME SEAM COLOURS keep these literal hues on their layers; the compiler
@@ -34,13 +40,20 @@
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
 
-    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    PREVIEW COPIES (scaffold=preview-*) show the slots a prototype is cloned
+    into at runtime (ticker cards, schedule rows) and the rest of the card
+    around an alternate. They are COPIES: they do not follow your edits and are
+    stripped on compile. Edit the original (the slot=/tpl= layer) and check
+    the spacing against the copies.
+
+    STACK ROWS (slot=row-* / slot=el-*) have been moved to the offsets the app stacks them
     to, so this file shows the assembled card rather than every band piled on
     the frame origin. `at=N` in the name records where each was put and the
-    compiler takes it back out; anything you move ON TOP of that is kept. Two
-    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
-    never both - so they are drawn overlapping on purpose. Toggle one off in
-    the layers panel to work on the other, and design each to fill the band.
+    compiler takes it back out; anything you move ON TOP of that is kept.
+    ALTERNATES - rows the app never shows together (a live game or a completed
+    one; the Scorecard's full / rosters / condensed score block) - each get a
+    column of their own beside the frame, with the rest of the card previewed
+    around them. Design each to fill the same band.
 
     CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
     runtime, labelled with the row that triggers each. The card GROWS to enclose
@@ -129,8 +142,10 @@
 
        With the name gone the portrait takes the height back (52, up from 44)
        and the stat columns take the width: 68 apart rather than 56, which is
-       what a 5-character value like "1.500" or "25.0%" needs at 17px Chivo Mono
+       what a 5-character value like "1.500" or "128.1" needs at 17px Chivo Mono
        (51.2 wide — measured) to have air either side of it rather than 5 units.
+       (Percentages are whole and ERA carries one decimal since 2026-09-11, so
+       "25%" and "12.0" are 3-4 characters — see `width` in RioData.getStatsLine.)
 
        The stats come from RioData.getStatsLine (bindStatLines in
        scoreboard-mount.js), the same resolver behind the Stat Bar and the Stat
@@ -164,26 +179,26 @@
     <rect x="28" y="50" width="30" height="20" rx="4" fill="#E53935" />
     <text x="43" y="64" text-anchor="middle" font-family="Rajdhani" font-size="12" font-weight="700" fill="#ffffff" id="slot=s1-role">AB</text>
     <rect id="scaffold=s1-live-icon" x="64" y="34" width="52" height="52" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="64" y="34" width="52" height="52" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s1-live-icon hidden" />
-    <text x="164" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s1-stat-0-label">AB</text>
+    <text x="164" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s1-stat-0-label">AB</text>
     <text x="164" y="55" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s1-stat-0-value">0</text>
-    <text x="232" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s1-stat-1-label">AVG</text>
+    <text x="232" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s1-stat-1-label">AVG</text>
     <text x="232" y="55" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s1-stat-1-value">.000</text>
-    <text x="164" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s1-stat-2-label">SLG</text>
+    <text x="164" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s1-stat-2-label">SLG</text>
     <text x="164" y="91" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s1-stat-2-value">.000</text>
-    <text x="232" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s1-stat-3-label">SO%</text>
-    <text x="232" y="91" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s1-stat-3-value">0.0%</text>
+    <text x="232" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s1-stat-3-label">SO%</text>
+    <text x="232" y="91" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s1-stat-3-value">0%</text>
 
     <!-- ── side 2: the mirror ── -->
     <rect x="742" y="50" width="30" height="20" rx="4" fill="#1E88E5" />
     <text x="757" y="64" text-anchor="middle" font-family="Rajdhani" font-size="12" font-weight="700" fill="#ffffff" id="slot=s2-role">P</text>
     <rect id="scaffold=s2-live-icon" x="684" y="34" width="52" height="52" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="684" y="34" width="52" height="52" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="slot=s2-live-icon hidden" />
-    <text x="568" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s2-stat-0-label">IP</text>
+    <text x="568" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s2-stat-0-label">IP</text>
     <text x="568" y="55" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s2-stat-0-value">0.0</text>
-    <text x="636" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s2-stat-1-label">ERA</text>
-    <text x="636" y="55" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s2-stat-1-value">0.00</text>
-    <text x="568" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s2-stat-2-label">K%</text>
-    <text x="568" y="91" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s2-stat-2-value">0.0%</text>
-    <text x="636" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.4" fill="#8f8fa3" font-family="Inter" id="slot=s2-stat-3-label">AVG</text>
+    <text x="636" y="37" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s2-stat-1-label">ERA</text>
+    <text x="636" y="55" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s2-stat-1-value">0.0</text>
+    <text x="568" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s2-stat-2-label">K%</text>
+    <text x="568" y="91" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s2-stat-2-value">0%</text>
+    <text x="636" y="73" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="0.6" fill="#8f8fa3" font-family="Rajdhani" id="slot=s2-stat-3-label">AVG</text>
     <text x="636" y="91" text-anchor="middle" font-size="17" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="slot=s2-stat-3-value">.000</text>
 
     <!-- ── count: balls / strikes / outs ── -->
@@ -343,6 +358,6 @@
          live board simply shows the mode and the stadium. -->
     <text x="670" y="36" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.4" opacity="1" fill="#8f8fa3" font-family="Inter" id="slot=meta-game-mode maxw=188 hidden">Game Mode</text>
     <text x="670" y="61" text-anchor="middle" font-size="13" font-weight="600" fill="#8f8fa3" font-family="Inter" id="slot=meta-main maxw=188">Stadium</text>
-    <text x="670" y="84" text-anchor="middle" font-size="11" opacity="0.75" fill="#8f8fa3" font-family="Inter" id="slot=meta-date maxw=188">Date</text>
+    <text x="670" y="84" text-anchor="middle" font-size="11" fill-opacity="0.75" fill="#8f8fa3" font-family="Inter" id="slot=meta-date maxw=188">Date</text>
   </g>
 </svg>

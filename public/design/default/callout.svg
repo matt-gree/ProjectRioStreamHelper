@@ -312,7 +312,10 @@
 
   </defs>
 
-  <rect width="1920" height="1080" fill="url(#rioBase)"/>
+  <!-- The bd-* ids are layer NAMES for a design tool (design-templates/); no
+       mount reads them. Without them the backdrop opens as a dozen identical
+       "Rectangle" layers. -->
+  <rect id="bd-night-base" width="1920" height="1080" fill="url(#rioBase)"/>
 
   <!-- EVERY LAYER BELOW IS CROPPED TO WHERE IT ACTUALLY PAINTS, and the heights
        are not arbitrary: each one is where its own gradient has already reached
@@ -327,23 +330,23 @@
 
   <!-- THE WALL. One texture, masked to nothing by y=756; the rect stops just
        past it. This is the only mask left in the file. -->
-  <g mask="url(#rioWallFade)">
-    <rect width="1920" height="760" fill="url(#rioGrid)"/>
+  <g id="bd-wall" mask="url(#rioWallFade)">
+    <rect id="bd-wall-grid" width="1920" height="760" fill="url(#rioGrid)"/>
   </g>
 
   <!-- THE HORIZON: where the wall lets go and the floor takes over. Air, no
        line - see the note on rioHorizonAir. -->
-  <rect x="0" y="566" width="1920" height="192" fill="url(#rioHorizonAir)"/>
+  <rect id="bd-horizon-air" x="0" y="566" width="1920" height="192" fill="url(#rioHorizonAir)"/>
 
   <!-- floor haze keeps the lower third of the frame from going flat black -->
-  <rect x="0" y="740" width="1920" height="340" fill="url(#rioFloor)"/>
+  <rect id="bd-floor-haze" x="0" y="740" width="1920" height="340" fill="url(#rioFloor)"/>
 
   <!-- the floor pool: stadium light, low and centre. This is what fills the
        lower middle of the frame now that no rule closes the bottom. -->
-  <rect x="0" y="640" width="1920" height="440" fill="url(#rioPool)"/>
+  <rect id="bd-floor-pool" x="0" y="640" width="1920" height="440" fill="url(#rioPool)"/>
 
   <!-- brand bloom: cy 12%, r 62% - zero by y~800 -->
-  <rect width="1920" height="820" fill="url(#rioBrand)"/>
+  <rect id="bd-brand-bloom" width="1920" height="820" fill="url(#rioBrand)"/>
 
   <!-- SIDE IDENTITY, in three tiers, weakest to strongest.
        1 · the edge columns, full height (plain gradients, no mask).
@@ -352,18 +355,18 @@
        3 · the halftone, which is the one you actually read as texture.
        All three die before the centre on their own stops - nothing here is
        masked away from the middle, it simply never gets there. -->
-  <rect width="1920" height="1080" fill="url(#rioEdgeA)" style="opacity:var(--side-a-weight,1)"/>
-  <rect width="1920" height="1080" fill="url(#rioEdgeB)" style="opacity:var(--side-b-weight,1)"/>
-  <rect width="1920" height="440" fill="url(#rioWashA)" style="opacity:var(--side-a-weight,1)"/>
-  <rect width="1920" height="440" fill="url(#rioWashB)" style="opacity:var(--side-b-weight,1)"/>
+  <rect id="bd-side1-edge" width="1920" height="1080" fill="url(#rioEdgeA)" style="opacity:var(--side-a-weight,1)"/>
+  <rect id="bd-side2-edge" width="1920" height="1080" fill="url(#rioEdgeB)" style="opacity:var(--side-b-weight,1)"/>
+  <rect id="bd-side1-bloom" width="1920" height="440" fill="url(#rioWashA)" style="opacity:var(--side-a-weight,1)"/>
+  <rect id="bd-side2-bloom" width="1920" height="440" fill="url(#rioWashB)" style="opacity:var(--side-b-weight,1)"/>
   <!-- - -dot-weight lets a SCENE dial the halftone without forking the file. The
        Game Summary is a sparse frame and wants the full 0.5; the Character
        Spotlight covers three of its four corners with cards and asks for less,
        or the dots only ever show as a rind around the content. Same texture,
        tuned to how much bare frame each scene actually has. -->
-  <rect width="1920" height="1080" fill="url(#rioDotsA)" mask="url(#rioDotMaskA)"
+  <rect id="bd-side1-dots" width="1920" height="1080" fill="url(#rioDotsA)" mask="url(#rioDotMaskA)"
         style="opacity:calc(var(--dot-weight,0.5) * var(--side-a-weight,1))"/>
-  <rect width="1920" height="1080" fill="url(#rioDotsB)" mask="url(#rioDotMaskB)"
+  <rect id="bd-side2-dots" width="1920" height="1080" fill="url(#rioDotsB)" mask="url(#rioDotMaskB)"
         style="opacity:calc(var(--dot-weight,0.5) * var(--side-b-weight,1))"/>
 
 </svg>

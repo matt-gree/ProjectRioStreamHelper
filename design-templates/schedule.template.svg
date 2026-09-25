@@ -5,8 +5,9 @@
     Do not hand-edit this file; edit it in Figma, or regenerate it.
 
     Round trip: import this into Figma, restyle, export as SVG (layer names as
-    ids, text NOT outlined, frame kept at exactly 1920x1080), then run
+    ids, text NOT outlined, the whole canvas exported as-is), then run
     scripts/compile-theme.py on the export to get an installable theme back.
+    
 
     LAYER NAMES ARE THE CONTRACT. Figma keeps names, not attributes, so every
     binding the app needs rides in the layer name:
@@ -20,6 +21,11 @@
                            ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
+      frame=WxH            invisible marker: the element's native size
+      at=X,Y               where this file PLACED a layer for editing; the
+                           compiler takes it back out (a nudge on top is kept)
+      defs                 a prototype the app keeps in <defs>; lifted onto the
+                           canvas so you can see it, put back on compile
     Keep them. Rename freely otherwise.
 
     RUNTIME SEAM COLOURS keep these literal hues on their layers; the compiler
@@ -36,13 +42,20 @@
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
 
-    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    PREVIEW COPIES (scaffold=preview-*) show the slots a prototype is cloned
+    into at runtime (ticker cards, schedule rows) and the rest of the card
+    around an alternate. They are COPIES: they do not follow your edits and are
+    stripped on compile. Edit the original (the slot=/tpl= layer) and check
+    the spacing against the copies.
+
+    STACK ROWS (slot=row-* / slot=el-*) have been moved to the offsets the app stacks them
     to, so this file shows the assembled card rather than every band piled on
     the frame origin. `at=N` in the name records where each was put and the
-    compiler takes it back out; anything you move ON TOP of that is kept. Two
-    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
-    never both - so they are drawn overlapping on purpose. Toggle one off in
-    the layers panel to work on the other, and design each to fill the band.
+    compiler takes it back out; anything you move ON TOP of that is kept.
+    ALTERNATES - rows the app never shows together (a live game or a completed
+    one; the Scorecard's full / rosters / condensed score block) - each get a
+    column of their own beside the frame, with the rest of the card previewed
+    around them. Design each to fill the same band.
 
     CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
     runtime, labelled with the row that triggers each. The card GROWS to enclose
@@ -217,7 +230,7 @@
 
     <!-- Clones land here, one per shown match, at y = index * data-h. -->
     <g transform="translate(16,108)" id="slot=rows">
-      <text x="604" y="0" text-anchor="middle" font-size="20" font-weight="600" letter-spacing="2" opacity="1" fill="#f5f5f8" font-family="Rajdhani" fill-opacity="0.5" id="slot=overflow maxw=600 h=48 hidden">Overflow</text>
+      <text x="604" y="0" text-anchor="middle" font-size="20" font-weight="600" letter-spacing="2" opacity="1" fill="#f5f5f8" font-family="Rajdhani" fill-opacity="0.5" transform="translate(0,358)" id="slot=overflow maxw=600 h=48 at=358 hidden">Overflow</text>
     </g>
 
     <!-- Prototype row: 1208 wide by 72 drawn, on an 82 pitch.
@@ -239,7 +252,7 @@
          starts at 960 against a name that can end at 890 - 60 and 70 units. At
          272 and 252 they were 18 and 38, which auto-fits happily into two
          columns that read as one collided string. -->
-    <g opacity="1" id="slot=match-template h=82 hidden">
+    <g opacity="1" transform="translate(16,108)" id="slot=match-template h=82 at=16,108 hidden">
       <rect x="0" y="0" width="1208" height="72" rx="10" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.06)" stroke-width="1" id="part=row-bg" />
       <rect x="0" y="12" width="6" height="48" rx="3" fill="#E60012" id="part=rail" />
 
@@ -252,5 +265,44 @@
 
       <text x="1180" y="44" text-anchor="end" font-size="24" font-weight="700" letter-spacing="1.6" fill="#f5f5f8" font-family="Rajdhani" id="part=status maxw=220">7:15 PM</text>
     </g>
-  </g>
-<g id="scaffold=meld-stages" fill="none" stroke="#00E5FF" stroke-opacity="0.75" stroke-width="1" stroke-dasharray="4 4"><rect id="scaffold=stage-resting" x="0" y="0" width="1240" height="124" rx="20" /><text id="scaffold=stage-resting-label" x="1235" y="12" text-anchor="end" font-family="Inter" font-size="9" fill="#00E5FF" fill-opacity="0.75" stroke="none">resting 1240x124</text></g></svg>
+  <g id="scaffold=preview-row-4"><g opacity="1" transform="translate(16,354)">
+      <rect x="0" y="0" width="1208" height="72" rx="10" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+      <rect x="0" y="12" width="6" height="48" rx="3" fill="#E60012" />
+
+      <text x="28" y="43" font-size="21" font-weight="600" letter-spacing="1.8" fill="#f5f5f8" font-family="Rajdhani" fill-opacity="0.62">ROUND</text>
+
+      <text x="552" y="47" text-anchor="end" font-size="32" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Side One</text>
+      <rect x="566" y="19" width="76" height="34" rx="8" fill="rgba(0,0,0,0.38)" />
+      <text x="604" y="44" text-anchor="middle" font-size="22" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono">Bo5</text>
+      <text x="656" y="47" text-anchor="start" font-size="32" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Side Two</text>
+
+      <text x="1180" y="44" text-anchor="end" font-size="24" font-weight="700" letter-spacing="1.6" fill="#f5f5f8" font-family="Rajdhani">7:15 PM</text>
+    </g>
+  </g><g id="scaffold=preview-row-3"><g opacity="1" transform="translate(16,272)">
+      <rect x="0" y="0" width="1208" height="72" rx="10" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+      <rect x="0" y="12" width="6" height="48" rx="3" fill="#E60012" />
+
+      <text x="28" y="43" font-size="21" font-weight="600" letter-spacing="1.8" fill="#f5f5f8" font-family="Rajdhani" fill-opacity="0.62">ROUND</text>
+
+      <text x="552" y="47" text-anchor="end" font-size="32" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Side One</text>
+      <rect x="566" y="19" width="76" height="34" rx="8" fill="rgba(0,0,0,0.38)" />
+      <text x="604" y="44" text-anchor="middle" font-size="22" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono">Bo5</text>
+      <text x="656" y="47" text-anchor="start" font-size="32" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Side Two</text>
+
+      <text x="1180" y="44" text-anchor="end" font-size="24" font-weight="700" letter-spacing="1.6" fill="#f5f5f8" font-family="Rajdhani">7:15 PM</text>
+    </g>
+  </g><g id="scaffold=preview-row-2"><g opacity="1" transform="translate(16,190)">
+      <rect x="0" y="0" width="1208" height="72" rx="10" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+      <rect x="0" y="12" width="6" height="48" rx="3" fill="#E60012" />
+
+      <text x="28" y="43" font-size="21" font-weight="600" letter-spacing="1.8" fill="#f5f5f8" font-family="Rajdhani" fill-opacity="0.62">ROUND</text>
+
+      <text x="552" y="47" text-anchor="end" font-size="32" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Side One</text>
+      <rect x="566" y="19" width="76" height="34" rx="8" fill="rgba(0,0,0,0.38)" />
+      <text x="604" y="44" text-anchor="middle" font-size="22" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono">Bo5</text>
+      <text x="656" y="47" text-anchor="start" font-size="32" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Side Two</text>
+
+      <text x="1180" y="44" text-anchor="end" font-size="24" font-weight="700" letter-spacing="1.6" fill="#f5f5f8" font-family="Rajdhani">7:15 PM</text>
+    </g>
+  </g><g id="scaffold=meld-stages" fill="none" stroke="#00E5FF" stroke-opacity="0.75" stroke-width="1" stroke-dasharray="4 4"><rect id="scaffold=stage-resting" x="0" y="0" width="1240" height="124" rx="20" /><text id="scaffold=stage-resting-label" x="1235" y="12" text-anchor="end" font-family="Inter" font-size="9" fill="#00E5FF" fill-opacity="0.75" stroke="none">resting 1240x124</text></g></g>
+</svg>

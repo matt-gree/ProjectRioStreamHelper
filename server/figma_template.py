@@ -56,6 +56,8 @@ can take is drawn as a dashed ``scaffold=stage-*`` box, derived from the same
 ``compact-w``/``compact-h``/``cardw``/``cardh`` attributes the mount melds to,
 so the guides cannot drift from the behaviour.
 """
+import copy
+import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -65,6 +67,7 @@ from server.theme_compiler import (
     _LIST_MODIFIERS,
     _MODIFIERS,
     _local,
+    _translate_xy,
     FileReport,
     SVG_NS,
     XLINK_NS,
@@ -90,6 +93,7 @@ SEAM_SENTINELS = {
     "accent": "#E60012",
     # callout.svg's backdrop seams (postgame spotlight + game summary)
     "port-color": "#E53935",
+    "port-2": "#1E88E5",
     "well": "#2B2B40",
     "accent-neutral": "#8F8FA3",
 }
@@ -112,6 +116,10 @@ _PLACEHOLDER = {
     "phase": "GRAND FINAL RESET",
     "clock": "11:11 AM ET",
     "status": "UP NEXT",
+    "side1-score": "2",
+    "side2-score": "1",
+    "time": "7:15 PM",
+    "meta": "Winners Final \u00b7 Bo3",
 }
 
 _TRANSPARENT_PX = (
@@ -199,15 +207,30 @@ def resolve_value(value: str, tokens: dict[str, str]) -> str:
     while True:
         at = out.find("var(", i)
         if at < 0:
-            return out.strip()
+            return _fold_calc(out.strip())
         parsed = _split_var(out, at)
         if parsed is None:
-            return out.strip()
+            return _fold_calc(out.strip())
         name, fallback, end = parsed
         seam = SEAM_SENTINELS.get(name[2:]) if name.startswith("--") else None
         replacement = seam or tokens.get(name) or resolve_value(fallback, tokens)
         out = out[:at] + replacement + out[end:]
         i = at + len(replacement)
+
+
+_CALC_RE = re.compile(r"calc\(([\d.\s*/+()-]+)\)")
+
+
+def _fold_calc(value: str) -> str:
+    """``calc(0.5 * 1)`` -> ``0.5``. Once its vars are resolved a calc is plain
+    arithmetic, and a design tool reads the attribute as a number or not at all
+    - the callout's dot field came through as ``opacity="calc(0.5 * 1)"``."""
+    def fold(m: re.Match) -> str:
+        try:
+            return f"{eval(m.group(1), {'__builtins__': {}}):g}"  # digits and operators only
+        except Exception:
+            return m.group(0)
+    return _CALC_RE.sub(fold, value)
 
 
 def simplify_font(stack: str) -> str:
@@ -279,7 +302,7 @@ def _split_decls(decls: str) -> list[tuple[str, str]]:
 
 def grammar_id(el: ET.Element) -> str | None:
     """Build the ``slot=name maxw=420`` layer name for a marked node."""
-    for marker in ("slot", "part", "tpl"):
+    for marker in ("slot", "part", "tpl", "pattern"):
         name = el.get(f"data-{marker}")
         if name:
             break
@@ -290,6 +313,8 @@ def grammar_id(el: ET.Element) -> str | None:
             return None
         marker, name = "band", ""
     tokens = [f"{marker}={name}" if name else marker]
+    if el.get("data-defs") is not None:
+        tokens.append("defs")
     for attr, key in _ATTR_TO_GRAMMAR.items():
         value = el.get(attr)
         if value is None:
@@ -302,6 +327,8 @@ def grammar_id(el: ET.Element) -> str | None:
     # the layer for editing without the reveal shipping (see module docstring).
     if _is_hidden(el):
         tokens.append("hidden")
+    if el.get("data-fillref"):
+        tokens.append(f"fill={el.get('data-fillref')}")
     return " ".join(tokens)
 
 
@@ -378,7 +405,17 @@ def _meld_stages(root: ET.Element) -> list[tuple[str, float, float, float, float
 # instead of two. A board is showing a live game or a completed one, never both;
 # scoreboard-mount.js gates them on showLiveSeg / showFinal, which is logic and
 # not something a theme file declares — so the pairing is stated here.
-_EXCLUSIVE_ROWS = ({"row-live", "row-final"},)
+_EXCLUSIVE_ROWS = (
+    {"row-live", "row-final"},
+    # The Scorecard's score block is ONE setting (mainMode) with three answers,
+    # each a whole block the theme draws (scorecard-mount.js STACK).
+    {"el-main", "el-rosters", "el-condensed"},
+)
+
+# Stack rows are `row-*` on the Scoreboard and `el-*` on the Scorecard — two
+# spellings of one contract (a local-origin group with data-h, stacked in
+# document order by the mount).
+_STACK_PREFIXES = ("row-", "el-")
 
 
 def _stack_rows(root: ET.Element) -> list[tuple[ET.Element, str, float]]:
@@ -394,7 +431,8 @@ def _stack_rows(root: ET.Element) -> list[tuple[ET.Element, str, float]]:
         return []
     rows = [
         el for el in root.iter()
-        if isinstance(el.tag, str) and (el.get("data-slot") or "").startswith("row-")
+        if isinstance(el.tag, str) and (el.get("data-slot") or "").startswith(_STACK_PREFIXES)
+        and el.get("data-h") is not None
     ]
     if not rows:
         return []
@@ -461,6 +499,606 @@ def _stage_guides(stages: list[tuple[str, float, float, float, float, str]]) -> 
         text.set("stroke", "none")
         text.text = f"{label} {fmt(w)}x{fmt(h)}"
     return group
+
+
+# --------------------------------------------------------------------------
+# Layout for editing
+# --------------------------------------------------------------------------
+#
+# A theme file is authored for the MOUNT, not for a person: prototypes sit at a
+# local origin (or inside <defs>, which a design tool never draws) and are
+# cloned into place at runtime, and a block with three alternates draws all
+# three on one spot. Opened as-is, the ticker is one card sitting on its RESULTS
+# badge, the schedule's row prototype sits on its title, the lower third is an
+# empty band, and the Scorecard is three score blocks piled on each other.
+#
+# So the template lays each out where the designer needs to SEE it:
+#
+#   * a PROTOTYPE moves to its first runtime slot (`at=X,Y` records where) and
+#     dashed-free PREVIEW copies (`scaffold=preview-*`) fill the slots after
+#     it at the mount's pitch, so spacing can be judged against real neighbours;
+#   * an ALTERNATE (a score block, a completed-game row) moves to a COLUMN of
+#     its own beside the native frame, with a preview of the rest of the card
+#     restacked around it;
+#   * a <defs>-only prototype comes out onto the canvas tagged `defs`.
+#
+# Previews are copies, not instances: they are stripped on compile and do not
+# follow edits. Only the original (the layer with a slot=/tpl= name) is live.
+
+COLUMN_GAP = 80       # native frame -> an alternate's column
+ROW_GAP = 60          # native frame -> a spare row beneath it
+LABEL_ROOM = 44       # canvas below each region for its caption
+FRAME_HUE = "#FF00FF"
+TICKER_GAP = 16       # overlays.ticker.tickerGap default (designConstants.js)
+
+
+@dataclass
+class _Layout:
+    width: float
+    height: float
+    jobs: list = field(default_factory=list)      # deferred preview copies
+    regions: list = field(default_factory=list)   # (caption, x, y, w, h)
+    moved: int = 0
+
+    def grow(self, x2: float, y2: float) -> None:
+        self.width = max(self.width, x2)
+        self.height = max(self.height, y2)
+
+
+def _at(x: float, y: float) -> str:
+    return f"{y:g}" if not x else f"{x:g},{y:g}"
+
+
+def _place(el: ET.Element, x: float, y: float) -> None:
+    if x or y:
+        el.set("transform", f"translate({x:g},{y:g})")
+    else:
+        el.attrib.pop("transform", None)
+    el.set("data-at", _at(x, y))
+
+
+def _find(root: ET.Element, attr: str, value: str | None = None) -> ET.Element | None:
+    for el in root.iter():
+        if isinstance(el.tag, str) and el.get(attr) is not None and (value is None or el.get(attr) == value):
+            return el
+    return None
+
+
+def _preview(layout: _Layout, parent: ET.Element, source: ET.Element, label: str,
+             transform: str | None, mutate=None, **attrs: str) -> None:
+    """Queue a preview copy of `source` into `parent`. Built after placeholder
+    text is filled, so the copy carries it. `mutate(copy)` runs while the copy
+    still has its data-* markers, so it can find parts by name."""
+    layout.jobs.append((parent, source, label, transform, mutate, attrs))
+
+
+def _build_previews(layout: _Layout) -> int:
+    for parent, source, label, transform, mutate, attrs in layout.jobs:
+        dup = copy.deepcopy(source)
+        if mutate:
+            mutate(dup)
+        for el in dup.iter():
+            if not isinstance(el.tag, str):
+                continue
+            el.attrib.pop("id", None)
+            for a in [a for a in el.attrib if a.startswith("data-")]:
+                del el.attrib[a]
+        if transform:
+            dup.set("transform", transform)
+        else:
+            dup.attrib.pop("transform", None)
+        # A prototype is authored dark; its original is revealed for editing,
+        # so the preview is too.
+        if dup.get("opacity") == "0":
+            dup.set("opacity", "1")
+        for k, v in attrs.items():
+            dup.set(k, v)
+        wrap = ET.Element(f"{{{SVG_NS}}}g", {"id": f"scaffold=preview-{label}"})
+        wrap.append(dup)
+        kids = list(parent)
+        parent.insert(kids.index(source) + 1 if source in kids else len(kids), wrap)
+    return len(layout.jobs)
+
+
+# The ticker's cards, as the mount would bind them. The first is the ORIGINAL
+# (the layer a designer edits), with names long enough to reach the name's fit
+# bound - the icons are authored for that worst case, so a short name would
+# leave them looking stranded. The rest are preview copies in the three states
+# a card can be in, so the track reads like a real one.
+_TICKER_CARDS = [
+    {"away": "ChainChompKid", "home": "PiantaPower", "score": ("7", "4"), "meta": "Stars Off \u00b7 Sep 21"},
+    {"away": "Toadsworth", "home": "Boo Crew", "score": ("5", "2"), "winner": 1, "meta": "Stars Off \u00b7 Sep 21"},
+    {"away": "Kritter", "home": "DryBonesDan", "score": ("1", "6"), "winner": 2, "meta": "Stars On \u00b7 Sep 20"},
+    {"away": "MontyMole", "home": "WigglerFan", "meta": "Stars Off"},
+]
+_LOSER_DIM = "0.45"   # LOSER_DIM, mount-utils.js
+
+# Average advance per character, in ems, for the faces the themes use. Only a
+# preview's icon placement rests on it, so near is good enough; the app
+# measures the real glyphs.
+_EM_PER_CHAR = {"rajdhani": 0.45, "inter": 0.56, "chivo mono": 0.6}
+
+
+def _text_width(el: ET.Element) -> float:
+    family = (el.get("font-family") or "").split(",")[0].strip().strip("'\"").lower()
+    size = _num(el, "font-size") or 16.0
+    width = len((el.text or "").strip()) * size * _EM_PER_CHAR.get(family, 0.5)
+    maxw = _num(el, "data-maxw")
+    return min(width, maxw) if maxw else width
+
+
+def _pin_images(card: ET.Element) -> None:
+    """Where applyPinsIn puts each pinned icon: `gap` off the measured outer
+    edge of its name. The dashed box behind the icon moves with it."""
+    parts = {el.get("data-part"): el for el in card.iter()
+             if isinstance(el.tag, str) and el.get("data-part")}
+    boxes = {el.get("id"): el for el in card.iter()
+             if isinstance(el.tag, str) and (el.get("id") or "").startswith("scaffold=")}
+    for name, img in parts.items():
+        target = img.get("data-pin-before") or img.get("data-pin-after")
+        text = parts.get(target)
+        if text is None or _num(text, "x") is None:
+            continue
+        w, x = _text_width(text), _num(text, "x")
+        anchor = text.get("text-anchor") or "start"
+        left = x - w if anchor == "end" else x - w / 2 if anchor == "middle" else x
+        gap, iw = _num(img, "data-pin-gap") or 0.0, _num(img, "width") or 0.0
+        nx = left - gap - iw if img.get("data-pin-before") else left + w + gap
+        for el in (img, boxes.get(f"scaffold={name}")):
+            if el is not None:
+                el.set("x", f"{nx:g}")
+
+
+def _bind_ticker_card(card: ET.Element, game: dict) -> None:
+    """ticker-mount.js's bindCard, over a template copy."""
+    parts = {el.get("data-part"): el for el in card.iter()
+             if isinstance(el.tag, str) and el.get("data-part")}
+
+    def put(name, **attrs):
+        el = parts.get(name)
+        if el is None:
+            return
+        for k, v in attrs.items():
+            if k == "text":
+                el.text = v
+            else:
+                el.set(k, v)
+
+    scores = game.get("score")
+    winner = game.get("winner")
+    put("away-name", text=game["away"])
+    put("home-name", text=game["home"])
+    put("meta", text=game["meta"])
+    put("score-group", opacity="1" if scores else "0")
+    put("vs", opacity="0" if scores else "1")
+    for side, tag in ((1, "away"), (2, "home")):
+        put(f"score-{tag}", text=scores[side - 1] if scores else "", opacity="1" if scores else "0")
+        put(f"{tag}-row", opacity=_LOSER_DIM if winner and winner != side else "1")
+        put(f"{tag}-win", opacity="1" if winner == side else "0")
+    _pin_images(card)
+
+
+def _plan_ticker(root: ET.Element, parent_of: dict, layout: _Layout) -> None:
+    tpl, track = _find(root, "data-slot", "card-template"), _find(root, "data-slot", "track")
+    if tpl is None or track is None:
+        return
+    tx, ty = _translate_xy(track.get("transform")) or (0.0, 0.0)
+    w = _num(tpl, "data-w") or 0.0
+    vw = _num(track, "data-vw") or w
+    pitch = w + TICKER_GAP
+    _place(tpl, tx, ty)
+    layout.moved += 1
+    # The original keeps every part visible for editing; only its text is set.
+    first = _TICKER_CARDS[0]
+    for el in tpl.iter():
+        part = el.get("data-part") if isinstance(el.tag, str) else None
+        if part in ("away-name", "home-name", "meta"):
+            el.text = {"away-name": first["away"], "home-name": first["home"], "meta": first["meta"]}[part]
+        elif part in ("score-away", "score-home"):
+            el.text = first["score"][part == "score-home"]
+    count = max(1, int((vw + TICKER_GAP) // pitch)) if pitch else 1
+    for i in range(1, count):
+        game = _TICKER_CARDS[1 + (i - 1) % (len(_TICKER_CARDS) - 1)]
+        _preview(layout, parent_of[tpl], tpl, f"card-{i + 1}", f"translate({tx + i * pitch:g},{ty:g})",
+                 mutate=lambda card, g=game: _bind_ticker_card(card, g))
+
+
+def _plan_schedule(root: ET.Element, parent_of: dict, layout: _Layout) -> None:
+    tpl, rows = _find(root, "data-slot", "match-template"), _find(root, "data-slot", "rows")
+    if tpl is None or rows is None:
+        return
+    rx, ry = _translate_xy(rows.get("transform")) or (0.0, 0.0)
+    pitch = _num(tpl, "data-h") or 82.0
+    bg = _find(root, "data-slot", "card-bg")
+    # The authored card is a pose for N rows; show exactly that many.
+    n = 4
+    if bg is not None and _num(bg, "height") and _num(bg, "data-compact-h") is not None:
+        n = max(1, round((_num(bg, "height") - _num(bg, "data-compact-h")) / pitch))
+    _place(tpl, rx, ry)
+    layout.moved += 1
+    for i in range(1, n):
+        _preview(layout, parent_of[tpl], tpl, f"row-{i + 1}", f"translate({rx:g},{ry + i * pitch:g})")
+    overflow = _find(root, "data-slot", "overflow")
+    if overflow is not None:
+        # Where the mount writes it: one line under the last row.
+        _place(overflow, 0, n * pitch + 30 - (_num(overflow, "y") or 0.0))
+        layout.moved += 1
+
+
+def _plan_playerplates(root: ET.Element, parent_of: dict, layout: _Layout) -> None:
+    side2 = _find(root, "data-slot", "side2")
+    if side2 is None:
+        return
+    anchors = {}
+    for el in root.iter():
+        if isinstance(el.tag, str) and _local(el.tag) == "script" and "anchors" in (el.text or ""):
+            try:
+                anchors = json.loads(el.text).get("anchors", {})
+            except ValueError:
+                pass
+    right = float(anchors.get("right", 0) or 0)
+    if right:
+        _place(side2, right, 0)
+        layout.moved += 1
+
+
+def _plan_lowerthird(root: ET.Element, parent_of: dict, layout: _Layout) -> None:
+    band = _find(root, "data-band")
+    defs = next((c for c in root if isinstance(c.tag, str) and _local(c.tag) == "defs"), None)
+    if band is None or defs is None:
+        return
+    tpls = [c for c in defs if isinstance(c.tag, str) and c.get("data-tpl")]
+    if not tpls:
+        return
+    bx, bw = _num(band, "data-x") or 0.0, _num(band, "data-w") or layout.width
+    bh, gap = _num(band, "data-h") or 0.0, _num(band, "data-gap") or 32.0
+    align = band.get("data-align") or "center"
+    _, by = _translate_xy(band.get("transform")) or (0.0, 0.0)
+
+    # Pack the templates into band-wide rows in document order: the first row
+    # sits in the band itself, the rest in rows below the frame.
+    rows: list[list[ET.Element]] = [[]]
+    for t in tpls:
+        w = _num(t, "data-w") or 300.0
+        used = sum(_num(o, "data-w") or 300.0 for o in rows[-1]) + gap * len(rows[-1])
+        if rows[-1] and used + w > bw:
+            rows.append([])
+        rows[-1].append(t)
+
+    bg = _find(root, "data-slot", "band-bg")
+    pad = (_num(bg, "data-pad") or 0.0) if bg is not None else 0.0
+    for r, row in enumerate(rows):
+        total = sum(_num(t, "data-w") or 300.0 for t in row) + gap * (len(row) - 1)
+        x = bx + {"left": 0.0, "right": bw - total}.get(align, (bw - total) / 2)
+        y = by if r == 0 else layout.height + ROW_GAP + (r - 1) * (bh + LABEL_ROOM + ROW_GAP)
+        if r and bg is not None:
+            _preview(layout, parent_of[bg], bg, f"bed-{r + 1}", f"translate(0,{y - by:g})",
+                     x=f"{x - pad:g}", width=f"{total + 2 * pad:g}")
+        for t in row:
+            defs.remove(t)
+            root.append(t)
+            t.set("data-defs", "1")
+            _place(t, x, y)
+            layout.moved += 1
+            x += (_num(t, "data-w") or 300.0) + gap
+    base_h = layout.height
+    for r in range(1, len(rows)):
+        y = base_h + ROW_GAP + (r - 1) * (bh + LABEL_ROOM + ROW_GAP)
+        names = ", ".join(t.get("data-tpl") or "" for t in rows[r])
+        layout.regions.append((f"more segment templates: {names}", 0.0, y, layout.width, bh))
+        layout.grow(layout.width, y + bh + LABEL_ROOM)
+
+
+def _plan_alternates(root: ET.Element, parent_of: dict, layout: _Layout, stack: list) -> None:
+    """Each alternate after the first gets a column of its own, with the rest of
+    the card restacked around it (as a preview) so it is designed in context."""
+    if not stack:
+        return
+    native_w, native_h = layout.width, layout.height
+    bg = _find(root, "data-slot", "card-bg")
+    top = (_num(bg, "y") if bg is not None else 0.0) or 0.0
+    rows = [el for el, _n, _y in stack]
+    col = 0
+    for group in _EXCLUSIVE_ROWS:
+        members = [el for el, name, _y in stack if name in group]
+        for alt in members[1:]:
+            col += 1
+            dx = col * (native_w + COLUMN_GAP)
+            offset, placed = top, []
+            for el, name, _y in stack:
+                if name in group and el is not alt:
+                    continue
+                placed.append((el, offset))
+                offset += _num(el, "data-h") or 0.0
+            for el, y in placed:
+                if el is alt:
+                    _place(alt, dx, y)
+                    layout.moved += 1
+                else:
+                    _preview(layout, parent_of[el], el, f"{alt.get('data-slot')}-{el.get('data-slot')}",
+                             f"translate({dx:g},{y:g})")
+            # Everything that is not a row (the card, its rail, decoration) in
+            # the same column, the card resized to this mode's stack.
+            for el in list(root):
+                if not isinstance(el.tag, str) or el in rows:
+                    continue
+                if _local(el.tag) in ("defs", "style", "script", "title", "desc"):
+                    continue
+                if (el.get("id") or "").startswith("scaffold"):
+                    continue
+                extra = {}
+                if el.get("data-slot") in ("card-bg", "card-rail") and el.get("height"):
+                    extra["height"] = f"{offset - top:g}"
+                _preview(layout, root, el, f"{alt.get('data-slot')}-{el.get('data-slot') or _local(el.tag)}",
+                         f"translate({dx:g},0)", **extra)
+            layout.regions.append((f"{alt.get('data-slot')}: alternate to {members[0].get('data-slot')}",
+                                   dx, 0.0, native_w, native_h))
+            layout.grow(dx + native_w, native_h + LABEL_ROOM)
+
+
+# --------------------------------------------------------------------------
+# Pattern fills
+# --------------------------------------------------------------------------
+#
+# A design tool drops an SVG <pattern> fill on import: the callout's back-wall
+# grid and both halftone dot fields opened as nothing. And a pattern lives in
+# <defs>, which it never draws, so there was no tile to edit either. So:
+#
+#   * each pattern's TILE comes out onto the canvas below the frame as a group
+#     named `pattern=ID w=W h=H` - the one thing to edit - and the compiler
+#     turns that group back into the <pattern>;
+#   * each layer it painted keeps its place with `fill=ID` in its name (and no
+#     fill, since the reference no longer resolves);
+#   * a PREVIEW of the painted field sits beside it, expanded into real shapes,
+#     cropped to where its masks let it through and with their fade baked in as
+#     opacity - so it reads right whether or not the tool honours masks. Like
+#     every preview it is a copy, and does not follow edits to the tile.
+
+_PREVIEW_STEPS = 12   # opacity levels a baked fade is quantised to
+
+
+def _stops(grad: ET.Element) -> list[tuple[float, float]]:
+    out = []
+    for st in grad:
+        if not isinstance(st.tag, str) or _local(st.tag) != "stop":
+            continue
+        off = st.get("offset") or "0"
+        off = float(off[:-1]) / 100 if off.endswith("%") else float(off)
+        color = (st.get("stop-color") or "#ffffff").lstrip("#")
+        lum = 1.0
+        if re.fullmatch(r"[0-9a-fA-F]{6}", color):
+            r, g, b = (int(color[i:i + 2], 16) / 255 for i in (0, 2, 4))
+            lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        out.append((off, lum * float(st.get("stop-opacity") or 1)))
+    return sorted(out)
+
+
+def _at_stop(stops: list[tuple[float, float]], t: float) -> float:
+    if not stops:
+        return 1.0
+    t = min(1.0, max(0.0, t))
+    if t <= stops[0][0]:
+        return stops[0][1]
+    for (o1, v1), (o2, v2) in zip(stops, stops[1:]):
+        if t <= o2:
+            return v1 if o2 == o1 else v1 + (v2 - v1) * (t - o1) / (o2 - o1)
+    return stops[-1][1]
+
+
+def _frac(v: str | None, default: float) -> float:
+    if v is None:
+        return default
+    return float(v[:-1]) / 100 if v.endswith("%") else float(v)
+
+
+def _mask_value(mask: ET.Element, ids: dict, x: float, y: float) -> float:
+    """How much of a point a luminance mask lets through, for the gradient
+    shapes these themes build masks from. Anything it cannot evaluate counts
+    as fully open, so a preview errs towards showing too much."""
+    acc = 0.0
+    for shape in mask:
+        if not isinstance(shape.tag, str) or _local(shape.tag) != "rect":
+            continue
+        rx, ry = _num(shape, "x") or 0.0, _num(shape, "y") or 0.0
+        rw, rh = _num(shape, "width") or 0.0, _num(shape, "height") or 0.0
+        if not (rw and rh and rx <= x <= rx + rw and ry <= y <= ry + rh):
+            continue
+        ref = re.match(r"url\(#([^)]+)\)", shape.get("fill") or "")
+        grad = ids.get(ref.group(1)) if ref else None
+        if grad is None or grad.get("gradientTransform") or grad.get("gradientUnits") == "userSpaceOnUse":
+            v = 1.0
+        else:
+            u, w = (x - rx) / rw, (y - ry) / rh
+            if _local(grad.tag) == "linearGradient":
+                x1, y1 = _frac(grad.get("x1"), 0), _frac(grad.get("y1"), 0)
+                x2, y2 = _frac(grad.get("x2"), 1), _frac(grad.get("y2"), 0)
+                dx, dy = x2 - x1, y2 - y1
+                t = ((u - x1) * dx + (w - y1) * dy) / ((dx * dx + dy * dy) or 1)
+            else:
+                cx, cy, r = _frac(grad.get("cx"), .5), _frac(grad.get("cy"), .5), _frac(grad.get("r"), .5)
+                t = ((u - cx) ** 2 + (w - cy) ** 2) ** 0.5 / (r or 1)
+            v = _at_stop(_stops(grad), t)
+        acc = acc + v * (1 - acc)
+    return acc
+
+
+def _tile_shapes(tile: ET.Element) -> list[tuple[str, str, dict]] | None:
+    """A tile as (kind, geometry, paint) - circles, and paths spelled in the
+    absolute M/L/H/V/Z the themes use. None for anything else."""
+    shapes = []
+    for el in tile:
+        if not isinstance(el.tag, str):
+            continue
+        tag = _local(el.tag)
+        paint = {k: el.get(k) for k in ("fill", "stroke", "stroke-width", "stroke-opacity", "fill-opacity")
+                 if el.get(k) is not None}
+        if tag == "circle":
+            shapes.append(("circle", f"{el.get('cx', '0')},{el.get('cy', '0')},{el.get('r', '0')}", paint))
+        elif tag == "path" and re.fullmatch(r"[MLHVZmlhvz\d.\s,-]+", el.get("d") or "") \
+                and not re.search(r"[lhvm]", el.get("d") or ""):
+            shapes.append(("path", el.get("d") or "", paint))
+        else:
+            return None
+    return shapes
+
+
+def _shift_path(d: str, dx: float, dy: float) -> str:
+    out, cmd, axis = [], "M", 0
+    for tok in re.findall(r"[MLHVZ]|-?\d*\.?\d+", d):
+        if tok in "MLHVZ":
+            cmd, axis = tok, 0
+            out.append(tok)
+            continue
+        v = float(tok)
+        if cmd == "H" or (cmd in "ML" and axis % 2 == 0):
+            v += dx
+        elif cmd == "V" or cmd in "ML":
+            v += dy
+        axis += 1
+        out.append(f"{v:g}")
+    return " ".join(out)
+
+
+def _expand(tile: ET.Element, tw: float, th: float, area: tuple, weight) -> ET.Element | None:
+    """The field `tile` paints over `area`, one path per (shape, fade level)."""
+    shapes = _tile_shapes(tile)
+    if not shapes:
+        return None
+    ax, ay, aw, ah = area
+    buckets: dict[tuple[int, int], list[str]] = {}
+    ty = ay - (ay % th)
+    while ty < ay + ah:
+        tx = ax - (ax % tw)
+        while tx < ax + aw:
+            level = round(weight(tx + tw / 2, ty + th / 2) * _PREVIEW_STEPS)
+            if level > 0:
+                for i, (kind, geo, _paint) in enumerate(shapes):
+                    if kind == "circle":
+                        cx, cy, r = (float(v) for v in geo.split(","))
+                        cx, cy = cx + tx, cy + ty
+                        seg = f"M{cx - r:g} {cy:g}a{r:g} {r:g} 0 1 0 {2 * r:g} 0a{r:g} {r:g} 0 1 0 {-2 * r:g} 0"
+                    else:
+                        seg = _shift_path(geo, tx, ty)
+                    buckets.setdefault((i, level), []).append(seg)
+            tx += tw
+        ty += th
+    group = ET.Element(f"{{{SVG_NS}}}g")
+    for (i, level), segs in sorted(buckets.items()):
+        _kind, _geo, paint = shapes[i]
+        path = ET.SubElement(group, f"{{{SVG_NS}}}path", {"d": "".join(segs), **paint})
+        path.set("opacity", f"{level / _PREVIEW_STEPS:.3g}")
+    return group
+
+
+def _lift_patterns(root: ET.Element, parent_of: dict, layout: _Layout, report) -> None:
+    defs = next((c for c in root if isinstance(c.tag, str) and _local(c.tag) == "defs"), None)
+    if defs is None:
+        return
+    ids = {el.get("id"): el for el in root.iter() if isinstance(el.tag, str) and el.get("id")}
+    patterns = [p for p in defs if isinstance(p.tag, str) and _local(p.tag) == "pattern"
+                and (p.get("patternUnits") == "userSpaceOnUse") and not p.get("patternTransform")]
+    users = {}
+    for el in root.iter():
+        m = re.match(r"url\(#([^)]+)\)", el.get("fill") or "") if isinstance(el.tag, str) else None
+        if m and m.group(1) in {p.get("id") for p in patterns}:
+            users.setdefault(m.group(1), []).append(el)
+    patterns = [p for p in patterns if p.get("id") in users]
+    if not patterns:
+        return
+
+    native_h = layout.height
+    y, x, tallest = native_h + ROW_GAP, 0.0, 0.0
+    for pat in patterns:
+        pid, tw, th = pat.get("id"), _num(pat, "width") or 0.0, _num(pat, "height") or 0.0
+        if not (tw and th):
+            continue
+        # The field each user paints, BEFORE its fill is taken away.
+        for el in users[pid]:
+            chain, node = [], el
+            while node is not None:
+                if node.get("mask"):
+                    chain.append(ids.get(re.sub(r"^url\(#|\)$", "", node.get("mask"))))
+                node = parent_of.get(node)
+            try:
+                own = float(el.get("opacity", "1"))
+            except ValueError:
+                own = 1.0
+
+            def weight(px, py, chain=chain, own=own):
+                v = own
+                for mask in chain:
+                    v *= _mask_value(mask, ids, px, py) if mask is not None else 1.0
+                return v
+
+            area = (_num(el, "x") or 0.0, _num(el, "y") or 0.0,
+                    _num(el, "width") or layout.width, _num(el, "height") or native_h)
+            field = _expand(pat, tw, th, area, weight)
+            name = el.get("id") or pid
+            el.set("fill", "none")
+            if el.get("data-slot") or el.get("data-part") or el.get("data-tpl"):
+                el.set("data-fillref", pid)
+            else:
+                el.set("id", f"{el.get('id')} fill={pid}" if el.get("id") else f"fill={pid}")
+            if field is None:
+                report.add("warn", f"pattern {pid!r}: its tile has shapes the preview cannot expand")
+                continue
+            # Beside the OUTERMOST masked ancestor, since the fade is baked in.
+            anchor, node = el, parent_of.get(el)
+            while node is not None and node is not root:
+                if node.get("mask"):
+                    anchor = node
+                node = parent_of.get(node)
+            host = parent_of[anchor]
+            field.set("id", f"scaffold=preview-{name}")
+            host.insert(list(host).index(anchor) + 1, field)
+        # The tile itself, on the canvas below the frame.
+        tile = ET.Element(f"{{{SVG_NS}}}g", {"data-pattern": pid, "data-w": f"{tw:g}", "data-h": f"{th:g}"})
+        for child in list(pat):
+            tile.append(child)
+        defs.remove(pat)
+        root.append(tile)
+        _place(tile, x, y)
+        layout.regions.append((f"pattern {pid} {tw:g}x{th:g}", x, y, tw, th))
+        tallest = max(tallest, th)
+        x += max(tw, 120.0) + 200.0
+        layout.moved += 1
+    layout.grow(max(layout.width, x), y + tallest + LABEL_ROOM)
+    report.add("info", f"lifted {len(patterns)} pattern tile(s) onto the canvas (pattern=ID) and "
+                       "previewed the fields they paint")
+
+
+_PLANS = {
+    "ticker": _plan_ticker,
+    "schedule": _plan_schedule,
+    "playerplates": _plan_playerplates,
+    "lowerthird": _plan_lowerthird,
+}
+
+
+def _canvas_guides(layout: _Layout, native_w: float, native_h: float) -> ET.Element:
+    """Frame bounds + a caption per region, on top of the art."""
+    g = ET.Element(f"{{{SVG_NS}}}g", {"id": "scaffold=canvas-guides"})
+    ET.SubElement(g, f"{{{SVG_NS}}}rect", {
+        "id": "scaffold=frame-bounds", "x": "0", "y": "0",
+        "width": f"{native_w:g}", "height": f"{native_h:g}", "fill": "none",
+        "stroke": FRAME_HUE, "stroke-width": "2", "stroke-dasharray": "12 8",
+    })
+    captions = [(f"FRAME {native_w:g}x{native_h:g}: what ships", 0.0, 0.0, native_w, native_h)]
+    for label, x, y, w, h in layout.regions:
+        ET.SubElement(g, f"{{{SVG_NS}}}rect", {
+            "id": f"scaffold=region-{len(captions)}", "x": f"{x:g}", "y": f"{y:g}",
+            "width": f"{w:g}", "height": f"{h:g}", "fill": "none",
+            "stroke": "#8F8FA3", "stroke-width": "2", "stroke-dasharray": "12 8",
+        })
+        captions.append((label, x, y, w, h))
+    for i, (label, x, y, _w, h) in enumerate(captions):
+        t = ET.SubElement(g, f"{{{SVG_NS}}}text", {
+            "id": f"scaffold=caption-{i}", "x": f"{x + 4:g}", "y": f"{y + h + 30:g}",
+            "font-family": "Inter", "font-size": "20", "font-weight": "600",
+            "fill": FRAME_HUE if i == 0 else "#C9C9D6",
+        })
+        t.text = label
+    return g
 
 
 def build_template(
@@ -593,7 +1231,9 @@ def build_template(
         href = el.get("href") or el.get(f"{{{XLINK_NS}}}href")
         if not href:
             el.set("href", _TRANSPARENT_PX)
-        name = el.get("data-slot") or ""
+        # A clone prototype's image is a PART (the ticker's captain icons),
+        # and needs the box as much as a top-level slot does.
+        name = el.get("data-slot") or el.get("data-part") or ""
         parent = parent_of.get(el)
         if parent is None or not name:
             continue
@@ -616,7 +1256,11 @@ def build_template(
     # --- 4b. meld stages: dashed guides for a card that resizes ----------
     stages = _meld_stages(root)
     if stages:
-        root.append(_stage_guides(stages))
+        # Into card-bg's own parent: the stages are in its coordinates, and a
+        # card inside a translated group (the schedule's) would otherwise get
+        # its guides drawn at the canvas origin.
+        bg = _find(root, "data-slot", "card-bg")
+        (parent_of.get(bg, root) if bg is not None else root).append(_stage_guides(stages))
         report.add(
             "info",
             f"added {len(stages)} dashed meld-stage guide(s) — the card's runtime extents",
@@ -654,6 +1298,21 @@ def build_template(
                 "card will not enclose them (the mount sizes the card to the rows)",
             )
 
+    # --- 4d. layout for editing: prototypes, alternates, <defs> -----------
+    try:
+        _, _, native_w, native_h = (float(v) for v in (root.get("viewBox") or "").replace(",", " ").split())
+    except ValueError:
+        native_w = native_h = 0.0
+    layout = _Layout(native_w, native_h)
+    plan = _PLANS.get(element)
+    if plan and native_w:
+        plan(root, parent_of, layout)
+    if native_w:
+        _plan_alternates(root, parent_of, layout, stack)
+        _lift_patterns(root, parent_of, layout, report)
+    if layout.moved:
+        report.add("info", f"placed {layout.moved} prototype/alternate layer(s) where the app draws them")
+
     # --- 5. placeholder text so an empty slot is visible -----------------
     filled = 0
     for el in root.iter():
@@ -666,6 +1325,21 @@ def build_template(
         filled += 1
     if filled:
         report.add("info", f"filled {filled} empty text slot(s) with sample content")
+
+    # --- 5b. preview copies, now that they can carry the placeholder text --
+    previews = _build_previews(layout)
+    if previews:
+        report.add("info", f"added {previews} preview copy(ies) (scaffold=preview-*, never shipped)")
+    extended = layout.width > native_w or layout.height > native_h
+    if extended:
+        layout.grow(layout.width, native_h + LABEL_ROOM)
+        root.append(_canvas_guides(layout, native_w, native_h))
+        root.set("viewBox", f"0 0 {layout.width:g} {layout.height:g}")
+        report.add(
+            "info",
+            f"canvas widened to {layout.width:g}x{layout.height:g} around the "
+            f"{native_w:g}x{native_h:g} frame (frame= marker restores it)",
+        )
 
     # --- 6. data-* markers -> layer names --------------------------------
     slots: list[str] = []
@@ -708,7 +1382,13 @@ def build_template(
         marker.set("opacity", "0")
         root.insert(0, marker)
 
-    header = ET.Comment(_header(element, root.get("viewBox") or "", keyframes))
+    if extended:
+        root.insert(0, ET.Element(f"{{{SVG_NS}}}rect", {
+            "id": f"frame={native_w:g}x{native_h:g}", "x": "0", "y": "0",
+            "width": "1", "height": "1", "opacity": "0",
+        }))
+
+    header = ET.Comment(_header(element, f"0 0 {native_w:g} {native_h:g}", keyframes, extended))
     root.insert(0, header)
 
     report.changed = True
@@ -723,7 +1403,7 @@ _PRESENTATION_ATTRS = {
 }
 
 
-def _header(element: str, viewbox: str, keyframes: int) -> str:
+def _header(element: str, viewbox: str, keyframes: int, extended: bool = False) -> str:
     size = " ".join(viewbox.split()[2:]) if viewbox else "?"
     motion = (
         f"Motion: {keyframes} keyframe block(s) were dropped. Every animation in "
@@ -732,14 +1412,22 @@ def _header(element: str, viewbox: str, keyframes: int) -> str:
         if keyframes
         else "Motion lives in the mount (JS), never in the theme file."
     )
+    canvas = (
+        f"\n    THE CANVAS IS BIGGER THAN THE ELEMENT. The magenta dashed box is the\n"
+        f"    {size.replace(' ', 'x')} frame that ships; the columns/rows beside it hold\n"
+        f"    alternates and spare prototypes laid out so nothing overlaps. Leave\n"
+        f"    the canvas size alone - the frame= layer tells the compiler the real one.\n"
+        if extended else ""
+    )
     return f"""
     FIGMA REIMPORT TEMPLATE - {element} ({size.replace(' ', 'x')}). GENERATED by
     scripts/figma-template.py from the shipped public/design/default/{element}.svg.
     Do not hand-edit this file; edit it in Figma, or regenerate it.
 
     Round trip: import this into Figma, restyle, export as SVG (layer names as
-    ids, text NOT outlined, frame kept at exactly {size.replace(' ', 'x')}), then run
+    ids, text NOT outlined, the whole canvas exported as-is), then run
     scripts/compile-theme.py on the export to get an installable theme back.
+    {canvas}
 
     LAYER NAMES ARE THE CONTRACT. Figma keeps names, not attributes, so every
     binding the app needs rides in the layer name:
@@ -753,6 +1441,11 @@ def _header(element: str, viewbox: str, keyframes: int) -> str:
                            ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
+      frame=WxH            invisible marker: the element's native size
+      at=X,Y               where this file PLACED a layer for editing; the
+                           compiler takes it back out (a nudge on top is kept)
+      defs                 a prototype the app keeps in <defs>; lifted onto the
+                           canvas so you can see it, put back on compile
     Keep them. Rename freely otherwise.
 
     RUNTIME SEAM COLOURS keep these literal hues on their layers; the compiler
@@ -767,13 +1460,20 @@ def _header(element: str, viewbox: str, keyframes: int) -> str:
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
 
-    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    PREVIEW COPIES (scaffold=preview-*) show the slots a prototype is cloned
+    into at runtime (ticker cards, schedule rows) and the rest of the card
+    around an alternate. They are COPIES: they do not follow your edits and are
+    stripped on compile. Edit the original (the slot=/tpl= layer) and check
+    the spacing against the copies.
+
+    STACK ROWS (slot=row-* / slot=el-*) have been moved to the offsets the app stacks them
     to, so this file shows the assembled card rather than every band piled on
     the frame origin. `at=N` in the name records where each was put and the
-    compiler takes it back out; anything you move ON TOP of that is kept. Two
-    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
-    never both - so they are drawn overlapping on purpose. Toggle one off in
-    the layers panel to work on the other, and design each to fill the band.
+    compiler takes it back out; anything you move ON TOP of that is kept.
+    ALTERNATES - rows the app never shows together (a live game or a completed
+    one; the Scorecard's full / rosters / condensed score block) - each get a
+    column of their own beside the frame, with the rest of the card previewed
+    around them. Design each to fill the same band.
 
     CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
     runtime, labelled with the row that triggers each. The card GROWS to enclose

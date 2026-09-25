@@ -108,7 +108,12 @@ _LIST_MODIFIERS = {"full"}
 # opacity:0 of a layer the template deliberately REVEALS so the designer can see
 # and style it (a FINAL badge, a runner icon). Without it the reveal compiles
 # back as a permanently visible layer; see server/figma_template.py.
-_FLAGS = {"hidden": ("opacity", "0")}
+#
+# `defs` is the other half of a template move: a clone PROTOTYPE the mount only
+# ever reads (the lower third's segment templates) is authored inside <defs>,
+# which a design tool does not draw, so the template lifts it onto the canvas
+# where the designer can see it and tags it; the compiler puts it back.
+_FLAGS = {"hidden": ("opacity", "0"), "defs": ("data-defs", "1")}
 
 # A layer tagged with a `scaffold` token (e.g. `scaffold=s1-logo`) is a
 # design-tool editing aid — the dashed placeholder boxes marking an image slot's
@@ -116,6 +121,10 @@ _FLAGS = {"hidden": ("opacity", "0")}
 _SCAFFOLD_RE = re.compile(r"(?:^|[ _])scaffold(?:[=:][^ _]*)?(?:$|[ _])", re.I)
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _LAYOUT_MARKER_RE = re.compile(r"^layout[=:_ ]+(absolute|stack)$", re.I)
+# The template's canvas can be LARGER than the element: alternates and spare
+# prototypes sit in columns/rows beside the native frame so nothing overlaps.
+# `frame=WxH` is the native size; the compiler restores the viewBox to it.
+_FRAME_MARKER_RE = re.compile(r"^frame[=:_ ]+(\d+(?:\.\d+)?)[x,](\d+(?:\.\d+)?)$", re.I)
 _VAR_ATTRS = ("fill", "stroke", "stop-color", "color")
 
 
@@ -174,11 +183,16 @@ def parse_grammar_id(raw: str) -> tuple[str, str, dict[str, str], list[str]] | N
         return None
     problems: list[str] = []
     first = tokens[0]
-    m = re.match(r"^(slot|part|tpl)[=:](.*)$", first, re.I)
+    m = re.match(r"^(slot|part|tpl|pattern)[=:](.*)$", first, re.I)
     if m:
         marker = m.group(1).lower()
-        name = m.group(2).strip().lower()
-        if not _NAME_RE.match(name):
+        # A pattern's name is the <pattern> id the layers' fills point at, and
+        # keeps its case (`rioGrid`); every other name is a lowercase contract.
+        name = m.group(2).strip() if marker == "pattern" else m.group(2).strip().lower()
+        if marker == "pattern" and not re.match(r"^[A-Za-z][\w-]*$", name):
+            problems.append(f"invalid pattern name {name!r}")
+            name = ""
+        elif marker != "pattern" and not _NAME_RE.match(name):
             problems.append(f"invalid {marker} name {name!r} (use lowercase letters, digits, dashes)")
             name = ""
         mods = tokens[1:]
@@ -200,6 +214,8 @@ def parse_grammar_id(raw: str) -> tuple[str, str, dict[str, str], list[str]] | N
             problems.append(f"unrecognized modifier {tok!r}")
             continue
         key, value = km.group(1).lower(), km.group(2)
+        if key == "fill":
+            continue  # a pattern reference - applied by _apply_fill_refs, on any layer
         flag = _FLAGS.get(key)
         if flag:
             # `hidden=1` / `hidden=false`: not the documented spelling, but a
@@ -323,6 +339,20 @@ def compile_svg(
         mutations += 1
     if stripped_dims:
         report.add("info", "stripped fixed width/height from the root (size comes from the viewBox)")
+
+    frame_markers = [
+        (el, _FRAME_MARKER_RE.match(el.get("id") or ""))
+        for el in root.iter()
+        if isinstance(el.tag, str) and _FRAME_MARKER_RE.match((el.get("id") or "").strip())
+    ]
+    if frame_markers:
+        fw, fh = (float(v) for v in frame_markers[0][1].groups())
+        native = f"0 0 {fw:g} {fh:g}"
+        if root.get("viewBox") != native:
+            report.add("info", f"restored the native frame {fw:g}x{fh:g} (the template canvas was larger)")
+            root.set("viewBox", native)
+        _remove_layers([el for el, _ in frame_markers], parent_of)
+        mutations += 1
 
     vb = root.get("viewBox")
     if not vb:
@@ -459,10 +489,13 @@ def compile_svg(
             continue
         at, raw = el.get("data-at"), el.get("transform")
         del el.attrib["data-at"]
+        # `at=Y` for a stack row, `at=X,Y` for anything placed sideways too (an
+        # alternate in its own column, a prototype lifted onto its first slot).
         try:
-            placed = float(at)
+            parts = [float(v) for v in at.split(",")]
         except ValueError:
             continue
+        placed_x, placed = (parts[0], parts[1]) if len(parts) == 2 else (0.0, parts[0])
         offset = _translate_xy(raw)
         if offset is None:
             if raw:
@@ -470,8 +503,8 @@ def compile_svg(
                 report.add("warn", f"row {el.get('data-slot')!r} carries transform {raw!r} — "
                                    "its stack origin could not be restored, check it by hand")
                 continue
-            if placed:
-                baked.append(el.get("data-slot") or "?")
+            if placed or placed_x:
+                baked.append(el.get("data-slot") or el.get("data-tpl") or "?")
             # No transform came back, so the contents themselves sit at +K and
             # the group has to be pulled back by K. Treated as translate(0,0)
             # here so the one subtraction below covers both cases.
@@ -485,7 +518,7 @@ def compile_svg(
         # relayout, so a correction parked there survives exactly until the
         # first one.
         el.attrib.pop("transform", None)
-        x, y = round(x, 3), round(y - placed, 3)
+        x, y = round(x - placed_x, 3), round(y - placed, 3)
         if x or y:
             wrapper = ET.Element(f"{{{SVG_NS}}}g")
             wrapper.set("transform", f"translate({x:g},{y:g})")
@@ -496,7 +529,63 @@ def compile_svg(
         restored += 1
         mutations += 1
     if restored:
-        report.add("info", f"restored {restored} stack row(s) to their local y origin")
+        report.add("info", f"restored {restored} placed layer(s) to their local origin")
+
+    # --- prototypes back into <defs> (the `defs` flag) ---
+    to_defs = [el for el in root.iter() if isinstance(el.tag, str) and el.get("data-defs") is not None]
+    if to_defs:
+        owner = {child: parent for parent in root.iter() for child in parent}
+        defs = next((c for c in root if isinstance(c.tag, str) and _local(c.tag) == "defs"), None)
+        if defs is None:
+            defs = ET.Element(f"{{{SVG_NS}}}defs")
+            root.insert(0, defs)
+        for el in to_defs:
+            del el.attrib["data-defs"]
+            parent = owner.get(el)
+            if parent is not defs:
+                if parent is not None:
+                    parent.remove(el)
+                defs.append(el)
+        parent_of = {child: parent for parent in root.iter() for child in parent}
+        report.add("info", f"returned {len(to_defs)} prototype(s) to <defs>")
+        mutations += 1
+    # --- pattern tiles back into <defs>, and the fills that point at them ---
+    # A design tool drops <pattern> fills, so the template draws each TILE as a
+    # `pattern=ID w=W h=H` group and names every layer it painted `fill=ID`.
+    rebuilt = 0
+    owner = {child: parent for parent in root.iter() for child in parent}
+    for el in [e for e in root.iter() if isinstance(e.tag, str) and e.get("data-pattern")]:
+        pid = el.attrib.pop("data-pattern")
+        pat = ET.Element(f"{{{SVG_NS}}}pattern", {
+            "id": pid, "width": el.attrib.pop("data-w", "0"), "height": el.attrib.pop("data-h", "0"),
+            "patternUnits": "userSpaceOnUse",
+        })
+        pat.extend(list(el))
+        defs = next((c for c in root if isinstance(c.tag, str) and _local(c.tag) == "defs"), None)
+        if defs is None:
+            defs = ET.Element(f"{{{SVG_NS}}}defs")
+            root.insert(0, defs)
+        owner[el].remove(el)
+        defs.append(pat)
+        rebuilt += 1
+    filled = 0
+    for el in root.iter():
+        raw = el.get("id") if isinstance(el.tag, str) else None
+        m = re.search(r"(?:^|[ _])fill=([A-Za-z][\w-]*)(?=$|[ _])", raw or "")
+        if not m:
+            continue
+        el.set("fill", f"url(#{m.group(1)})")
+        style = el.get("style")
+        if style and "fill" in style:
+            kept = [d for d in style.split(";") if d.strip() and d.split(":", 1)[0].strip() != "fill"]
+            el.set("style", ";".join(kept)) if kept else el.attrib.pop("style")
+        rest = (raw[:m.start()] + raw[m.end():]).strip(" _")
+        el.set("id", rest) if rest else el.attrib.pop("id")
+        filled += 1
+    if rebuilt or filled:
+        parent_of = {child: parent for parent in root.iter() for child in parent}
+        report.add("info", f"rebuilt {rebuilt} pattern(s) and pointed {filled} layer fill(s) back at them")
+        mutations += 1
     if baked:
         report.add(
             "info",

@@ -5,8 +5,9 @@
     Do not hand-edit this file; edit it in Figma, or regenerate it.
 
     Round trip: import this into Figma, restyle, export as SVG (layer names as
-    ids, text NOT outlined, frame kept at exactly 1920x80), then run
+    ids, text NOT outlined, the whole canvas exported as-is), then run
     scripts/compile-theme.py on the export to get an installable theme back.
+    
 
     LAYER NAMES ARE THE CONTRACT. Figma keeps names, not attributes, so every
     binding the app needs rides in the layer name:
@@ -20,6 +21,11 @@
                            ships permanently visible.
       scaffold=NAME        editing only guide (dashed boxes), STRIPPED on compile
       layout=absolute      invisible marker carrying the root layout mode
+      frame=WxH            invisible marker: the element's native size
+      at=X,Y               where this file PLACED a layer for editing; the
+                           compiler takes it back out (a nudge on top is kept)
+      defs                 a prototype the app keeps in <defs>; lifted onto the
+                           canvas so you can see it, put back on compile
     Keep them. Rename freely otherwise.
 
     RUNTIME SEAM COLOURS keep these literal hues on their layers; the compiler
@@ -36,13 +42,20 @@
     game art, so design the BOX as the no art look; the app draws the real icon
     on top and hides it when there is none.
 
-    STACK ROWS (slot=row-*) have been moved to the offsets the app stacks them
+    PREVIEW COPIES (scaffold=preview-*) show the slots a prototype is cloned
+    into at runtime (ticker cards, schedule rows) and the rest of the card
+    around an alternate. They are COPIES: they do not follow your edits and are
+    stripped on compile. Edit the original (the slot=/tpl= layer) and check
+    the spacing against the copies.
+
+    STACK ROWS (slot=row-* / slot=el-*) have been moved to the offsets the app stacks them
     to, so this file shows the assembled card rather than every band piled on
     the frame origin. `at=N` in the name records where each was put and the
-    compiler takes it back out; anything you move ON TOP of that is kept. Two
-    rows sharing one `at=` are ALTERNATES - a live game or a completed one,
-    never both - so they are drawn overlapping on purpose. Toggle one off in
-    the layers panel to work on the other, and design each to fill the band.
+    compiler takes it back out; anything you move ON TOP of that is kept.
+    ALTERNATES - rows the app never shows together (a live game or a completed
+    one; the Scorecard's full / rosters / condensed score block) - each get a
+    column of their own beside the frame, with the rest of the card previewed
+    around them. Design each to fill the same band.
 
     CYAN DASHED BOXES (scaffold=stage-*) are the sizes this card takes at
     runtime, labelled with the row that triggers each. The card GROWS to enclose
@@ -267,7 +280,7 @@
        above, seven below. It was 14.8 above and 3.7 below - the same two rows,
        sitting low in their own card, which reads as a crop rather than as a
        choice. -->
-  <g opacity="1" id="slot=card-template w=424 hidden">
+  <g opacity="1" transform="translate(166,0)" id="slot=card-template w=424 at=166,0 hidden">
     <rect x="0" y="8" width="424" height="64" rx="10" fill="#10101a" stroke="#1f1f30" stroke-width="1" id="part=card-bg" />
 
     <!-- The winner's rail, flush against the plate on that side. Flush and not
@@ -283,14 +296,14 @@
     <rect x="166" y="15" width="92" height="32" rx="8" fill="rgba(0,0,0,0.42)" />
 
     <g id="part=away-row">
-      <image x="10" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=away-cap pinbefore=away-name pingap=10 hidden" />
-      <text x="150" y="40" text-anchor="end" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="part=away-name maxw=98">Away</text>
-      <text x="204" y="40" text-anchor="end" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="part=score-away">0</text>
+      <rect id="scaffold=away-cap" x="10" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="10" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=away-cap pinbefore=away-name pingap=10 hidden" />
+      <text x="150" y="40" text-anchor="end" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="part=away-name maxw=98">ChainChompKid</text>
+      <text x="204" y="40" text-anchor="end" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="part=score-away">7</text>
     </g>
     <g id="part=home-row">
-      <image x="382" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=home-cap pinafter=home-name pingap=10 hidden" />
-      <text x="274" y="40" text-anchor="start" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="part=home-name maxw=98">Home</text>
-      <text x="220" y="40" text-anchor="start" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="part=score-home">0</text>
+      <rect id="scaffold=home-cap" x="382" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="382" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="1" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" id="part=home-cap pinafter=home-name pingap=10 hidden" />
+      <text x="274" y="40" text-anchor="start" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani" id="part=home-name maxw=98">PiantaPower</text>
+      <text x="220" y="40" text-anchor="start" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" id="part=score-home">4</text>
     </g>
 
     <!-- score-group is what the mount hides when there is no result: the dash
@@ -305,6 +318,126 @@
          still bound by the mount as its own part, so a package that wants it
          only has to draw it. Uppercased here rather than in the data, because
          the mode is content and a package is free to drop the transform. -->
-    <text x="212" y="65" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.8" style="text-transform:uppercase" fill="#8f8fa3" font-family="Inter" id="part=meta maxw=370">MODE · DATE</text>
+    <text x="212" y="65" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.8" style="text-transform:uppercase" fill="#8f8fa3" font-family="Inter" id="part=meta maxw=370">Stars Off · Sep 21</text>
   </g>
-</svg>
+<g id="scaffold=preview-card-4"><g opacity="1" transform="translate(1486,0)">
+    <rect x="0" y="8" width="424" height="64" rx="10" fill="#10101a" stroke="#1f1f30" stroke-width="1" />
+
+    <!-- The winner's rail, flush against the plate on that side. Flush and not
+         floating in the gap: at 10 from the name and 9 from the plate it reads
+         as belonging to neither, which for a marker is the whole job lost. -->
+    <rect x="160" y="17" width="6" height="28" rx="3" opacity="0" fill="#E60012" />
+    <rect x="258" y="17" width="6" height="28" rx="3" opacity="0" fill="#E60012" />
+
+    <!-- The plate is the theme's own chrome and is ALWAYS drawn - it is the
+         fixed object the eye tracks as the cards go past, so a live game
+         showing VS must show it in the same place, at the same size, as the
+         nine finished cards either side of it. -->
+    <rect x="166" y="15" width="92" height="32" rx="8" fill="rgba(0,0,0,0.42)" />
+
+    <g opacity="1">
+      <rect x="35.1" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="35.1" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" />
+      <text x="150" y="40" text-anchor="end" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">MontyMole</text>
+      <text x="204" y="40" text-anchor="end" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" opacity="0" />
+    </g>
+    <g opacity="1">
+      <rect x="365" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="365" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" />
+      <text x="274" y="40" text-anchor="start" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">WigglerFan</text>
+      <text x="220" y="40" text-anchor="start" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" opacity="0" />
+    </g>
+
+    <!-- score-group is what the mount hides when there is no result: the dash
+         between two numbers, and nothing else. The plate above it stays. -->
+    <g opacity="0">
+      <text x="212" y="39" text-anchor="middle" font-size="14" fill="#8f8fa3" font-family="Inter">–</text>
+    </g>
+    <text x="212" y="40" text-anchor="middle" font-size="16" font-weight="700" letter-spacing="1.5" opacity="1" fill="#8f8fa3" font-family="Inter">VS</text>
+
+    <!-- MODE, then date - the competition earns the line and the park does not,
+         the same call the Matchup summary's history cards make. `stadium` is
+         still bound by the mount as its own part, so a package that wants it
+         only has to draw it. Uppercased here rather than in the data, because
+         the mode is content and a package is free to drop the transform. -->
+    <text x="212" y="65" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.8" style="text-transform:uppercase" fill="#8f8fa3" font-family="Inter">Stars Off</text>
+  </g>
+</g><g id="scaffold=preview-card-3"><g opacity="1" transform="translate(1046,0)">
+    <rect x="0" y="8" width="424" height="64" rx="10" fill="#10101a" stroke="#1f1f30" stroke-width="1" />
+
+    <!-- The winner's rail, flush against the plate on that side. Flush and not
+         floating in the gap: at 10 from the name and 9 from the plate it reads
+         as belonging to neither, which for a marker is the whole job lost. -->
+    <rect x="160" y="17" width="6" height="28" rx="3" opacity="0" fill="#E60012" />
+    <rect x="258" y="17" width="6" height="28" rx="3" opacity="1" fill="#E60012" />
+
+    <!-- The plate is the theme's own chrome and is ALWAYS drawn - it is the
+         fixed object the eye tracks as the cards go past, so a live game
+         showing VS must show it in the same place, at the same size, as the
+         nine finished cards either side of it. -->
+    <rect x="166" y="15" width="92" height="32" rx="8" fill="rgba(0,0,0,0.42)" />
+
+    <g opacity="0.45">
+      <rect x="51.3" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="51.3" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" />
+      <text x="150" y="40" text-anchor="end" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Kritter</text>
+      <text x="204" y="40" text-anchor="end" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" opacity="1">1</text>
+    </g>
+    <g opacity="1">
+      <rect x="373.1" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="373.1" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" />
+      <text x="274" y="40" text-anchor="start" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">DryBonesDan</text>
+      <text x="220" y="40" text-anchor="start" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" opacity="1">6</text>
+    </g>
+
+    <!-- score-group is what the mount hides when there is no result: the dash
+         between two numbers, and nothing else. The plate above it stays. -->
+    <g opacity="1">
+      <text x="212" y="39" text-anchor="middle" font-size="14" fill="#8f8fa3" font-family="Inter">–</text>
+    </g>
+    <text x="212" y="40" text-anchor="middle" font-size="16" font-weight="700" letter-spacing="1.5" opacity="0" fill="#8f8fa3" font-family="Inter">VS</text>
+
+    <!-- MODE, then date - the competition earns the line and the park does not,
+         the same call the Matchup summary's history cards make. `stadium` is
+         still bound by the mount as its own part, so a package that wants it
+         only has to draw it. Uppercased here rather than in the data, because
+         the mode is content and a package is free to drop the transform. -->
+    <text x="212" y="65" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.8" style="text-transform:uppercase" fill="#8f8fa3" font-family="Inter">Stars On · Sep 20</text>
+  </g>
+</g><g id="scaffold=preview-card-2"><g opacity="1" transform="translate(606,0)">
+    <rect x="0" y="8" width="424" height="64" rx="10" fill="#10101a" stroke="#1f1f30" stroke-width="1" />
+
+    <!-- The winner's rail, flush against the plate on that side. Flush and not
+         floating in the gap: at 10 from the name and 9 from the plate it reads
+         as belonging to neither, which for a marker is the whole job lost. -->
+    <rect x="160" y="17" width="6" height="28" rx="3" opacity="1" fill="#E60012" />
+    <rect x="258" y="17" width="6" height="28" rx="3" opacity="0" fill="#E60012" />
+
+    <!-- The plate is the theme's own chrome and is ALWAYS drawn - it is the
+         fixed object the eye tracks as the cards go past, so a live game
+         showing VS must show it in the same place, at the same size, as the
+         nine finished cards either side of it. -->
+    <rect x="166" y="15" width="92" height="32" rx="8" fill="rgba(0,0,0,0.42)" />
+
+    <g opacity="1">
+      <rect x="27" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="27" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" />
+      <text x="150" y="40" text-anchor="end" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Toadsworth</text>
+      <text x="204" y="40" text-anchor="end" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" opacity="1">5</text>
+    </g>
+    <g opacity="0.45">
+      <rect x="348.8" y="15" width="32" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.06" stroke="#8F8FA3" stroke-opacity="0.4" stroke-dasharray="3 3" /><image x="348.8" y="15" width="32" height="32" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" />
+      <text x="274" y="40" text-anchor="start" font-size="18" font-weight="700" fill="#f5f5f8" font-family="Rajdhani">Boo Crew</text>
+      <text x="220" y="40" text-anchor="start" font-size="26" font-weight="700" style="font-variant-numeric:tabular-nums" fill="#f5f5f8" font-family="Chivo Mono" opacity="1">2</text>
+    </g>
+
+    <!-- score-group is what the mount hides when there is no result: the dash
+         between two numbers, and nothing else. The plate above it stays. -->
+    <g opacity="1">
+      <text x="212" y="39" text-anchor="middle" font-size="14" fill="#8f8fa3" font-family="Inter">–</text>
+    </g>
+    <text x="212" y="40" text-anchor="middle" font-size="16" font-weight="700" letter-spacing="1.5" opacity="0" fill="#8f8fa3" font-family="Inter">VS</text>
+
+    <!-- MODE, then date - the competition earns the line and the park does not,
+         the same call the Matchup summary's history cards make. `stadium` is
+         still bound by the mount as its own part, so a package that wants it
+         only has to draw it. Uppercased here rather than in the data, because
+         the mode is content and a package is free to drop the transform. -->
+    <text x="212" y="65" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.8" style="text-transform:uppercase" fill="#8f8fa3" font-family="Inter">Stars Off · Sep 21</text>
+  </g>
+</g></svg>

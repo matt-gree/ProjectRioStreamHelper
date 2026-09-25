@@ -353,3 +353,141 @@ def test_an_absolute_theme_is_never_re_placed(tokens):
     src = PACKAGES / "default" / "scoreboard-s.svg"
     template, _ = build_template(src.read_text(), "scoreboard-s", tokens)
     assert "at=" not in strip_comments(template)
+
+
+# --------------------------------------------------------------------------
+# Layout for editing: prototypes, alternates, <defs>
+# --------------------------------------------------------------------------
+
+def marked_nodes(svg: str) -> list[tuple]:
+    """Where every marked node sits: its marker, its chain of marked
+    ancestors, whether it lives in <defs>, and the geometry a mount reads.
+    Paint is deliberately left out - the template bakes classes to attributes,
+    which is a legitimate difference, while a moved node is not."""
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(svg)
+    out = []
+
+    def walk(el, chain, in_defs):
+        if not isinstance(el.tag, str):
+            return
+        tag = el.tag.rsplit("}", 1)[-1]
+        in_defs = in_defs or tag == "defs"
+        mark = next((f"{m}={el.get(f'data-{m}')}" for m in ("slot", "part", "tpl")
+                     if el.get(f"data-{m}")), None)
+        if mark:
+            # `style="opacity:0"` and `opacity="0"` are one state; the compiler
+            # lands the first as the second.
+            opacity = el.get("opacity") or (re.search(r"(?<![-\w])opacity:\s*([\d.]+)", el.get("style") or "") or [None, None])[1]
+            out.append((mark, chain, in_defs, tag,
+                        tuple(el.get(a) for a in ("transform", "x", "y", "width", "height")) + (opacity,)))
+            chain = chain + (mark,)
+        for child in el:
+            walk(child, chain, in_defs)
+
+    walk(root, (), False)
+    return sorted(out, key=repr)
+
+
+@pytest.mark.parametrize("src", SHIPPED, ids=lambda p: f"{p.parent.name}/{p.stem}")
+def test_every_marked_node_comes_back_where_it_was(src, tokens):
+    """The slot COUNT survives a lot of damage: a prototype left on the canvas
+    instead of in <defs> (drawn on air), a placement not taken back out (drawn
+    twice as far over), a native frame left at the editing canvas's size (the
+    element shrunk to fit). Compare where every bound node actually IS."""
+    shipped = src.read_text()
+    template, _ = build_template(shipped, src.stem, tokens)
+    back, _ = compile_svg(template, src.stem)
+    assert marked_nodes(back) == marked_nodes(shipped)
+    vb = re.search(r'viewBox="([^"]+)"', shipped).group(1)
+    assert re.search(r'viewBox="([^"]+)"', back).group(1) == vb
+
+
+@pytest.mark.parametrize("element,slot,at", [
+    # The ticker's card lands on the track, not on its RESULTS badge.
+    ("ticker", "card-template", "166,0"),
+    # The schedule's row lands on the rows group, not on the card's title.
+    ("schedule", "match-template", "16,108"),
+    # Side 2's plate sits on its own anchor, not on side 1's.
+    ("playerplates", "side2", "970,0"),
+])
+def test_a_prototype_is_previewed_on_its_first_runtime_slot(element, slot, at, tokens):
+    src = PACKAGES / "default" / f"{element}.svg"
+    template, _ = build_template(src.read_text(), element, tokens)
+    assert re.search(rf'id="slot={slot}\b[^"]*\bat={at}\b', template), f"{slot} was not placed at {at}"
+
+
+def test_the_ticker_previews_a_full_track_of_cards(tokens):
+    src = PACKAGES / "default" / "ticker.svg"
+    template, _ = build_template(src.read_text(), "ticker", tokens)
+    # 1760 of track at a 424 + 16 pitch holds four cards: one real, three copies.
+    assert len(re.findall(r'id="scaffold=preview-card-\d+"', template)) == 3
+
+
+def test_ticker_icons_get_boxes_and_the_copies_show_each_card_state(tokens):
+    """The captain icons are PARTS of a clone prototype, and got no dashed box
+    while only slot= images did - the ticker opened with no icon anywhere."""
+    src = PACKAGES / "default" / "ticker.svg"
+    template, _ = build_template(src.read_text(), "ticker", tokens)
+    assert 'id="scaffold=away-cap"' in template and 'id="scaffold=home-cap"' in template
+    copies = re.split(r'id="scaffold=preview-card-\d+"', strip_comments(template))[1:]
+    names = " ".join(copies)
+    # One copy per state: side 1 won, side 2 won, live.
+    assert "Toadsworth" in names and "Kritter" in names and "MontyMole" in names
+    assert names.count('opacity="0.45"') == 2
+
+
+def test_the_lower_thirds_segment_templates_leave_defs_for_editing(tokens):
+    """A design tool does not draw <defs>. With the templates there, the lower
+    third opened as an empty band and a Figma export lost all seven."""
+    src = PACKAGES / "default" / "lowerthird.svg"
+    template, _ = build_template(src.read_text(), "lowerthird", tokens)
+    defs = re.search(r"<defs>(.*?)</defs>", strip_comments(template), re.S).group(1)
+    assert "tpl=" not in defs
+    tpls = re.findall(r'id="(tpl=[^"]+)"', template)
+    assert len(tpls) == 7 and all(" defs" in t for t in tpls)
+    assert 'id="frame=1920x1080"' in template
+
+
+def test_scorecard_alternates_get_columns_instead_of_a_pile(tokens):
+    src = PACKAGES / "default" / "scorecard.svg"
+    template, _ = build_template(src.read_text(), "scorecard", tokens)
+    assert re.search(r'id="slot=el-main h=348 at=162"', template)
+    assert re.search(r'id="slot=el-rosters h=254 at=576,162 hidden"', template)
+    assert re.search(r'id="slot=el-condensed h=112 at=1152,162 hidden"', template)
+    assert 'id="frame=496x766"' in template
+
+
+def test_a_design_tool_that_bakes_a_sideways_placement_is_corrected(tokens):
+    """The sideways twin of the baked-row case: a column's X comes back in the
+    contents, not on the group, and must still come off."""
+    src = PACKAGES / "default" / "playerplates.svg"
+    template, _ = build_template(src.read_text(), "playerplates", tokens)
+    flattened = re.sub(r' transform="translate\(970,0\)"( id="slot=side2 )', r"\1", template)
+    assert flattened != template
+    back, report = compile_svg(flattened, "playerplates")
+    assert re.search(r'data-slot="side2"[^>]*>\s*<g transform="translate\(-970,0\)"', back)
+    assert any("baked into their contents" in f.message for f in report.findings)
+
+
+def test_callout_patterns_become_editable_tiles_and_come_back(tokens):
+    """A design tool drops <pattern> fills, so the callout's grid and dot fields
+    opened as nothing. The tiles come out as `pattern=` layers, the fields are
+    previewed, and the compiler rebuilds exactly what shipped."""
+    src = PACKAGES / "default" / "callout.svg"
+    template, _ = build_template(src.read_text(), "callout", tokens)
+    for pid, size in (("rioGrid", 64), ("rioDotsA", 26), ("rioDotsB", 26)):
+        assert re.search(rf'id="pattern={pid} w={size} h={size} at=', template)
+        assert f'fill={pid}"' in template
+    assert 'id="scaffold=preview-bd-side2-dots' in template
+    # side 2 is painted, not left to default black
+    assert "#1E88E5" in template
+    assert "calc(" not in template
+
+    compiled, _ = compile_svg(template, "callout")
+    for pid in ("rioGrid", "rioDotsA", "rioDotsB"):
+        assert f'<pattern id="{pid}"' in compiled
+        assert f'fill="url(#{pid})"' in compiled
+    body = strip_comments(compiled)
+    assert "pattern=" not in body and "scaffold" not in body
