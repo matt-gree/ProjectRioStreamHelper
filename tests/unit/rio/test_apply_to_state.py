@@ -157,6 +157,30 @@ async def test_apply_completed_splits_linescore(mock_socket):
     assert s("score.1.home_linescore") == [2, 3, 2]
 
 
+async def test_apply_completed_swapped_flips_every_away_home_pair(mock_socket):
+    """A swap seats HOME on side 1 — its name, score, captain, roster AND its
+    linescore row, with home_team saying so. The caller used to flip only the
+    first three, so the linescore rows disagreed with the names beside them."""
+    await apply_completed_game_to_state(
+        make_completed(away_roster=[1, 2], home_roster=[3, 4]), 1, swapped=True)
+    assert s("score.1.home_team") == 1
+    assert s("score.1.player.1.rioName") == "Bob"
+    assert s("score.1.player.2.rioName") == "Alice"
+    assert (s("score.1.score_left"), s("score.1.score_right")) == (7, 2)
+    assert s("score.1.away_linescore") == [2, 3, 2]
+    assert s("score.1.home_linescore") == [0, 1, 1]
+    unswapped = await _roster_after(swapped=False)
+    swapped = await _roster_after(swapped=True)
+    assert swapped == (unswapped[1], unswapped[0])
+
+
+async def _roster_after(swapped):
+    await apply_completed_game_to_state(
+        make_completed(away_roster=[1, 2], home_roster=[3, 4]), 1, swapped=swapped)
+    return tuple(tuple(s(f"score.1.player.{t}.character.{i}.name") for i in range(2))
+                 for t in (1, 2))
+
+
 async def test_apply_completed_emits_single_batch(mock_socket):
     await apply_completed_game_to_state(make_completed(), 1)
     assert mock_socket.await_count == 1

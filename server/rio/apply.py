@@ -308,7 +308,8 @@ def _completed_roster(roster_ids, captain: str) -> tuple[list, int]:
     return names, cap_idx
 
 
-async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side_reason: str = ""):
+async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side_reason: str = "",
+                                        swapped: bool = False):
     """Write completed game data into State under score.{scoreboard_number}.
 
     Completed games from the /games API differ from HUD/ongoing:
@@ -319,8 +320,16 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
     - DOES include both rosters: away_roster/home_roster are in the default
       /games/ response (no include_roster param — that is a no-op), as nine
       character IDs in roster order.
+
+    ``swapped`` seats HOME on side 1. Every away/home pair flips HERE, in one
+    place: the caller used to swap a hand-picked subset (users, scores,
+    captains) and left the rosters, the linescore and ``home_team`` behind, so
+    a pinned player on a completed game drew the other player's nine and a
+    linescore whose rows disagreed with the names beside them.
     """
     sb = f"score.{scoreboard_number}"
+    side1, side2 = ("home", "away") if swapped else ("away", "home")
+    ls1, ls2 = (1, 0) if swapped else (0, 1)
 
     # Convert pandas Timestamps to ISO strings if present
     def _ts(val):
@@ -331,12 +340,12 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
     stadium_slug = _stadium_slug(game.get("stadium", ""))
 
     entries = [
-        # Home team designation (completed games always away=1, home=2)
-        (f"{sb}.home_team", 2),
+        # Which side is home (away=1, home=2 unless the cascade swapped them)
+        (f"{sb}.home_team", 1 if swapped else 2),
 
         # Scores
-        (f"{sb}.score_left", game.get("away_score", 0)),
-        (f"{sb}.score_right", game.get("home_score", 0)),
+        (f"{sb}.score_left", game.get(f"{side1}_score", 0)),
+        (f"{sb}.score_right", game.get(f"{side2}_score", 0)),
 
         # Game metadata. source_type is owned by Settings (per-scoreboard
         # source config); don't mirror it into State here — that would
@@ -358,8 +367,10 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
         # Linescore (per-inning runs, returned by API with include_linescore=1).
         # API returns {"0": [away innings...], "1": [home innings...]} but may
         # also return a list [[away...], [home...]] for some game records.
-        (f"{sb}.away_linescore", _linescore_side(game.get("linescore"), 0)),
-        (f"{sb}.home_linescore", _linescore_side(game.get("linescore"), 1)),
+        # The keys are named away/home but hold SIDE 1 / SIDE 2, the same as
+        # the live path writes them.
+        (f"{sb}.away_linescore", _linescore_side(game.get("linescore"), ls1)),
+        (f"{sb}.home_linescore", _linescore_side(game.get("linescore"), ls2)),
 
         # Winner/loser (processed columns from pyrio)
         (f"{sb}.winner_user", game.get("winner_user", "")),
@@ -403,8 +414,8 @@ async def apply_completed_game_to_state(game: dict, scoreboard_number: int, side
     ]
 
     team_data = [
-        (game.get("away_user", ""), game.get("away_captain", ""), game.get("away_roster")),
-        (game.get("home_user", ""), game.get("home_captain", ""), game.get("home_roster")),
+        (game.get(f"{side}_user", ""), game.get(f"{side}_captain", ""), game.get(f"{side}_roster"))
+        for side in (side1, side2)
     ]
 
     for team_idx, (username, captain, roster_ids) in enumerate(team_data):

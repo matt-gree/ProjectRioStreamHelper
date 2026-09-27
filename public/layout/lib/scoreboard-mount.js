@@ -88,7 +88,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, linescoreColumns, layoutBox } from './mount-utils.js';
+import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, linescoreColumns, layoutBox, boxRowSides } from './mount-utils.js';
 import { ensurePortPalette, inkOn, portColor as portPaletteColor } from './port-colors.js';
 
 const SETTINGS_TYPE = 'scoreboard';
@@ -901,7 +901,14 @@ export function mountScoreboard({ host, sb, size }) {
    * change upstream) falls back to what it played, which is the old behaviour.
    */
   function bindBox(d) {
-    const played = Math.max(d.away.length, d.home.length);
+    // Rows are away (top) then home (bottom), mapped onto sides by home_team.
+    const [topSide, botSide] = boxRowSides(d.homeTeam);
+    const line = { 1: d.away, 2: d.home };
+    const runs = { 1: d.sL, 2: d.sR };
+    const name = { 1: d.p1, 2: d.p2 };
+    const top = line[topSide];
+    const bot = line[botSide];
+    const played = Math.max(top.length, bot.length);
     const total = linescoreColumns(played, d.inningsSelected);
     // Past MAX_INN the grid shows the LAST nine innings, not the first.
     const shown = Math.min(total, MAX_INN);
@@ -911,8 +918,8 @@ export function mountScoreboard({ host, sb, size }) {
       const active = i <= shown;
       setOpacity(`box-col-${i}`, active);
       engine.setText(`box-h-${i}`, active ? String(src + 1) : '');
-      const a = d.away[src];
-      const h = d.home[src];
+      const a = top[src];
+      const h = bot[src];
       engine.setText(`box-away-${i}`, active ? (a != null ? a : '-') : '');
       engine.setText(`box-home-${i}`, active ? (h != null ? h : '-') : '');
       // Extra innings: a column past the length the game was SET to. Rio
@@ -926,10 +933,10 @@ export function mountScoreboard({ host, sb, size }) {
         hEl.style.fill = extra ? 'var(--accent)' : '';
       }
     }
-    engine.setText('box-away-r', d.sL);
-    engine.setText('box-home-r', d.sR);
-    engine.setText('box-away-name', d.p1 || 'Away');
-    engine.setText('box-home-name', d.p2 || 'Home');
+    engine.setText('box-away-r', runs[topSide]);
+    engine.setText('box-home-r', runs[botSide]);
+    engine.setText('box-away-name', name[topSide] || 'Away');
+    engine.setText('box-home-name', name[botSide] || 'Home');
     layoutBox(engine, shown, MAX_INN);
     return total > 0;
   }
@@ -1034,6 +1041,7 @@ export function mountScoreboard({ host, sb, size }) {
       r3Name: g(state, `score.${SB}.runner3Name`, ''),
       away: g(state, `score.${SB}.away_linescore`, []) || [],
       home: g(state, `score.${SB}.home_linescore`, []) || [],
+      homeTeam: g(state, `score.${SB}.home_team`, 2),
       stadium: g(state, `score.${SB}.stadium`, ''),
       inningsPlayed: g(state, `score.${SB}.innings_played`, ''),
       // What the game was SET to, as against what it played — the pair is what

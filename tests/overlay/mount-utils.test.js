@@ -1,10 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { applyCardRail, linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../public/layout/lib/mount-utils.js';
+import { applyCardRail, boxRowSides, linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../public/layout/lib/mount-utils.js';
 
 /*
  * Two rules a scoreboard gets wrong SILENTLY — nothing throws, nothing logs, and
  * a preview with the wrong data looks entirely plausible. Both were found on air.
  */
+
+describe('boxRowSides — home is always the bottom row', () => {
+    it('reads home_team: [away side, home side]', () => {
+        expect(boxRowSides(2)).toEqual([1, 2]);
+        expect(boxRowSides(1)).toEqual([2, 1]);
+        expect(boxRowSides('1')).toEqual([2, 1]);
+    });
+    it('treats anything unknown as the ordinary seating', () => {
+        for (const v of [undefined, null, '', 0, 3, 'x']) expect(boxRowSides(v)).toEqual([1, 2]);
+    });
+});
 
 describe('linescoreColumns', () => {
     /* The bug: the feeds hand over the innings that have HAPPENED, so counting

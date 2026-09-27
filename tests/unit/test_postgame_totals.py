@@ -75,6 +75,18 @@ def test_linescore_attributes_runs_to_innings():
     assert home == [0, 2, 0]
 
 
+def test_linescore_survives_the_event_num_byte_wrapping():
+    """Rio stores Event Num in a byte: event 256 is numbered 0 again. Sorting
+    by it pulled the extra innings' running scores to the front, so a 10-inning
+    11-6 game drew 11 and 6 in the 1st and zeros after. File order is truth."""
+    events = [lev(i % 256, 1 + i // 30, (i // 15) % 2, 0, 0) for i in range(270)]
+    events[-1].update({"Away Score": 5, "Home Score": 2})   # late runs, num 13
+    away, home = postgame_stats.linescore(events, _FinalScore(5, 2))
+    assert len(away) == 9
+    assert away[-1] == 5 and home[-1] == 2
+    assert sum(away[:-1]) == 0 and sum(home[:-1]) == 0
+
+
 def test_linescore_marks_unplayed_bottom_half_as_x():
     # Home leads after the top of the last inning — bottom never played.
     events = [lev(0, 1, 0, 0, 0), lev(1, 1, 1, 0, 3), lev(2, 2, 0, 1, 3)]

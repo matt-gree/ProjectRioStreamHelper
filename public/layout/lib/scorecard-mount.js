@@ -23,7 +23,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, layoutBox } from './mount-utils.js';
+import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, layoutBox, boxRowSides } from './mount-utils.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const ELEMENT = 'scorecard';
@@ -498,10 +498,22 @@ export function mountScorecard({ host, sb }) {
   }
 
   function bindBox(d) {
+    // Rows are away (top) then home (bottom), mapped onto sides by home_team;
+    // each row's dot takes its side's colour, so the cue travels with the row.
+    const [topSide, botSide] = boxRowSides(d.homeTeam);
+    const line = { 1: d.away, 2: d.home };
+    const runs = { 1: d.sL, 2: d.sR };
+    const top = line[topSide];
+    const bot = line[botSide];
+    for (const [slot, side] of [['box-away-dot', topSide], ['box-home-dot', botSide]]) {
+      const el = engine.slots[slot];
+      if (el) el.style.fill = `var(--side${side})`;
+    }
+
     // How many inning columns this game warrants: its configured length (so a
     // live game holds a stable width) but never fewer than have been played
     // (extra innings), capped at nine.
-    const played = Math.max(d.away.length, d.home.length, 0);
+    const played = Math.max(top.length, bot.length, 0);
     const sel = parseInt(d.inningsSelected, 10) || 0;
     const shown = Math.min(Math.max(sel, played, 1), MAX_INN);
 
@@ -509,13 +521,13 @@ export function mountScorecard({ host, sb }) {
       const col = engine.slots[`box-col-${i}`];
       const active = i <= shown;
       if (col) col.setAttribute('opacity', active ? '1' : '0');
-      const a = d.away[i - 1];
-      const h = d.home[i - 1];
+      const a = top[i - 1];
+      const h = bot[i - 1];
       engine.setText(`box-away-${i}`, active ? (a != null ? a : '-') : '');
       engine.setText(`box-home-${i}`, active ? (h != null ? h : '-') : '');
     }
-    engine.setText('box-away-r', d.sL);
-    engine.setText('box-home-r', d.sR);
+    engine.setText('box-away-r', runs[topSide]);
+    engine.setText('box-home-r', runs[botSide]);
 
     /*
      * THE PITCH IS FIXED AND THE BLOCK MOVES — the SLIDE policy, shared with the
@@ -613,6 +625,7 @@ export function mountScorecard({ host, sb }) {
       r3Name: g(state, `score.${SB}.runner3Name`, ''),
       away: g(state, `score.${SB}.away_linescore`, []) || [],
       home: g(state, `score.${SB}.home_linescore`, []) || [],
+      homeTeam: g(state, `score.${SB}.home_team`, 2),
       inningsSelected: g(state, `score.${SB}.innings_selected`, 0),
       batTeam, pitTeam,
     };

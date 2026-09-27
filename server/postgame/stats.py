@@ -160,8 +160,10 @@ def linescore(events: list, stat: StatObj) -> tuple[list, list]:
     reconciled against the final box score so runs that land after the
     final recorded event (e.g. a walk-off) aren't dropped.
     """
-    ordered = sorted((e for e in events or [] if isinstance(e, dict)),
-                     key=lambda e: e.get("Event Num", 0))
+    # FILE order, never ``Event Num``: Rio stores it in a byte, so it wraps
+    # 255 → 0 on a long game and sorting by it folds the late innings' running
+    # scores into inning 1 (an extra-inning game drew 11-0-0-… on its box).
+    ordered = [e for e in events or [] if isinstance(e, dict)]
     cum_away: dict[int, int] = {}
     cum_home: dict[int, int] = {}
     halves_seen: set[tuple[int, int]] = set()

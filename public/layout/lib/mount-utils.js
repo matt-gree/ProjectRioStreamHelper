@@ -153,6 +153,17 @@ export function bindImageProbe(engine, isDisposed, slotName, url, fallbackSlot) 
 // Regulation or what was played, whichever is greater: the max is what keeps
 // EXTRA innings visible once a game runs past its own length. A record with no
 // innings_selected falls back to what it played.
+// HOME BATS LAST, SO HOME IS THE BOTTOM ROW OF EVERY LINESCORE — whichever
+// side the cascade seated it on. `[top, bottom]` as SIDE numbers, from the
+// board's `score.{N}.home_team` (or a capture's `meta.homeSide`); anything
+// that is not 1 is the ordinary seating, home on side 2. The linescore state
+// keys are `away_linescore`/`home_linescore` by name but hold side 1 / side 2,
+// so the ROW is chosen here and never by which key the data came from.
+export function boxRowSides(homeSide) {
+  const h = Number(homeSide) === 1 ? 1 : 2;
+  return [3 - h, h];
+}
+
 export function linescoreColumns(played, inningsSelected) {
   if (!(played > 0)) return 0;
   return Math.max(played, inningsSelected || 0);

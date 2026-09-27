@@ -30,7 +30,7 @@ import { ensureGsap } from './gsap-loader.js';
 import { createRevealGate } from './reveal-gate.js';
 import { captainFrame } from './captain-framing.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
-import { prettyStadium } from './mount-utils.js';
+import { prettyStadium, boxRowSides } from './mount-utils.js';
 
 const REF_W = 1920, REF_H = 1080;
 const NEUTRAL_ACCENT = '#f59e0b';
@@ -636,6 +636,13 @@ export function mountPostgameVs({ host }) {
       </div>`;
   }
 
+  function homeSideOf(meta, l1) {
+    const h = Number(meta?.homeSide);
+    if (h === 1 || h === 2) return h;
+    if (l1.length && l1[l1.length - 1] == null) return 1;
+    return 2;
+  }
+
   // Per-inning linescore band. Column count follows the innings actually
   // played — a 5-inning mercy renders 5 tight columns, extras add more
   // (narrowing slightly so long games still fit between the heroes).
@@ -661,6 +668,12 @@ export function mountPostgameVs({ host }) {
         <div class="c tot r ${s}" data-col="${n + 2}">${Number(t.runs) || 0}</div>
         <div class="c tot h" data-col="${n + 3}">${Number(t.hits) || 0}</div>`;
     };
+    // HOME BATS LAST, SO HOME IS THE BOTTOM ROW — whichever side the cascade
+    // seated it on. `meta.homeSide` is recorded at capture; a capture from
+    // before it existed falls back to the side whose last half went unplayed
+    // (only home can have an "X"), and then to side 2.
+    const bySide = { 1: row(1, l1, ctx.p1, ctx.t1), 2: row(2, l2, ctx.p2, ctx.t2) };
+    const rows = boxRowSides(homeSideOf(ctx.meta, l1)).map(side => bySide[side]);
     return `
       <div class="pv-line"><div class="lgrid" style="grid-template-columns: ${cols};">
         <div class="c hd" data-col="0"></div>
@@ -668,8 +681,7 @@ export function mountPostgameVs({ host }) {
         <div class="rule hd" data-col="${n + 1}"></div>
         <div class="c hd" data-col="${n + 2}">R</div>
         <div class="c hd" data-col="${n + 3}">H</div>
-        ${row(1, l1, ctx.p1, ctx.t1)}
-        ${row(2, l2, ctx.p2, ctx.t2)}
+        ${rows.join('')}
       </div></div>`;
   }
 

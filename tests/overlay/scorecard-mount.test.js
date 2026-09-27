@@ -463,3 +463,31 @@ describe('the FINAL badge', () => {
         }
     });
 });
+
+describe('the linescore puts home on the bottom row', () => {
+    /*
+     * Home bats last, so home is the bottom row whichever side the cascade seated
+     * it on. The state keys are away_/home_linescore by NAME but hold side 1 /
+     * side 2, so a swapped board (home_team = 1) drew home on top until the row
+     * was chosen from home_team. The dot is the row's only side cue, so it moves
+     * with the data.
+     */
+    const row = (slot, prefix) => [1, 2, 3, 4, 5].map((i) => slot(`${prefix}-${i}`).textContent);
+
+    it('keeps side 1 on top when side 2 is home', async () => {
+        const { slot } = await mountWith();
+        expect(row(slot, 'box-away')).toEqual(['0', '1', '0', '3', '0']);
+        expect(slot('box-away-r').textContent).toBe('4');
+        expect(slot('box-away-dot').style.fill).toBe('var(--side1)');
+    });
+
+    it('moves side 1 to the bottom when side 1 is home', async () => {
+        const { slot } = await mountWith({ state: gameState({ home_team: 1 }) });
+        expect(row(slot, 'box-home')).toEqual(['0', '1', '0', '3', '0']);
+        expect(row(slot, 'box-away')).toEqual(['1', '0', '0', '1', '0']);
+        expect(slot('box-home-r').textContent).toBe('4');
+        expect(slot('box-away-r').textContent).toBe('2');
+        expect(slot('box-away-dot').style.fill).toBe('var(--side2)');
+        expect(slot('box-home-dot').style.fill).toBe('var(--side1)');
+    });
+});

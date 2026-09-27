@@ -149,6 +149,9 @@ class PostGame:
             "quitter": stat.quitter(),
             "version": stat.version(),
             "winnerSide": winner_side,
+            # Which SIDE was home — the Game Summary draws home on the bottom
+            # row of its linescore whichever side it is seated on.
+            "homeSide": 1 if t1 == 1 else 2,
         }
         return {
             "present": True,

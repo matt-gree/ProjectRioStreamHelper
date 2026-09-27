@@ -189,8 +189,11 @@ def character_abs(payload: dict, contacts: dict, sb: int, side: int,
     chars = side_data.get("characters") or []
     char = chars[char_index] if char_index < len(chars) else {}
 
-    events = [e for e in payload.get("events") or [] if isinstance(e, dict)]
-    events.sort(key=lambda e: e.get("Event Num", 0))
+    # FILE order, and each event's identity is its INDEX in the file — the key
+    # simulate_contacts uses. ``Event Num`` is a byte that wraps 255 → 0 on a
+    # long game, so sorting or matching by it scrambles the late innings.
+    events = [(i, e) for i, e in enumerate(payload.get("events") or [])
+              if isinstance(e, dict)]
 
     def side_pair(ev, away_key, home_key):
         raw = {0: ev.get(away_key), 1: ev.get(home_key)}
@@ -200,7 +203,7 @@ def character_abs(payload: dict, contacts: dict, sb: int, side: int,
 
     abs_list = []
     # Plate-appearance star accumulator: a PA is the consecutive run of
-    # events (Event Num order — one event per pitch) sharing the same
+    # events (file order — one event per pitch) sharing the same
     # (Inning, Half Inning, Batter Roster Loc), ending at the pitch that
     # resolves the AB. A resolved event closes the PA; every Star-type
     # BATTER swing inside the span (foul star swings included) consumed
@@ -208,7 +211,7 @@ def character_abs(payload: dict, contacts: dict, sb: int, side: int,
     cost = star_cost(char.get("name", ""), bool(char.get("isCaptain")))
     pa_key = None
     pa_stars = 0
-    for idx, ev in enumerate(events):
+    for idx, (file_idx, ev) in enumerate(events):
         key = (ev.get("Inning"), ev.get("Half Inning"),
                ev.get("Batter Roster Loc"))
         if key != pa_key:
@@ -235,13 +238,13 @@ def character_abs(payload: dict, contacts: dict, sb: int, side: int,
         # Event scores are pre-play; the next event carries the settled
         # score. Fall back to crediting the RBI to the batting side.
         if idx + 1 < len(events):
-            score_after = side_pair(events[idx + 1], "Away Score", "Home Score")
+            score_after = side_pair(events[idx + 1][1], "Away Score", "Home Score")
         else:
             score_after = dict(score_before)
             score_after[str(side)] = (score_after.get(str(side)) or 0) + (ev.get("RBI") or 0)
 
         rec = {
-            "eventNum": ev.get("Event Num"),
+            "eventNum": file_idx,
             "inning": ev.get("Inning"),
             "halfInning": ev.get("Half Inning"),
             "result": ev.get("Result of AB"),
@@ -295,7 +298,7 @@ def character_abs(payload: dict, contacts: dict, sb: int, side: int,
             "fielder": None,
         }
 
-        c = contacts.get(ev.get("Event Num"))
+        c = contacts.get(file_idx)
         if c is not None:
             points = [[round(x, 3), round(y, 3), round(z, 3)]
                       for x, y, z in c.trajectory]

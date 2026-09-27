@@ -393,13 +393,8 @@ async def apply_completed_game_dict(game: dict, scoreboard_number: int) -> bool:
     home_user = game.get("home_user", "")
     swap, reason = _orient_pin_match(away_user, home_user, scoreboard_number)
 
-    if swap:
-        game = dict(game)
-        game["away_user"], game["home_user"] = game["home_user"], game["away_user"]
-        game["away_score"], game["home_score"] = game.get("home_score", 0), game.get("away_score", 0)
-        game["away_captain"], game["home_captain"] = game.get("home_captain", ""), game.get("away_captain", "")
-
-    await apply_completed_game_to_state(game, scoreboard_number, side_reason=reason)
+    await apply_completed_game_to_state(game, scoreboard_number, side_reason=reason,
+                                        swapped=bool(swap))
     await _record_game_id(scoreboard_number, game.get("game_id"))
     # A completed game never updates again, so nothing is following anything —
     # and a board moving from a live game to a completed one has to clear the
