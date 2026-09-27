@@ -18,6 +18,8 @@ import {
     scaleSourceSizes,
     clearSourceSizes,
     resolveLetterSpacing,
+    resolveRoleIcon,
+    playerRole,
     DEFAULT_NAME_SIZE,
     MIN_NAME_SIZE,
     MAX_NAME_SIZE,
@@ -451,5 +453,56 @@ describe('a source’s own size, on its URL', () => {
         expect(cleared.searchParams.has('nameSize')).toBe(false);
         expect(cleared.searchParams.has('prefixSize')).toBe(false);
         expect(cleared.searchParams.get('team')).toBe('1');
+    });
+});
+
+/*
+ * The bat/glove icon. Where it sits is a setting; whether it draws at all is
+ * the game's — and getTeamRole's own default (top of the inning when none is
+ * recorded) would otherwise hand side 1 a bat on a board with no game.
+ */
+describe('resolveRoleIcon', () => {
+    it('is off by default and for anything unrecognised', () => {
+        expect(resolveRoleIcon(undefined)).toBeNull();
+        expect(resolveRoleIcon('off')).toBeNull();
+        expect(resolveRoleIcon('sideways')).toBeNull();
+    });
+    it('places the icon beside the chosen run', () => {
+        expect(resolveRoleIcon('nameLeft')).toEqual({ run: 'name', side: 'left' });
+        expect(resolveRoleIcon('nameRight')).toEqual({ run: 'name', side: 'right' });
+        expect(resolveRoleIcon('tagLeft')).toEqual({ run: 'tag', side: 'left' });
+        expect(resolveRoleIcon('tagRight')).toEqual({ run: 'tag', side: 'right' });
+    });
+    it('stays in the prefix run whether or not the player has a prefix', () => {
+        // The run is chosen from the SETTING, never the text — a player with no
+        // sponsor gets the icon in the prefix's place, like the other side.
+        expect(resolveRoleIcon('tagLeft', { prefixShown: true })).toEqual({ run: 'tag', side: 'left' });
+    });
+    it('falls back to the same side of the name when the prefix position is Off', () => {
+        expect(resolveRoleIcon('tagLeft', { prefixShown: false })).toEqual({ run: 'name', side: 'left' });
+        expect(resolveRoleIcon('tagRight', { prefixShown: false })).toEqual({ run: 'name', side: 'right' });
+    });
+});
+
+describe('playerRole', () => {
+    const get = (obj, path, def) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj) ?? def;
+    const getTeamRole = (state, sb, team) => (team === 1 ? 'batting' : 'pitching');
+    const opts = { get, getTeamRole };
+
+    it('answers the role while a game is in progress', () => {
+        const state = { score: { 1: { half_inning: 'Top' } } };
+        expect(playerRole(state, 1, 1, opts)).toBe('batting');
+        expect(playerRole(state, 1, 2, opts)).toBe('pitching');
+    });
+    it('draws nothing with no game on the board', () => {
+        expect(playerRole({ score: { 1: {} } }, 1, 1, opts)).toBeNull();
+    });
+    it('draws nothing once the game is over', () => {
+        const state = { score: { 1: { half_inning: 'Bottom', game_over: true } } };
+        expect(playerRole(state, 1, 1, opts)).toBeNull();
+    });
+    it('draws nothing without RioData loaded', () => {
+        const state = { score: { 1: { half_inning: 'Top' } } };
+        expect(playerRole(state, 1, 1, { get, getTeamRole: null })).toBeNull();
     });
 });

@@ -57,7 +57,7 @@ import {
  * runs sit, then the second size — which is last because it is the only one
  * that does nothing until the prefix is turned on.
  */
-const FIT_KEYS = ['nameSize', 'letterSpacing', 'align', 'prefixPosition', 'prefixSize'];
+const FIT_KEYS = ['nameSize', 'letterSpacing', 'align', 'prefixPosition', 'roleIcon', 'prefixSize'];
 
 // The frame the OBS source really is, which is not the element's declared
 // native size once a producer has resized it (../../../context/obs.jsx mapItem).

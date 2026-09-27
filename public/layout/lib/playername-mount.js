@@ -9,6 +9,7 @@
  *   nameSize        px — the type size, full stop (see below)
  *   align           auto | left | center | right
  *   prefixPosition  above | below | inline | off
+ *   roleIcon        off | nameLeft | nameRight | tagLeft | tagRight
  *
  * `auto` is the default and has to exist. The setting is global (one namespace,
  * like the roster's), and the behaviour it replaces was side-dependent — side 1
@@ -244,8 +245,27 @@ const CSS = `
 }
 /* A participant with no prefix leaves no gap — the gap belongs to a row that
    has something in it. The SCALE is unaffected: it reads the prefix setting,
-   never the content, so this side stays the same size as the one opposite. */
-.pn-tag:empty { display: none; }
+   never the content, so this side stays the same size as the one opposite.
+   A class rather than :empty, because the run can hold the role icon. */
+.pn-tag.pn-blank { display: none; }
+/* THE ROLE ICON (bat / glove) rides INSIDE the run it sits beside, as an
+   inline image — so it takes that run's type size, is measured by the width fit
+   with no arithmetic of its own, and never moves the text baseline the inline
+   prefix aligns on. Sized in em for the same reason, and dropped just below the
+   baseline so it centres on the capitals rather than on the line box. It picks
+   up the run's drop-shadow (a filter reaches everything painted), not its border
+   (text-stroke never reaches an image). */
+.pn-role {
+  display: inline-block;
+  height: 0.8em; width: auto;
+  vertical-align: -0.08em;
+  object-fit: contain;
+}
+.pn-role[data-side='left']  { margin-inline-end: 0.25em; }
+.pn-role[data-side='right'] { margin-inline-start: 0.25em; }
+/* Alone in the prefix's place (no prefix text): no gap to keep from a word, so
+   the icon sits on the run's edge exactly where the prefix would start. */
+.pn-icon-only .pn-role { margin: 0; }
 .pn-name {
   margin: 0;
   font-size: calc(${NAME_SIZE}px * var(--pn-scale, 1));
@@ -277,6 +297,7 @@ function injectCss() {
 
 const ALIGNMENTS = new Set(['left', 'center', 'right']);
 const PREFIX_POSITIONS = new Set(['above', 'below', 'inline', 'off']);
+const ROLE_ICON_POSITIONS = new Set(['nameLeft', 'nameRight', 'tagLeft', 'tagRight']);
 
 /**
  * Which edge the name sits on, for one side.
@@ -294,6 +315,47 @@ export function resolveAlign(setting, team) {
 export function resolvePrefixPosition(setting) {
     const want = String(setting ?? 'above');
     return PREFIX_POSITIONS.has(want) ? want : 'above';
+}
+
+/**
+ * Where the batting/fielding icon goes — `{ run, side }`, or null for off.
+ *
+ * Anything unrecognised is off: the icon is an addition, so a stale or
+ * hand-edited value degrades to the name as it always drew.
+ *
+ * An icon asked for beside the PREFIX goes where the prefix sits, whether or
+ * not this participant HAS one: a player with no sponsor still gets the icon in
+ * the prefix's place, so the two sides of a pair draw it in the same spot. Only
+ * a prefix position of Off leaves it nowhere to be — then it falls back to the
+ * same side of the NAME rather than being dropped.
+ */
+export function resolveRoleIcon(setting, { prefixShown = true } = {}) {
+    const want = String(setting ?? 'off');
+    if (!ROLE_ICON_POSITIONS.has(want)) return null;
+    const side = want.endsWith('Left') ? 'left' : 'right';
+    const run = want.startsWith('tag') && prefixShown ? 'tag' : 'name';
+    return { run, side };
+}
+
+/**
+ * Which icon this side's player gets — 'batting', 'pitching' (the glove), or
+ * null when there is no game in progress to have a role in.
+ *
+ * The role itself is RioData.getTeamRole's, the one statement of who is batting
+ * that the Roster and the stat cards also read. What this adds is the gate:
+ * getTeamRole assumes the top of an inning when none is recorded, which would
+ * hand side 1 a bat on a board with no game at all, and a finished game has
+ * nobody batting.
+ */
+export function playerRole(state, sb, team, {
+    getTeamRole = globalThis.RioData?.getTeamRole,
+    get = globalThis.OverlayBase?.deepGet,
+} = {}) {
+    const g = get;
+    if (typeof getTeamRole !== 'function' || typeof g !== 'function') return null;
+    if (!g(state, `score.${sb}.half_inning`, '')) return null;
+    if (g(state, `score.${sb}.game_over`, false) === true) return null;
+    return getTeamRole(state, sb, team);
 }
 
 /**
@@ -590,6 +652,9 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
     const NAME_KEY = `score.${SCOREBOARD}.player.${TEAM}.rioName`;
     // Address-book prefix (sponsor/tag) projects to score.player.{T}.team.
     const TAG_KEY = `score.${SCOREBOARD}.player.${TEAM}.team`;
+    // What getTeamRole reads, plus the game_over that retires the icon.
+    const ROLE_KEYS = new Set(['half_inning', 'home_team', 'game_over']
+        .map((k) => `score.${SCOREBOARD}.${k}`));
 
     const root = document.createElement('div');
     root.className = 'pn-root';
@@ -599,8 +664,16 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
     lines.className = 'pn-lines';
     const tagEl = document.createElement('span');
     tagEl.className = 'pn-tag';
+    const tagText = document.createElement('span');
+    tagEl.appendChild(tagText);
     const nameEl = document.createElement('span');
     nameEl.className = 'pn-name';
+    const nameText = document.createElement('span');
+    nameEl.appendChild(nameText);
+    // Detached until a setting and a game both ask for it (placeRoleIcon).
+    const roleEl = document.createElement('img');
+    roleEl.className = 'pn-role';
+    roleEl.alt = '';
     lines.append(tagEl, nameEl);
     box.appendChild(lines);
     root.appendChild(box);
@@ -674,11 +747,34 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
     // un-wrapped width, so a pair that has already wrapped still shrinks to the
     // scale that un-wraps it.
     function widestLine(scale) {
-        const tagW = tagEl.textContent ? tagEl.getBoundingClientRect().width : 0;
+        const tagW = tagEl.classList.contains('pn-blank') ? 0 : tagEl.getBoundingClientRect().width;
         const nameW = nameEl.getBoundingClientRect().width;
         if (prefixPosition !== 'inline') return Math.max(tagW, nameW);
         return tagW ? tagW + INLINE_GAP * scale + nameW : nameW;
     }
+
+    /*
+     * Put the icon in (or take it out of) the run it belongs to. Only touches the
+     * DOM when something changed — this runs on every HUD frame, and re-setting
+     * an image's src or re-inserting it is a reflow per frame for nothing.
+     */
+    function placeRoleIcon(where, role) {
+        if (!where) {
+            roleEl.remove();
+            return;
+        }
+        const url = window.RioData.roleIconUrl(role);
+        if (roleEl.getAttribute('src') !== url) roleEl.setAttribute('src', url);
+        roleEl.dataset.side = where.side;
+        const run = where.run === 'tag' ? tagEl : nameEl;
+        const text = where.run === 'tag' ? tagText : nameText;
+        const ref = where.side === 'left' ? text : null;
+        if (roleEl.parentNode !== run || (ref ? roleEl.nextSibling !== text : run.lastChild !== roleEl)) {
+            run.insertBefore(roleEl, ref);
+        }
+    }
+    // A late-loading icon changes the run's width after the fit measured it.
+    roleEl.addEventListener('load', () => applyScale());
 
     // A container can resize a member's slot without the window moving, so the
     // box is observed as well as the window.
@@ -712,8 +808,20 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
         prefixPosition = resolvePrefixPosition(sideSetting('prefixPosition', 'above'));
         box.className = `pn-box pn-a-${align} pn-p-${prefixPosition}`;
 
-        nameEl.textContent = g(state, NAME_KEY, '');
-        tagEl.textContent = g(state, TAG_KEY, '');
+        const name = g(state, NAME_KEY, '');
+        const tag = g(state, TAG_KEY, '');
+        nameText.textContent = name;
+        tagText.textContent = tag;
+
+        const role = name ? playerRole(state, SCOREBOARD, TEAM) : null;
+        const where = role
+            ? resolveRoleIcon(sideSetting('roleIcon', 'off'), { prefixShown: prefixPosition !== 'off' })
+            : null;
+        placeRoleIcon(where, role);
+        // The prefix run stays up while it holds the icon, even with no text.
+        const iconInTag = where?.run === 'tag';
+        tagEl.classList.toggle('pn-blank', !tag && !iconInTag);
+        tagEl.classList.toggle('pn-icon-only', !tag && iconInTag);
 
         // Every input to the scale — the size, the prefix position, the run
         // widths — can have just changed, so this is the tail of every update.
@@ -729,7 +837,7 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
     return {
         update,
         dispose,
-        shouldRender: (key) => key === NAME_KEY || key === TAG_KEY,
+        shouldRender: (key) => key === NAME_KEY || key === TAG_KEY || ROLE_KEYS.has(key),
         shouldRenderSettings: (key) => key.startsWith('overlays.'),
     };
 }

@@ -240,6 +240,16 @@ export const LAYOUT_SETTINGS = {
         { key: 'letterSpacing', type: 'number-override', label: 'Letter Spacing', description: 'Extra space between letters, in pixels — raise it to reopen the gaps a thick Font Border closes. Negative tightens.', defaultValue: 0, min: -10, max: 40, step: 0.5, suffix: 'px' },
         { key: 'align', type: 'select', label: 'Alignment', description: 'Which edge the name sits on. Mirror Sides puts side 1 left and side 2 right — the pair that frames a scoreboard.', options: [{ value: 'auto', label: 'Mirror Sides' }, { value: 'left', label: 'Left' }, { value: 'center', label: 'Middle' }, { value: 'right', label: 'Right' }], defaultValue: 'auto' },
         { key: 'prefixPosition', type: 'select', label: 'Prefix Position', description: 'Where the Address Book prefix (sponsor / tag) sits relative to the name. Off hides it without editing the Address Book.', options: [{ value: 'above', label: 'Above Name' }, { value: 'below', label: 'Below Name' }, { value: 'inline', label: 'Before Name' }, { value: 'off', label: 'Off' }], defaultValue: 'above' },
+        /*
+         * THE BAT / GLOVE — which half of the inning this player is in, beside
+         * the run the producer picks. One select rather than a switch plus a
+         * position, the prefixPosition shape. A prefix side holds the icon in the
+         * prefix's place even for a player with no prefix, falling back to the
+         * name only when the prefix position is Off (playername-mount.js
+         * `resolveRoleIcon`); and the icon only draws while a game is in
+         * progress.
+         */
+        { key: 'roleIcon', type: 'select', label: 'Bat / Glove Icon', description: 'A bat while this player is batting, a glove while they are fielding. Beside the prefix, it sits where the prefix goes even for a player without one (with Prefix Position Off, it moves beside the name). Shows only during a game.', options: [{ value: 'off', label: 'Off' }, { value: 'nameLeft', label: 'Left of Name' }, { value: 'nameRight', label: 'Right of Name' }, { value: 'tagLeft', label: 'Left of Prefix' }, { value: 'tagRight', label: 'Right of Prefix' }], defaultValue: 'off' },
     ],
     teamlogo: [],
     /*

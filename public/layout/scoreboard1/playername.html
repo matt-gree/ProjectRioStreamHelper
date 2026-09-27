@@ -13,7 +13,7 @@
   <!-- The whitelist must name every knob the mount reads: the stage's Style
        section filters LAYOUT_SETTINGS.playername down to what appears here, so
        an omitted key is a setting the mount honours but nobody can reach. -->
-  <meta name="overlay-settings" content="nameSize, prefixSize, letterSpacing, align, prefixPosition, textColor, accentColor, displayFont, textShadow, textStroke" />
+  <meta name="overlay-settings" content="nameSize, prefixSize, letterSpacing, align, prefixPosition, roleIcon, textColor, accentColor, displayFont, textShadow, textStroke" />
   <!-- Inter is bundled locally and injected by overlay-base.js. -->
   <style>
     html, body { margin: 0; overflow: hidden; }
@@ -33,6 +33,8 @@
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="/layout/lib/overlay-base.js"></script>
+  <!-- RioData.getTeamRole / roleIconUrl — the bat/glove beside the name. -->
+  <script src="/layout/lib/rio-data.js"></script>
   <script type="module">
     import { mountPlayerName, sourceSizeOverride } from '/layout/lib/playername-mount.js';
 
