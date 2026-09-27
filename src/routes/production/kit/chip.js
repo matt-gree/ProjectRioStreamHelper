@@ -43,9 +43,11 @@
 export function chipFor(placement) {
     // No source anywhere — the one case that isn't about scenes at all.
     if (!placement?.item) return 'unbound';
-    const live = placement.slot
-        ? placement.item.enabled && !!placement.mine
-        : placement.item.enabled;
+    // A source filed in an OBS group is drawn only while the GROUP is too — a
+    // hidden folder takes everything in it off the broadcast, whatever each
+    // item's own eye says.
+    const shown = placement.item.enabled && placement.item.groupEnabled !== false;
+    const live = placement.slot ? shown && !!placement.mine : shown;
     if (placement.where === 'program') return live ? 'air' : 'off';
     if (placement.where === 'preview') return live ? 'pvw' : 'off';
     return 'off';

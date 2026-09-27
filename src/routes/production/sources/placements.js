@@ -221,8 +221,12 @@ const BY_ID = new Map(CONTAINER_MEMBERS.map(el => [el.id, el]));
 const membersOf = (def) => (def?.members ?? []).map(id => BY_ID.get(id)).filter(Boolean);
 
 /*
- * One scene's rows. Order follows OBS's own scene-item order, so the rack reads
- * the way the producer's source list does.
+ * One scene's rows. Order follows OBS's own Sources list, top first (the mirror
+ * stores it that way — see obs.jsx `topFirst`), so the rack reads the way the
+ * producer's source list does. A source filed in an OBS GROUP carries it as
+ * `folder`, and the mirror puts a group's contents straight after it, so a
+ * folder's rows are always contiguous — the rack draws them as one collapsible
+ * unit (`folderRuns`).
  */
 export function placementsInScene({ scene, where, items = [] }, feeds = {}, defs = {}) {
     const out = [];
@@ -241,6 +245,7 @@ export function placementsInScene({ scene, where, items = [] }, feeds = {}, defs
             out.push({
                 id: placementId(instance, scene),
                 instance, element: direct, board, variant, scene, where, item,
+                folder: item.group ?? null,
             });
             continue;
         }
@@ -268,6 +273,7 @@ export function placementsInScene({ scene, where, items = [] }, feeds = {}, defs
 
         out.push({
             id, instance, element: el, board: null, variant, scene, where, item,
+            folder: item.group ?? null,
             container: isContainer ? stem : null,
             feeds: children.map(f => f.id),
             carrying,
@@ -297,7 +303,7 @@ export function placementsInScene({ scene, where, items = [] }, feeds = {}, defs
             out.push({
                 id: placementId(slot, scene),
                 instance: slot, element: f, board: null, variant: '',
-                scene, where, item,
+                scene, where, item, folder: item.group ?? null,
                 parent: id, container: stem, slot: stem,
                 mine: carrying === f.id,
                 carrying,
@@ -305,6 +311,25 @@ export function placementsInScene({ scene, where, items = [] }, feeds = {}, defs
         }
     }
     return out;
+}
+
+/*
+ * A scene's rows cut into RUNS — `{ folder, rows }` — each either one OBS group's
+ * contents (`folder` = its name) or a stretch of scene-level rows (`folder:
+ * null`), in list order. The rack draws a folder run as one collapsible unit.
+ * Runs are split wherever the folder changes, so the order OBS shows is never
+ * rearranged to gather a group together; the mirror already keeps them
+ * contiguous.
+ */
+export function folderRuns(rows = []) {
+    const runs = [];
+    for (const p of rows) {
+        const folder = p.folder ?? null;
+        const last = runs.at(-1);
+        if (last && last.folder === folder) last.rows.push(p);
+        else runs.push({ folder, rows: [p] });
+    }
+    return runs;
 }
 
 /*
@@ -343,6 +368,12 @@ export function useConsoleScenes() {
             scene,
             where: sceneRole(scene, roles),
             items: (sceneItems[scene] || []).filter(i => i.isPrsh),
+            // The scene's GROUP items by name — what a folder header needs to
+            // draw (and toggle) the folder's own eye. Not rows: a group is not
+            // a PRSH source, and a folder holding none of ours never appears.
+            folders: Object.fromEntries((sceneItems[scene] || [])
+                .filter(i => i.isGroup && !i.group)
+                .map(i => [i.sourceName, i])),
             mirrored: mirroredScenes.includes(scene),
             loading: mirroredScenes.includes(scene) && !sceneItems[scene],
         }));
@@ -611,7 +642,7 @@ export function sideSibling(placement, placements = []) {
         && sidePairVariant(p.variant) === other
         && p.element?.id === placement.element?.id
         && p.item
-        && p.item.id !== placement.item.id
+        && !(p.item.id === placement.item.id && p.item.owner === placement.item.owner)
         && !isFedPlacement(p)
     ));
     return halves.find(p => p.board === placement.board)

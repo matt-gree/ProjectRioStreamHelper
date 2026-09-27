@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
     Eye, EyeOff, ChevronDown, ChevronRight, Plus, Circle, CircleDot, Trash2, TriangleAlert,
+    Folder, FolderOpen,
 } from 'lucide-react';
 import { useObsStore, useMirrorScene } from '../../context/obs';
 import { useStateStore } from '../../context/store';
@@ -15,7 +16,7 @@ import { cn } from '../../lib/utils';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { ELEMENTS, isPinnable } from './elements';
 import {
-    isFedPlacement, placementTarget, stretchOfPlacement, togglePin as togglePinIn, useConsoleOffline,
+    folderRuns, isFedPlacement, placementTarget, stretchOfPlacement, togglePin as togglePinIn, useConsoleOffline,
     useConsolePlacements, useConsoleScenes, usePlacementLabel,
 } from './sources/placements';
 import { GameStageChip, StateChip, chipFor } from './kit';
@@ -61,6 +62,7 @@ export const RAIL_KEY = 'prsh.ui.production.rail';
 export const OPEN_SCENES_KEY = 'prsh.ui.production.scenes';
 export const SHUT_TIERS_KEY = 'prsh.ui.production.tiers';
 export const HIDDEN_SCENES_KEY = 'prsh.ui.production.hiddenScenes';
+export const SHUT_FOLDERS_KEY = 'prsh.ui.production.folders';
 
 export function useRackSelection() {
     return usePersistentState(SELECTION_KEY, 'desk:match', v => typeof v === 'string');
@@ -111,6 +113,22 @@ export function useHiddenScenes() {
     return usePersistentState(HIDDEN_SCENES_KEY, [], v => Array.isArray(v));
 }
 
+/*
+ * Which OBS GROUPS the producer has folded shut on the rack, stored as
+ * `folderKey(scene, group)`. The SHUT ones, like useShutTiers, so a folder
+ * nobody has touched is open: a producer who files sources into a group in OBS
+ * still expects to see them the first time the rack draws it. A rack
+ * preference, never an OBS write — OBS has no "collapsed" state to mirror, and
+ * folding a folder here says nothing about what it draws.
+ */
+export function useShutFolders() {
+    return usePersistentState(SHUT_FOLDERS_KEY, [], v => Array.isArray(v));
+}
+
+// Per SCENE: a group can be placed in two scenes, and folding it in one says
+// nothing about the other. A newline cannot appear in an OBS name.
+export const folderKey = (scene, group) => `${scene}\n${group}`;
+
 // First-run seed: an empty rail undersells the surface, so a producer who has
 // never pinned anything starts with the two cards nearly every stream uses.
 // `null` (never touched) is deliberately distinct from `[]` (emptied on
@@ -127,19 +145,19 @@ export function seededRail(rail) {
 // confirm-to-live buffer like everywhere else. Also the rail card's (../rail),
 // which is why it can NAME ITS SCENE: a rack row sits under its scene's header,
 // a rail card does not, and the same overlay can be pinned from two scenes.
-export const EyeAction = memo(function EyeAction({ placement, namesScene = false }) {
+export const EyeAction = memo(function EyeAction({ placement, namesScene = false, what = 'source' }) {
     const { enabled, staged } = useDisplayedEnabled(placement?.scene, placement?.item);
     if (!placement) return null;
     const Icon = enabled ? Eye : EyeOff;
     const verb = enabled ? 'Hide' : 'Show';
-    const what = namesScene && placement.scene ? `${verb} in ${placement.scene}` : `${verb} source`;
+    const tip = namesScene && placement.scene ? `${verb} in ${placement.scene}` : `${verb} ${what}`;
     return (
-        <SimpleTooltip label={staged ? 'Staged — goes live on confirm' : what}>
+        <SimpleTooltip label={staged ? 'Staged — goes live on confirm' : tip}>
             <button
                 type="button"
                 onClick={() => setSourceVisibility(placement.scene, placement.item, !enabled)}
                 aria-pressed={enabled}
-                aria-label={what}
+                aria-label={tip}
                 className={cn(
                     'shrink-0 transition-colors',
                     staged ? 'text-amber-400' : enabled ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
@@ -816,8 +834,9 @@ const SceneEditFooter = memo(function SceneEditFooter({ editing, onToggle, hidde
  */
 const SceneSection = memo(function SceneSection({
     scene, rows, open, onToggle, selection, onSelect, pinned, onPinToggle, onAdd, label,
-    editing = false, hidden = false, onToggleHidden,
+    editing = false, hidden = false, onToggleHidden, shutFolders, onToggleFolder,
 }) {
+    const renderRow = sceneRowRenderer({ selection, onSelect, pinned, onPinToggle, label });
     // Edit mode is a list of scene NAMES and nothing else: no rows under them
     // and so nothing to mirror, which is what lets a producer open it on a
     // collection of thirty scenes without asking OBS for thirty scene lists.
@@ -841,33 +860,97 @@ const SceneSection = memo(function SceneSection({
             {shown && (loading
                 ? <Text size="xs" dimmed className="px-2">Reading scene…</Text>
                 : rows.length
-                    ? rows.map((p) => {
-                        const { name, detail } = label(p);
-                        /*
-                         * `parent` and `slot` are two different questions and the
-                         * row asks both. INDENT is about the list — is there a row
-                         * above me I hang off — while the RADIO is about the
-                         * placement: a member's slot pushes, an own source shows
-                         * and hides (`isFedPlacement`, ../placements). They travel
-                         * together on a row either builder made, and part company
-                         * on one resolved from a stored id.
-                         */
-                        return (
-                            <RackRow
-                                key={p.id} state={chipFor(p)} name={name} meta={detail}
-                                nested={!!p.parent}
-                                selected={selection === p.id} onSelect={() => onSelect(p.id)}
-                                quickAction={p.slot
-                                    ? <FeedAction placement={p} />
-                                    : <EyeAction placement={p} />}
-                                pinnable={isPinnable(p.element)} pinned={pinned.has(p.id)}
-                                onPinToggle={() => onPinToggle(p.id)}
-                                rowAction={<PlacementRemove placement={p} name={name} />}
-                                stretch={stretchOfPlacement(p)} cropped={p.item?.cropped}
+                    ? folderRuns(rows).map(run => (run.folder
+                        ? (
+                            <FolderRun
+                                key={`folder:${run.folder}`} scene={scene} run={run}
+                                open={!shutFolders.has(folderKey(scene.scene, run.folder))}
+                                onToggle={() => onToggleFolder(folderKey(scene.scene, run.folder))}
+                                renderRow={renderRow}
                             />
-                        );
-                    })
+                        )
+                        : run.rows.map(renderRow)))
                     : <Text size="xs" dimmed className="px-2">No PRSH overlays here yet.</Text>
+            )}
+        </div>
+    );
+});
+
+/*
+ * One scene's rows, as the rack draws them — split out of SceneSection so a
+ * folder draws its contents with exactly the row the scene draws at top level.
+ */
+function sceneRowRenderer({ selection, onSelect, pinned, onPinToggle, label }) {
+    return (p) => {
+        const { name, detail } = label(p);
+        /*
+         * `parent` and `slot` are two different questions and the row asks
+         * both. INDENT is about the list — is there a row above me I hang off —
+         * while the RADIO is about the placement: a member's slot pushes, an own
+         * source shows and hides (`isFedPlacement`, ../placements). They travel
+         * together on a row either builder made, and part company on one
+         * resolved from a stored id.
+         */
+        return (
+            <RackRow
+                key={p.id} state={chipFor(p)} name={name} meta={detail}
+                nested={!!p.parent}
+                selected={selection === p.id} onSelect={() => onSelect(p.id)}
+                quickAction={p.slot
+                    ? <FeedAction placement={p} />
+                    : <EyeAction placement={p} />}
+                pinnable={isPinnable(p.element)} pinned={pinned.has(p.id)}
+                onPinToggle={() => onPinToggle(p.id)}
+                rowAction={<PlacementRemove placement={p} name={name} />}
+                stretch={stretchOfPlacement(p)} cropped={p.item?.cropped}
+            />
+        );
+    };
+}
+
+/*
+ * An OBS GROUP, as a collapsible unit of the rack.
+ *
+ * The folder is the producer's own structure — they built it in OBS to keep a
+ * scene's sources together — so the rack shows it where OBS does, in OBS's
+ * order, rather than flattening it away. Its header carries the GROUP's eye,
+ * because hiding a folder is how a producer takes its whole contents off in one
+ * press in OBS, and a child row reading OFF under a hidden folder with no way to
+ * say why would be the rack disagreeing with itself. The count is of our rows,
+ * not the group's items: a folder holding a camera and one scoreboard is one
+ * thing on this rack.
+ *
+ * Folding it is browser-local (useShutFolders) and folds the ROWS only — the
+ * header stays, so a shut folder with something on air still shows its eye.
+ */
+const FolderRun = memo(function FolderRun({ scene, run, open, onToggle, renderRow }) {
+    const group = scene.folders?.[run.folder] ?? null;
+    const Chevron = open ? ChevronDown : ChevronRight;
+    const Icon = open ? FolderOpen : Folder;
+    // Members nest under their container, so only rows of their own count.
+    const count = run.rows.filter(p => !p.parent).length;
+    return (
+        <div data-rack-folder={run.folder}>
+            <div className="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-secondary/40">
+                <button
+                    type="button" onClick={onToggle} aria-expanded={open}
+                    aria-label={`${open ? 'Fold' : 'Unfold'} ${run.folder}`}
+                    className="flex h-full min-w-0 flex-1 items-center gap-1.5 text-left"
+                >
+                    <Chevron size={12} className="shrink-0 text-muted-foreground" />
+                    <Icon size={13} className="shrink-0 text-muted-foreground" />
+                    <Text size="xs" span truncate className="min-w-0 text-foreground">{run.folder}</Text>
+                    <Text size="xs" span dimmed>{count}</Text>
+                </button>
+                {group && <EyeAction placement={{ scene: scene.scene, item: group }} what="folder" />}
+                {/* The pin and trash columns, held empty so the eyes line up. */}
+                <span aria-hidden className="invisible shrink-0 text-xs leading-none">◇</span>
+                <span aria-hidden className="w-3 shrink-0" />
+            </div>
+            {open && (
+                <div className={cn('ml-3 border-l border-border/60 pl-1', group && !group.enabled && 'opacity-60')}>
+                    {run.rows.map(renderRow)}
+                </div>
             )}
         </div>
     );
@@ -937,6 +1020,13 @@ export const Rack = memo(function Rack({
     const [openScenes, setOpenScenes] = useOpenScenes();
     const [shutTiers, setShutTiers] = useShutTiers();
     const [hiddenScenes, setHiddenScenes] = useHiddenScenes();
+    const [shutFolderList, setShutFolders] = useShutFolders();
+    const shutFolders = useMemo(() => new Set(shutFolderList ?? []), [shutFolderList]);
+    const toggleFolder = (key) => setShutFolders(prev => (
+        (prev ?? []).includes(key)
+            ? (prev ?? []).filter(k => k !== key)
+            : [...(prev ?? []), key]
+    ));
     // Momentary, not persisted: a producer who reloads mid-edit should land on
     // their console, not on a list of eyes.
     const [editingScenes, setEditingScenes] = useState(false);
@@ -1084,6 +1174,7 @@ export const Rack = memo(function Rack({
                                 onAdd={onAdd} label={label}
                                 editing={editingScenes} hidden={hidden.has(sc.scene)}
                                 onToggleHidden={() => toggleHidden(sc.scene)}
+                                shutFolders={shutFolders} onToggleFolder={toggleFolder}
                             />
                         ))}
                     {!offline && scenes.length > 0 && (

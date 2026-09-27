@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { Scaling } from 'lucide-react';
-import { useObsStore } from '../../../context/obs';
+import { ownerScene, useObsStore } from '../../../context/obs';
 import { stageOrRun, usePending } from '../../../context/staging';
 import { notifications } from '../../../lib/notify';
 import { Button } from '../../../components/ui/button';
@@ -46,7 +46,7 @@ import { useBoardTag } from '../board/boards';
  * source doesn't already know.
  */
 
-const pendingKey = (placement) => `obs:size:${placement.scene}:${placement.item.id}`;
+const pendingKey = (placement) => `obs:size:${ownerScene(placement.scene, placement.item)}:${placement.item.id}`;
 
 export function matchSize(placement, sibling, label) {
     const mine = placement.item.sourceName;
@@ -65,9 +65,9 @@ export function matchSize(placement, sibling, label) {
          */
         run: async () => {
             const size = await useObsStore.getState().matchSceneItemSize({
-                scene: placement.scene,
+                scene: ownerScene(placement.scene, placement.item),
                 itemId: placement.item.id,
-                modelScene: sibling.scene,
+                modelScene: ownerScene(sibling.scene, sibling.item),
                 modelItemId: sibling.item.id,
                 sourceName: mine,
                 matchRender,

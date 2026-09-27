@@ -772,3 +772,95 @@ describe('scene item transforms', () => {
         expect(useObsStore.getState().sceneItems.Main).toBe(before);
     });
 });
+
+/*
+ * OBS's SOURCE LIST, as the rack reads it: top first, with each GROUP's
+ * contents filed straight after it and addressed through the group.
+ *
+ * GetSceneItemList answers bottom-first, so a rack that took it verbatim read
+ * upside down against the producer's own Sources dock; and it does not descend
+ * into groups, so a PRSH source filed in a folder had no row at all.
+ */
+describe('source order and groups', () => {
+    const LT_URL = 'http://localhost:5260/layout/lowerthird/lowerthird.html';
+    const at = (id, sourceName, index, extra = {}) =>
+        ({ ...browserItem(id, sourceName), sceneItemIndex: index, ...extra });
+
+    async function connectGrouped({ groupEnabled = true } = {}) {
+        const connectPromise = useObsStore.getState().connect();
+        const fake = h.instances.at(-1);
+        fake.rpc.GetStudioModeEnabled = { studioModeEnabled: false };
+        fake.rpc.GetSceneList = { currentProgramSceneName: 'Main', scenes: [{ sceneName: 'Main' }] };
+        // Bottom-first, as OBS answers: SB is drawn under everything.
+        fake.rpc.GetSceneItemList = {
+            sceneItems: [
+                at(1, 'SB', 0),
+                at(2, 'Graphics', 1, { inputKind: null, isGroup: true, sceneItemEnabled: groupEnabled }),
+                at(3, 'Top', 2),
+            ],
+        };
+        // Ids restart inside the group: 1 here is NOT the scoreboard.
+        fake.rpc.GetGroupSceneItemList = ({ sceneName }) => (sceneName === 'Graphics'
+            ? { sceneItems: [at(1, 'LT', 0), at(2, 'Inner', 1)] }
+            : { sceneItems: [] });
+        fake.rpc.GetInputSettings = ({ inputName }) => ({
+            inputSettings: { url: inputName === 'LT' ? LT_URL : SB_URL },
+        });
+        await connectPromise;
+        return fake;
+    }
+
+    const names = () => useObsStore.getState().sceneItems.Main.map(i => i.sourceName);
+
+    it('stores the scene top-first, the way the Sources dock lists it', async () => {
+        await connectGrouped();
+        expect(names()).toEqual(['Top', 'Graphics', 'Inner', 'LT', 'SB']);
+    });
+
+    it('files a group’s contents under it, owned by the group', async () => {
+        await connectGrouped({ groupEnabled: false });
+        const lt = useObsStore.getState().sceneItems.Main.find(i => i.sourceName === 'LT');
+        expect(lt).toMatchObject({ id: 1, group: 'Graphics', owner: 'Graphics', groupEnabled: false, isPrsh: true });
+        const sb = useObsStore.getState().sceneItems.Main.find(i => i.sourceName === 'SB');
+        expect(sb).toMatchObject({ id: 1, group: null, owner: 'Main' });
+    });
+
+    it('patches a grouped item from an event naming the group, not its twin id in the scene', async () => {
+        const fake = await connectGrouped();
+        fake.fire('SceneItemEnableStateChanged',
+            { sceneName: 'Graphics', sceneItemId: 1, sceneItemEnabled: false });
+        const items = useObsStore.getState().sceneItems.Main;
+        expect(items.find(i => i.sourceName === 'LT').enabled).toBe(false);
+        expect(items.find(i => i.sourceName === 'SB').enabled).toBe(true);
+    });
+
+    it('hiding the folder marks its contents hidden with it', async () => {
+        const fake = await connectGrouped();
+        fake.fire('SceneItemEnableStateChanged',
+            { sceneName: 'Main', sceneItemId: 2, sceneItemEnabled: false });
+        const items = useObsStore.getState().sceneItems.Main;
+        expect(items.find(i => i.sourceName === 'LT').groupEnabled).toBe(false);
+        expect(items.find(i => i.sourceName === 'Top').groupEnabled).toBe(true);
+    });
+
+    it('a change inside a group reloads the scene that lists it', async () => {
+        const fake = await connectGrouped();
+        fake.calls.length = 0;
+        fake.fire('SceneItemListReindexed', { sceneName: 'Graphics' });
+        await vi.waitFor(() =>
+            expect(fake.callsOf('GetSceneItemList').map(([, p]) => p.sceneName)).toEqual(['Main']));
+    });
+
+    it('the conceal cue finds a grouped PRSH overlay by its owner', async () => {
+        const fetchSpy = vi.fn(() => Promise.resolve({ ok: true }));
+        vi.stubGlobal('fetch', fetchSpy);
+        vi.useFakeTimers({ toFake: ['setTimeout'] });
+        const fake = await connectGrouped();
+        const done = useObsStore.getState().setSceneItemEnabled('Graphics', 1, false);
+        await vi.runAllTimersAsync();
+        await done;
+        expect(JSON.parse(fetchSpy.mock.calls[0][1].body).payload.url).toBe(LT_URL);
+        expect(fake.callsOf('SetSceneItemEnabled').at(-1)[1])
+            .toEqual({ sceneName: 'Graphics', sceneItemId: 1, sceneItemEnabled: false });
+    });
+});

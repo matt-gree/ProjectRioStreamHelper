@@ -919,3 +919,76 @@ describe('Rack without OBS', () => {
         expect(onAdd).toHaveBeenCalledWith(null);
     });
 });
+
+/*
+ * OBS GROUPS are folders on the rack: the producer's own structure, shown where
+ * OBS shows it and folded as one unit. The mirror (obs.jsx) stores a scene
+ * top-first with each group's contents straight after it, `group`/`owner`
+ * naming the folder.
+ */
+describe('Rack folders', () => {
+    const groupItem = (id, name, enabled = true) =>
+        ({ id, sourceName: name, enabled, inputKind: null, isGroup: true, isPrsh: false, group: null, owner: 'Game' });
+    const inGroup = (id, name, url, group, { enabled = true, groupEnabled = true } = {}) =>
+        ({ ...item(id, name, url, enabled), group, owner: group, groupEnabled });
+
+    const rig = ({ groupEnabled = true } = {}) => obs({
+        Game: [
+            item(5, 'LT top', LOWER, true),
+            groupItem(4, 'Graphics', groupEnabled),
+            inGroup(1, 'SB', SB, 'Graphics', { groupEnabled }),
+            item(1, 'SB loose', 'http://x/layout/scoreboard1/scoreboard.html?scoreboard=2', true),
+        ],
+    });
+
+    it('rows the scene in OBS order, with the group’s sources inside its folder', () => {
+        rig();
+        ui(<Rack />);
+        expect(sectionRows('Game')).toEqual(['Lower Third', 'Scoreboard', 'Scoreboard']);
+        const folder = document.querySelector('[data-rack-folder="Graphics"]');
+        expect(folder).not.toBeNull();
+        expect(within(folder).getByText('Graphics')).toBeInTheDocument();
+        expect([...folder.querySelectorAll('[data-rack-row]')].length).toBe(1);
+    });
+
+    it('folds a folder shut and remembers it', () => {
+        rig();
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Fold Graphics' }));
+        expect(document.querySelector('[data-rack-folder="Graphics"] [data-rack-row]')).toBeNull();
+        expect(sectionRows('Game')).toEqual(['Lower Third', 'Scoreboard']);
+        cleanup();
+        ui(<Rack />);
+        expect(screen.getByRole('button', { name: 'Unfold Graphics' })).toBeInTheDocument();
+    });
+
+    it('reads a source in a hidden folder as off air', () => {
+        rig({ groupEnabled: false });
+        ui(<Rack />);
+        const folder = document.querySelector('[data-rack-folder="Graphics"]');
+        expect(folder.querySelector('[data-chip-state]').getAttribute('data-chip-state')).toBe('off');
+    });
+
+    it('shows and hides the folder itself from its header', async () => {
+        const real = useObsStore.getState().setSceneItemEnabled;
+        const spy = vi.fn(() => Promise.resolve());
+        useObsStore.setState({ setSceneItemEnabled: spy });
+        restoreObs.push(() => useObsStore.setState({ setSceneItemEnabled: real }));
+        rig();
+        ui(<Rack />);
+        fireEvent.click(screen.getByRole('button', { name: 'Hide folder' }));
+        await vi.waitFor(() => expect(spy).toHaveBeenCalledWith('Game', 4, false));
+    });
+
+    it('addresses a grouped source through its group', async () => {
+        const real = useObsStore.getState().setSceneItemEnabled;
+        const spy = vi.fn(() => Promise.resolve());
+        useObsStore.setState({ setSceneItemEnabled: spy });
+        restoreObs.push(() => useObsStore.setState({ setSceneItemEnabled: real }));
+        rig();
+        ui(<Rack />);
+        const folder = document.querySelector('[data-rack-folder="Graphics"]');
+        fireEvent.click(within(folder).getByRole('button', { name: 'Hide source' }));
+        await vi.waitFor(() => expect(spy).toHaveBeenCalledWith('Graphics', 1, false));
+    });
+});

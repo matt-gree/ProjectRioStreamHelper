@@ -88,4 +88,8 @@ connection.
   shutdown reconciliation) and `InputRemoved`. Don't add a code path that reads
   a source's url by calling `GetInputSettings` directly — go through the cache
   or the mirror, or the fan-out this exists to prevent comes back.
-
+- **Groups are mirrored into their parent scene** (see `scenes-and-placements.md`).
+  Events about a group's contents arrive naming the GROUP, so `patchOwned`
+  patches by `(owner, id)` across every mirrored scene and `reloadScene` also
+  refreshes each tracked scene in `groupParents`. `itemsOfSource` descends into
+  groups too, or a redraw would resize a grouped copy it never visited.

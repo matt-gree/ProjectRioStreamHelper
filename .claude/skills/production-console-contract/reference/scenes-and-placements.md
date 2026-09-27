@@ -66,6 +66,21 @@ whichever `find()` reached first. Read out before the board and variant axes, so
   The band's Program/Preview **scene picker reads the same list** (`SceneSelect`,
   `production.jsx`), keeping the scene it currently shows so the `<select>`
   never names the wrong one.
+- **Rows follow OBS's Sources list, top first, and an OBS GROUP is a FOLDER.**
+  `GetSceneItemList` answers bottom-first and does not descend into groups, so
+  the mirror (`refreshScene`, `topFirst`) re-sorts by `sceneItemIndex` and reads
+  each group's contents in place after it, each child carrying `group` and
+  `owner` (the group's name) plus `groupEnabled`. Placements carry `folder`;
+  `folderRuns` cuts a scene's rows into contiguous runs and the rack draws a
+  folder run as one collapsible unit (`FolderRun`, header = chevron · name ·
+  count · the GROUP's eye). Folding is browser-local (`useShutFolders`,
+  `prsh.ui.production.folders`, keyed per scene) and defaults open. Two rules
+  that fail silently if dropped: **every OBS request names `ownerScene(scene,
+  item)`, never the rack's scene** — a grouped item's id is only unique inside
+  its group, so the outer scene either 600s or hits a different item with the
+  same number; and **a hidden folder puts its contents OFF** (`chipFor` reads
+  `groupEnabled`), because OBS draws nothing in it whatever the child's own eye
+  says.
 - **Members are NOT discovered from sources, and they NEST under their
   container.** Character Spotlight and Game Summary can share one Callout Stage
   source; a source→row scan alone would collapse two separately-driven elements

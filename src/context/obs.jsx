@@ -70,7 +70,17 @@ const gcPort = () =>
 function resetMirror() {
     tracked = new Set();
     inputCache = new Map();
+    groupParents = new Map();
 }
+
+/*
+ * The OBS scene a mirrored item must be ADDRESSED through — the group, for an
+ * item inside one. Every request that names a (scene, item id) pair goes
+ * through this, because an item id is only unique within the scene that owns
+ * it: a child of a group asked for by its outer scene is either a 600 or, worse,
+ * a different item that happens to share the number.
+ */
+export const ownerScene = (sceneName, item) => item?.owner ?? sceneName;
 
 // Track a scene and pull it in. Tracking BEFORE the fetch matters twice: the
 // refreshScene write guards on membership, and a second concurrent request for
@@ -181,23 +191,33 @@ function desiredShutdown(url) {
  * them. One enumeration, so the two cannot drift about what they visit.
  *
  * Scenes come from `scenes` — every name OBS knows, mirrored or not — because a
- * scene the producer never expanded is still on air. Items nested inside GROUPS
- * are not visited: GetSceneItemList does not descend, and a PRSH source is
- * placed at scene level by addBrowserSource.
+ * scene the producer never expanded is still on air. GetSceneItemList does not
+ * descend into GROUPS, so each group is read once on its own — a producer who
+ * files sources into folders has them in there, and a copy skipped here is one
+ * the redraw silently resizes. A grouped item's `sceneName` is the GROUP, the
+ * name every request against it has to carry (see `ownerScene`).
  */
 async function itemsOfSource(sourceName) {
     const out = [];
-    for (const sceneName of useObsStore.getState().scenes || []) {
-        let items;
-        try {
-            ({ sceneItems: items } = await obs.call('GetSceneItemList', { sceneName }));
-        } catch {
-            continue;   // a scene that vanished between the list and here
-        }
+    const groups = new Set();
+    const visit = (sceneName, items) => {
         for (const it of items || []) {
+            if (it.isGroup) groups.add(it.sourceName);
             if (it.sourceName !== sourceName) continue;
             out.push({ sceneName, id: it.sceneItemId, transform: it.sceneItemTransform });
         }
+    };
+    for (const sceneName of useObsStore.getState().scenes || []) {
+        try {
+            visit(sceneName, (await obs.call('GetSceneItemList', { sceneName })).sceneItems);
+        } catch {
+            continue;   // a scene that vanished between the list and here
+        }
+    }
+    for (const group of groups) {
+        try {
+            visit(group, (await obs.call('GetGroupSceneItemList', { sceneName: group })).sceneItems);
+        } catch { /* removed between the two reads */ }
     }
     return out;
 }
@@ -249,7 +269,10 @@ export const useObsStore = create((set) => ({
         // cleanly from nothing. (gc-overlay has no /layout/ path and no
         // overlay-base, so the cue correctly skips it.)
         if (!enabled) {
-            const item = (useObsStore.getState().sceneItems[sceneName] || [])
+            // By OWNER, across every mirrored scene: `sceneName` is the group
+            // for an item inside one, and a group has no list of its own here.
+            const item = Object.entries(useObsStore.getState().sceneItems)
+                .flatMap(([scene, items]) => items.filter(it => ownerScene(scene, it) === sceneName))
                 .find(it => it.id === sceneItemId);
             if (item?.isPrsh && (item.url || '').includes('/layout/')) {
                 try {
@@ -837,6 +860,31 @@ function inputSettingsFor(sourceName, gen) {
     return pending;
 }
 
+/*
+ * OBS'S SOURCE-LIST ORDER, top first.
+ *
+ * GetSceneItemList answers BOTTOM-first (`sceneItemIndex` 0 is the item drawn
+ * underneath everything), which is the reverse of the list a producer reads in
+ * OBS's Sources dock. The rack is meant to read the way that list does, so the
+ * mirror stores it top-first. An item with no index (an old server, a test
+ * fake) keeps the order it came in.
+ */
+function topFirst(items) {
+    if (!(items || []).every(it => typeof it.sceneItemIndex === 'number')) return items || [];
+    return [...items].sort((a, b) => b.sceneItemIndex - a.sceneItemIndex);
+}
+
+/*
+ * Which scenes hold each GROUP — `group name -> Set(scene)`.
+ *
+ * An item inside a group lives in the group's own scene as far as obs-websocket
+ * is concerned: its events arrive with `sceneName` = the group, and every
+ * request against it has to name the group, never the scene the producer sees
+ * it in. This is how an event about a group's contents finds the mirrored
+ * scenes that list it.
+ */
+let groupParents = new Map();
+
 async function refreshScene(sceneName, gen) {
     if (!obs || !sceneName || gen !== generation) return;
     try {
@@ -844,22 +892,75 @@ async function refreshScene(sceneName, gen) {
         // Enrich browser sources with their URL so we can tell which are fed by
         // PRSH. Cached per source name, so mirroring a fifth scene costs one
         // GetSceneItemList plus a call only for sources not seen before.
-        const enriched = await Promise.all(sceneItems.map(async (it) => {
-            const base = mapItem(it);
+        const enrich = async (it, extra) => {
+            const base = { ...mapItem(it), ...extra };
             if (it.inputKind === 'browser_source' && !it.isGroup) {
                 const settings = await inputSettingsFor(it.sourceName, gen);
                 base.url = settings?.url || null;
                 base.isPrsh = isPrshUrl(base.url, gcPort());
             }
             return base;
+        };
+        /*
+         * A GROUP IS FLATTENED IN PLACE: the group's own item, then its
+         * contents, each carrying `group` (the folder's name, which is also the
+         * `owner` every request against it must name) and `groupEnabled`, since
+         * a hidden folder hides everything in it whatever the child's own eye
+         * says. OBS groups do not nest, so one level is the whole tree.
+         */
+        const lists = await Promise.all(topFirst(sceneItems).map(async (it) => {
+            const own = await enrich(it, { owner: sceneName, group: null, groupEnabled: true });
+            if (!it.isGroup) return [own];
+            let children = [];
+            try {
+                ({ sceneItems: children } = await obs.call('GetGroupSceneItemList', { sceneName: it.sourceName }));
+            } catch { /* a group removed between the two calls */ }
+            const inner = await Promise.all(topFirst(children).map(c => enrich(c, {
+                owner: it.sourceName, group: it.sourceName, groupEnabled: !!it.sceneItemEnabled,
+            })));
+            return [own, ...inner];
         }));
+        const enriched = lists.flat();
         if (gen !== generation || !tracked.has(sceneName)) return;
+        for (const [g, parents] of groupParents) {
+            parents.delete(sceneName);
+            if (!parents.size) groupParents.delete(g);
+        }
+        for (const it of enriched) {
+            if (!it.isGroup) continue;
+            if (!groupParents.has(it.sourceName)) groupParents.set(it.sourceName, new Set());
+            groupParents.get(it.sourceName).add(sceneName);
+        }
         useObsStore.setState(state => ({
             sceneItems: { ...state.sceneItems, [sceneName]: enriched },
         }));
     } catch {
         // Scene may have been renamed/removed between the event and this call.
     }
+}
+
+/*
+ * Patch the mirrored copies of ONE OBS scene item, addressed the way OBS
+ * addresses it: by its owner (the group, for an item inside one) and its id.
+ * A group can sit in more than one mirrored scene, so every copy is patched.
+ * `fn(item)` returns the fields to change, or null for "already true" — the
+ * store is only written when something actually moved.
+ */
+function patchOwned(owner, id, fn) {
+    useObsStore.setState(state => {
+        let changed = false;
+        const next = {};
+        for (const [scene, items] of Object.entries(state.sceneItems)) {
+            next[scene] = items.map((it) => {
+                if (it.id !== id || ownerScene(scene, it) !== owner) return it;
+                const patch = fn(it);
+                if (!patch) return it;
+                changed = true;
+                return { ...it, ...patch };
+            });
+        }
+        return changed ? { sceneItems: next } : {};
+    });
 }
 
 function wireEvents(client, gen) {
@@ -924,35 +1025,31 @@ function wireEvents(client, gen) {
         const cropped = isCropped(sceneItemTransform);
         const same = (a, b) => (a == null && b == null)
             || (a != null && b != null && Math.round(a * 10) === Math.round(b * 10));
-        useObsStore.setState(state => {
-            const items = state.sceneItems[sceneName];
-            const it = items?.find(i => i.id === sceneItemId);
-            const w = sceneItemTransform?.sourceWidth ?? null;
-            const h = sceneItemTransform?.sourceHeight ?? null;
-            const settled = same(it?.stretch, next) && it?.cropped === cropped
-                && it?.renderWidth === w && it?.renderHeight === h;
-            if (!it || settled) return {};
-            return {
-                sceneItems: {
-                    ...state.sceneItems,
-                    [sceneName]: items.map(i => (i.id === sceneItemId
-                        ? { ...i, stretch: next, cropped, renderWidth: w, renderHeight: h }
-                        : i)),
-                },
-            };
-        });
+        const w = sceneItemTransform?.sourceWidth ?? null;
+        const h = sceneItemTransform?.sourceHeight ?? null;
+        // By OWNER: an item inside a group reports the group as its scene.
+        patchOwned(sceneName, sceneItemId, it => (
+            same(it.stretch, next) && it.cropped === cropped
+                && it.renderWidth === w && it.renderHeight === h
+                ? null
+                : { stretch: next, cropped, renderWidth: w, renderHeight: h }
+        ));
     });
 
     client.on('SceneItemEnableStateChanged', ({ sceneName, sceneItemId, sceneItemEnabled }) => {
         if (!alive()) return;
+        patchOwned(sceneName, sceneItemId, () => ({ enabled: sceneItemEnabled }));
+        // A FOLDER's eye is its contents' too: everything filed in it goes dark
+        // with it, whatever each child's own eye says.
         useObsStore.setState(state => {
             const items = state.sceneItems[sceneName];
-            if (!items) return {};
+            const folder = items?.find(it => it.id === sceneItemId && it.isGroup && !it.group);
+            if (!folder) return {};
             return {
                 sceneItems: {
                     ...state.sceneItems,
-                    [sceneName]: items.map(it =>
-                        it.id === sceneItemId ? { ...it, enabled: sceneItemEnabled } : it),
+                    [sceneName]: items.map(it => (it.group === folder.sourceName
+                        ? { ...it, groupEnabled: sceneItemEnabled } : it)),
                 },
             };
         });
@@ -960,9 +1057,14 @@ function wireEvents(client, gen) {
 
     // Only scenes we mirror. Lazily-mirrored ones are in `tracked`, so a Break
     // scene a producer expanded stays live; a scene nobody opened is dropped
-    // rather than pulled in by the event.
+    // rather than pulled in by the event. An event about a GROUP's contents
+    // names the group, so it reloads every mirrored scene that holds it.
     const reloadScene = ({ sceneName }) => {
-        if (alive() && tracked.has(sceneName)) refreshScene(sceneName, gen);
+        if (!alive()) return;
+        if (tracked.has(sceneName)) refreshScene(sceneName, gen);
+        for (const parent of groupParents.get(sceneName) ?? []) {
+            if (tracked.has(parent)) refreshScene(parent, gen);
+        }
     };
     client.on('SceneItemCreated', reloadScene);
     client.on('SceneItemRemoved', reloadScene);

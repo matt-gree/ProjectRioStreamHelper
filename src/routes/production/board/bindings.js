@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useObsStore } from '../../../context/obs';
+import { ownerScene, useObsStore } from '../../../context/obs';
 import { stageOrRun, usePending } from '../../../context/staging';
 import { sizeOptionFor } from '../elements';
 import { variantParams } from '../sources/instances';
@@ -77,16 +77,24 @@ export function absoluteOverlayUrl(url) {
     try { return new URL(url, window.location.origin).toString(); } catch { return url; }
 }
 
+/*
+ * Every key and request here names the item's OWNER (`ownerScene`), not the
+ * scene the rack lists it under: an item filed in an OBS group belongs to the
+ * group, its id is only unique there, and toggling it is one act wherever that
+ * group appears.
+ */
+const visibilityKey = (sceneName, item) => `obs:${ownerScene(sceneName, item)}:${item.id}`;
+
 // Toggle an OBS source's visibility through the confirm-to-live buffer. The
 // pending key is the (scene, item) pair, so flipping the same switch twice
 // cancels out (liveValue match drops the entry).
 export function setSourceVisibility(sceneName, item, enabled) {
     stageOrRun({
-        key: `obs:${sceneName}:${item.id}`,
+        key: visibilityKey(sceneName, item),
         label: `${enabled ? 'Show' : 'Hide'} ${item.sourceName}`,
         value: enabled,
         liveValue: item.enabled,
-        run: () => useObsStore.getState().setSceneItemEnabled(sceneName, item.id, enabled),
+        run: () => useObsStore.getState().setSceneItemEnabled(ownerScene(sceneName, item), item.id, enabled),
     });
 }
 
@@ -103,7 +111,7 @@ export function setSourceVisibility(sceneName, item, enabled) {
  * removal and a staged visibility flip on the same item can't both sit in the
  * queue describing different futures — the later one replaces the earlier.
  */
-const removalKey = (sceneName, item) => `obs:remove:${sceneName}:${item.id}`;
+const removalKey = (sceneName, item) => `obs:remove:${ownerScene(sceneName, item)}:${item.id}`;
 
 export function removeSourceFromScene(sceneName, item) {
     stageOrRun({
@@ -117,7 +125,7 @@ export function removeSourceFromScene(sceneName, item) {
         // HIDDEN source `value === liveValue === false` and the buffer threw the
         // removal away as a no-op — a producer confirming the popover, pressing
         // Go Live, and watching nothing happen.
-        run: () => useObsStore.getState().removeSceneItem(sceneName, item.id),
+        run: () => useObsStore.getState().removeSceneItem(ownerScene(sceneName, item), item.id),
     });
 }
 
@@ -163,7 +171,7 @@ export function useOtherScenesWith(sourceName, exceptScene) {
 // What a visibility control should DISPLAY for a source: the staged value if
 // one is pending, else OBS truth — plus the staged flag for amber styling.
 export function useDisplayedEnabled(sceneName, item) {
-    const pending = usePending(item ? `obs:${sceneName}:${item.id}` : '∅');
+    const pending = usePending(item ? visibilityKey(sceneName, item) : '∅');
     if (!item) return { enabled: false, staged: false };
     return { enabled: pending ? pending.value : item.enabled, staged: !!pending };
 }
