@@ -118,6 +118,30 @@ describe('controller-mount → gc-overlay URL', () => {
         expect(globalThis.OverlayBase.blank).toMatch(/controller port/i);
     });
 
+    it('shows nothing for a CPU side, though Rio reports a port for it', async () => {
+        const vsCpu = { score: { 1: { player: { 1: { port: 0, rioName: 'MattGree' },
+                                              2: { port: 0, rioName: 'CPU' } } } } };
+        stubOverlayBase(vsCpu);
+        const { hidden } = await frameSrc({ team: 2, state: vsCpu });
+        expect(hidden).toBe(true);
+        expect(globalThis.OverlayBase.blank).toMatch(/CPU/);
+        // The human's side is untouched.
+        expect(new URL((await frameSrc({ team: 1, state: vsCpu })).src).searchParams.get('port')).toBe('1');
+    });
+
+    it('lets a fixed ?port= override outrank the CPU rule', async () => {
+        const vsCpu = { score: { 1: { player: { 2: { port: 0, rioName: 'CPU' } } } } };
+        stubOverlayBase(vsCpu);
+        const { src } = await frameSrc({ team: 2, state: vsCpu, portOverride: 1 });
+        expect(new URL(src).searchParams.get('port')).toBe('2');
+    });
+
+    it('re-renders when the side\'s player changes, not only its port', async () => {
+        const { ctl } = await frameSrc();
+        expect(ctl.shouldRender('score.1.player.1.rioName')).toBe(true);
+        expect(ctl.shouldRender('score.1.player.2.rioName')).toBe(false);
+    });
+
     it('blanks, and names why, when the reader is not running', async () => {
         stubStatus({ running: false, url: null });
         const { hidden, ctl } = await frameSrc();

@@ -202,6 +202,60 @@ async def test_a_genuinely_unknown_mode_stops_retrying(monkeypatch):
     assert P._game_mode_unresolved is False, "an unknown mode must settle, not spin"
 
 
+async def test_a_new_game_with_no_mode_clears_the_last_games(monkeypatch):
+    """An unranked game after an NNL one kept the NNL tag — its stats, and its
+    league logo. A definite "no mode" on a new game is an answer."""
+    from server.rio.provider import RioGameDataProvider as P
+    from server.settings import Settings
+
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    monkeypatch.setattr(P, "_game_mode_unresolved", False)
+    await Settings.Set("scoreboards.binding.1.stats_tag", "NNL Season 4")
+
+    async def unknown(_id, timeout=None):
+        return ""
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", unknown)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: False)   # never needed
+
+    await P._apply_hud_game_mode({"tag_set": -1}, new_game=True)
+    assert P._game_mode_unresolved is False
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == ""
+
+
+async def test_a_new_game_not_yet_resolvable_says_nothing(monkeypatch):
+    from server.rio.provider import RioGameDataProvider as P
+    from server.settings import Settings
+
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    await Settings.Set("scoreboards.binding.1.stats_tag", "NNL Season 4")
+
+    async def slow(_id, timeout=None):
+        return ""
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", slow)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: False)
+
+    await P._apply_hud_game_mode({"tag_set": 7}, new_game=True)
+    assert P._game_mode_unresolved is True
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "NNL Season 4"
+
+
+async def test_a_new_game_hands_a_picked_board_back_to_the_feed(monkeypatch):
+    from server.rio.provider import RioGameDataProvider as P
+    from server.settings import Settings
+
+    async def fast(_id, timeout=None):
+        return "S14 Superstars Off"
+    monkeypatch.setattr(P, "_hud_targets", [1])
+    monkeypatch.setattr(stats_api, "resolve_tag_set_name", fast)
+    monkeypatch.setattr(stats_api, "modes_ready", lambda: True)
+    await Settings.Set("scoreboards.binding.1.stats_tag", "NNL Season 4")
+    await Settings.Set("scoreboards.binding.1.stats_tag_manual", True)
+
+    await P._apply_hud_game_mode({"tag_set": 7}, new_game=True)
+    assert Settings.Get("scoreboards.binding.1.stats_tag") == "S14 Superstars Off"
+    assert Settings.Get("scoreboards.binding.1.stats_tag_manual") is False
+
+
 # --- launch-time ordering -------------------------------------------------
 
 async def test_prime_caches_publishes_modes_before_the_slow_rebuild(monkeypatch):

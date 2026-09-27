@@ -822,7 +822,7 @@ class RioGameDataProvider:
             # A fresh HUD game reverts every manual name override back to the
             # HUD value (the override is scoped to a single game).
             await cls._clear_name_overrides()
-            await cls._apply_hud_game_mode(game_json)
+            await cls._apply_hud_game_mode(game_json, new_game=True)
         elif resync:
             # An explicit re-read of the same game (see _game_mode_resync). A
             # producer's own pick still stands — sync_stats_tag skips it.
@@ -837,7 +837,7 @@ class RioGameDataProvider:
             # again on every following frame is a stall per frame for as long as
             # Project Rio is unreachable. The shared in-flight fetch keeps
             # running; a later frame finds its answer in the cache.
-            await cls._apply_hud_game_mode(game_json, budget=0)
+            await cls._apply_hud_game_mode(game_json, budget=0, new_game=True)
 
         for sb in cls._hud_targets:
             if is_new_game:
@@ -898,13 +898,19 @@ class RioGameDataProvider:
         await State.Save()
 
     @classmethod
-    async def _apply_hud_game_mode(cls, game_json: dict, budget: float | None = None):
+    async def _apply_hud_game_mode(cls, game_json: dict, budget: float | None = None,
+                                   new_game: bool = False):
         """Set each HUD-target scoreboard's game-mode tag from the HUD tag set.
 
         Resolves the HUD game's TagSetID to its game-mode name and writes it to
         scoreboards.binding.{sb}.stats_tag. This drives the stats fetch and
-        updates the UI selectbox. If the id can't be resolved (unknown/inactive
-        mode) the existing manual selection is left untouched.
+        updates the UI selectbox.
+
+        ``new_game`` (the new-game frame, and the retries that finish its job) is
+        what lets a resolved mode retire a producer's pick from an earlier game,
+        and what makes a DEFINITE "no mode" clear the last game's tag: an
+        unranked game after an NNL one used to keep the NNL tag, its stats and its
+        league logo. "We never got to look" (modes not loaded) still says nothing.
         """
         from server.rio import stats_api  # local import avoids cycle at module load
 
@@ -918,17 +924,22 @@ class RioGameDataProvider:
             tag_set_id,
             timeout=stats_api.LIVE_RESOLVE_TIMEOUT if budget is None else budget,
         )
+        from server.bindings import sync_stats_tag
         if not name:
             # Worth another go next frame only if the modes hadn't loaded yet.
-            cls._game_mode_unresolved = not stats_api.modes_ready()
+            no_mode = tag_set_id is None or tag_set_id == -1
+            cls._game_mode_unresolved = not no_mode and not stats_api.modes_ready()
+            if new_game and not cls._game_mode_unresolved:
+                # A final answer of "no mode": the last game's must not stand in.
+                for sb in cls._hud_targets:
+                    await sync_stats_tag(sb, "")
             return
         cls._game_mode_unresolved = False
-        from server.bindings import sync_stats_tag
         for sb in cls._hud_targets:
             # Skips a board whose mode the producer picked (server/bindings.py
-            # sync_stats_tag) — an override sticks against the feed, like a name
-            # override, and the console says so.
-            await sync_stats_tag(sb, name)
+            # sync_stats_tag) — an override sticks against the feed for the rest
+            # of its game, like a name override, and the console says so.
+            await sync_stats_tag(sb, name, new_game=new_game)
 
     @classmethod
     def _is_new_game(cls, current_inning: int, game_id=None) -> bool:

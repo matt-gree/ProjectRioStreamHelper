@@ -172,7 +172,7 @@ describe('characterSummary', () => {
      */
     /*
      * THE SERVER'S LINE, VERBATIM. `format_batting_line` already appends every
-     * non-zero count stat — HR, 3B, 2B, BB, HBP, RBI, SB, count elided at one —
+     * non-zero count stat — HR, 3B, 2B, BB, HBP, K, RBI, SB, count elided at one —
      * so appending HR and RBI to it printed both twice: Bowser read
      * "1-for-3, HR, 3 RBI, 1 HR, 3 RBI". These are real server outputs.
      */

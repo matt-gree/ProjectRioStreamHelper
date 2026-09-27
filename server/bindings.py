@@ -144,7 +144,7 @@ def stats_tag_is_manual(sb_id: int) -> bool:
     return bool(get_binding(sb_id).get("stats_tag_manual"))
 
 
-async def sync_stats_tag(sb_id: int, name: str | None) -> bool:
+async def sync_stats_tag(sb_id: int, name: str | None, *, new_game: bool = False) -> bool:
     """Point board ``sb_id``'s game-mode tag at what the FEED is playing.
 
     THE ONE AUTO-SYNC WRITER. Four paths used to write `stats_tag` from a game's
@@ -160,12 +160,23 @@ async def sync_stats_tag(sb_id: int, name: str | None) -> bool:
     Returns True when it wrote. A blank/unknown ``name`` still clears the tag —
     leaving the last game's mode on a board whose game has a mode we can't name
     is how a stats fetch ends up running against the wrong tag.
+
+    ``new_game``: A PICK LASTS FOR THE GAME IT WAS MADE IN, like a name override
+    (`_clear_name_overrides`) and the manual side swap. It had no scope at all, so
+    a mode picked once — even picked to the mode already playing, since any pick
+    sets the flag — outranked every game after it: a producer who played an NNL
+    game and then a Superstars one kept the NNL tag, and with it NNL stats and the
+    NNL league logo, until they noticed and picked again. So a new game whose mode
+    the feed can NAME hands the board back to the feed. One the feed cannot name
+    leaves the pick standing — that is the case a pick exists for.
     """
-    if stats_tag_is_manual(sb_id):
-        return False
     value = name or ""
     if value.startswith("ID:"):  # unresolved tag-set id is not a mode name
         value = ""
+    if stats_tag_is_manual(sb_id):
+        if not (new_game and value):
+            return False
+        await Settings.Set(f"scoreboards.binding.{sb_id}.stats_tag_manual", False)
     key = f"scoreboards.binding.{sb_id}.stats_tag"
     if Settings.Get(key, None) == value:
         return False

@@ -178,9 +178,10 @@ async def assign_game(
                         game_mode_name = resolved
                 # One writer, one rule: it clears an unknown mode rather than
                 # leaving the last game's, and it leaves a producer's PICK alone
-                # (server/bindings.py sync_stats_tag).
+                # unless this new game's mode can be named — a pick lasts for the
+                # game it was made in (server/bindings.py sync_stats_tag).
                 from server.bindings import sync_stats_tag
-                await sync_stats_tag(scoreboard_number, game_mode_name)
+                await sync_stats_tag(scoreboard_number, game_mode_name, new_game=True)
 
                 # Initialize the slot + historical API stats on first load.
                 await StatsTracker.on_new_game(

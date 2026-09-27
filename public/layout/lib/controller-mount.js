@@ -97,6 +97,19 @@ function displayParams(settings, team) {
 }
 
 const PORT_KEY = (sb, team) => `score.${sb}.player.${team}.port`;
+const NAME_KEY = (sb, team) => `score.${sb}.player.${team}.rioName`;
+
+/*
+ * A CPU SIDE HAS NO CONTROLLER. Project Rio names the computer's side exactly
+ * `CPU` and still reports a port for it — the port of the pad that started the
+ * game — so a vs-CPU game drew the one human's controller on BOTH sides. The
+ * port is left alone in state (it still tints the scoreboard); only this element
+ * reads a CPU side as having nothing to show. The raw `rioName` and not the
+ * display override: what Rio says is playing is what decides whether a pad is.
+ */
+export function isCpuSide(name) {
+    return typeof name === 'string' && name.trim().toUpperCase() === 'CPU';
+}
 
 export function mountController({ host, sb = 1, team = 1, portOverride = null }) {
     const wrap = document.createElement('div');
@@ -108,6 +121,7 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
     host.appendChild(wrap);
 
     const key = PORT_KEY(sb, team);
+    const nameKey = NAME_KEY(sb, team);
     let gcBaseUrl = null;     // e.g. http://localhost:8069, from controller status
     // The URL the iframe currently holds. Tracked whole rather than as a port,
     // because the appearance settings are part of it now and a producer
@@ -136,7 +150,9 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
     }
 
     function currentPort(state) {
+        // A producer's fixed ?port= is a deliberate pick and outranks the CPU rule.
         if (portOverride != null && !Number.isNaN(portOverride)) return portOverride;
+        if (isCpuSide(OverlayBase.deepGet(state, nameKey))) return null;
         const p = OverlayBase.deepGet(state, key);
         return (typeof p === 'number') ? p : null;
     }
@@ -146,9 +162,20 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
         const port = currentPort(state);
 
         // No port on this side: nothing to show. Blank rather than keep the last
-        // player's controller on screen.
+        // player's controller on screen. The HUD reports ports only once a game
+        // is loaded, so BEFORE first pitch the one source of a port is the bound
+        // fixture's (Match desk → Port, projected onto this same key) — the note
+        // names it, since that is the answer to "why is side 2 empty until the
+        // game starts?".
         if (port == null) {
-            OverlayBase.setBlank('No controller port on this side yet — the HUD reports a port only once a game is loaded.');
+            if (isCpuSide(OverlayBase.deepGet(state, nameKey)) && portOverride == null) {
+                OverlayBase.setBlank('This side is the CPU — no controller to show.');
+                frame.style.display = 'none';
+                frame.src = 'about:blank';
+                lastSrc = undefined;
+                return;
+            }
+            OverlayBase.setBlank('No controller port on this side yet — the HUD reports one once a game loads. To show it sooner, set this side’s Port on its match.');
             frame.style.display = 'none';
             frame.src = 'about:blank';
             lastSrc = undefined;
@@ -200,5 +227,5 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
         wrap.remove();
     }
 
-    return { update, dispose, shouldRender: (k) => k === key };
+    return { update, dispose, shouldRender: (k) => k === key || k === nameKey };
 }

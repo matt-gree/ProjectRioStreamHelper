@@ -351,7 +351,9 @@ export function useBoardDesk(sb) {
      *
      * Picking one is an OVERRIDE and says so: the flag is what stops every feed
      * path (HUD frame, game assign, rotation advance, match projection) from
-     * overwriting it, and what the panel reads to call it out. Clearing hands the
+     * overwriting it, and what the panel reads to call it out. Like a name
+     * override it lasts for the game it was made in: the next game whose mode the
+     * feed can name hands the board back (`sync_stats_tag`, server/bindings.py). Clearing hands the
      * board back to the feed — the mode goes to whatever is being played right
      * now rather than to blank, since blank would be a third state nobody asked
      * for.

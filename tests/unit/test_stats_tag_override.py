@@ -44,6 +44,26 @@ async def test_sync_leaves_a_producers_pick_alone(mock_socket, set_setting):
     assert binding_stats_tag(1) == "Ranked"
 
 
+async def test_a_new_game_with_a_named_mode_retires_the_pick(mock_socket, set_setting):
+    """A pick lasts for the game it was made in. Unscoped, a mode picked during an
+    NNL game kept NNL stats and the NNL league logo on every game after it."""
+    set_setting("scoreboards.binding.1.stats_tag", "NNL Season 4")
+    set_setting("scoreboards.binding.1.stats_tag_manual", True)
+    assert await sync_stats_tag(1, "S14 Superstars Off", new_game=True) is True
+    assert binding_stats_tag(1) == "S14 Superstars Off"
+    assert stats_tag_is_manual(1) is False
+
+
+@pytest.mark.parametrize("name", ["", "ID:198", None])
+async def test_a_new_game_the_feed_cannot_name_keeps_the_pick(mock_socket, set_setting, name):
+    """That is the case a pick exists for."""
+    set_setting("scoreboards.binding.1.stats_tag", "NNL Season 4")
+    set_setting("scoreboards.binding.1.stats_tag_manual", True)
+    assert await sync_stats_tag(1, name, new_game=True) is False
+    assert binding_stats_tag(1) == "NNL Season 4"
+    assert stats_tag_is_manual(1) is True
+
+
 async def test_sync_clears_an_unknown_mode(mock_socket, set_setting):
     """Leaving the last game's mode on a board whose game we cannot name is how a
     stats fetch ends up running against the wrong tag."""
