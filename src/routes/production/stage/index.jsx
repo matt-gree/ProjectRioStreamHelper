@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { Text } from '../../../components/ui/primitives';
 import { PanelShell, chipFor } from '../kit';
 import { isPinnable, settingsTypeOf, sizeOptionFor } from '../elements';
-import { DESK_PREFIX } from '../sources/instances';
+import { DESK_PREFIX, variantParams } from '../sources/instances';
 import { placementDims } from '../board/bindings';
 import { useContainerDefs } from '../containers/containers';
 import {
@@ -18,6 +18,7 @@ import { IntroRow, introTypeFor } from './intro';
 import SizeMatchRow from './sizematch';
 import RedrawRow from './resolution';
 import BoardSwitchRow from './boardswitch';
+import RosterLayoutRow, { useRosterPlacement } from './rosterlayout';
 import { PlayerNameStage } from './playername';
 import { useStyleSide } from './side-scope';
 import { useSideLabels } from '../sides';
@@ -113,8 +114,12 @@ function useContainerDims(placement) {
 }
 
 const ElementStage = memo(function ElementStage({
-    placement, placements, title, pinned, onPinToggle, onSelect,
+    placement: selected, placements, title, pinned, onPinToggle, onSelect,
 }) {
+    /* A Roster catalog row wears the layout picked for it with OBS closed, so
+       the preview, its size readout and Copy URL all follow (rosterlayout.jsx).
+       Every other placement comes back as it went in. */
+    const placement = useRosterPlacement(selected);
     const { element, board } = placement;
     /* The settings NAMESPACE, never the element id — Matchup History is
        `matchuphistory` here and `overlays.matchup.*` in its mount, and a panel
@@ -134,6 +139,10 @@ const ElementStage = memo(function ElementStage({
     /* The source's ?size=, read once: it picks the theme file an override has
        to reach AND drops the element settings that size doesn't draw. */
     const size = sizeOptionFor(element, placement.variant)?.value;
+    /* ...and a Roster's ?layout= (grid when absent), which drops the settings
+       its shape does not draw — read off the variant, so a catalog row's
+       offline pick counts too. */
+    const layout = variantParams(placement.variant).find(([p]) => p === 'layout')?.[1];
     return (
         <PanelShell
             state={chipFor(placement)} title={title}
@@ -154,6 +163,10 @@ const ElementStage = memo(function ElementStage({
                     element is board-scoped, has a real source, and the rig has
                     more than one board (see boardswitch.jsx). */}
                 <BoardSwitchRow placement={placement} placements={placements} onSelect={onSelect} />
+                {/* A Roster's shape — Grid / Row / Column — which is also its
+                    canvas, so switching resizes the OBS source with it
+                    (rosterlayout.jsx). Nothing on any other element. */}
+                <RosterLayoutRow placement={placement} onSelect={onSelect} />
                 <Body element={element} board={board} placement={placement} />
                 {/* An OBS ACTION on this source, so it sits with the body's
                     controls rather than under two sections of settings — and
@@ -178,6 +191,7 @@ const ElementStage = memo(function ElementStage({
                     label={settingsLabel}
                     exclude={Body.surfacedKeys}
                     size={size}
+                    layout={layout}
                 />
                 {/* ...and the GLOBAL design keys this element can pin for
                     itself. Separate section, below its own settings, because a

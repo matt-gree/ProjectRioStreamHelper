@@ -15,7 +15,8 @@
 
 // Reference roster icon sizes — trailing icons match captain, all scale
 // uniformly to fit the 452×140 frame.
-import { styleSetting } from './side-styles.js';
+import { styleNs, styleSetting } from './side-styles.js';
+import { ROSTER_LAYOUTS, FIELD_SPOTS, rosterLayout } from './roster-layouts.js';
 
 const REF_W = 452, REF_H = 140;
 const CHAR_SIZE = 52;
@@ -48,6 +49,13 @@ const CSS = `
   pointer-events: none;
 }
 .superstar-badge--captain { width: 36px; height: 36px; }
+/* The captain box (overlays.roster.captainBox) — the line and field layouts,
+   where the captain is the same size as everyone else. A pseudo-element rather
+   than an outline, which older CEF builds draw square whatever the radius. */
+.roster-container .captain-box::after {
+  content: ''; position: absolute; inset: -3px; pointer-events: none;
+  border: 2px solid var(--accent, #f59e0b); border-radius: 8px;
+}
 .roster-container[data-portraits="pixel"] .captain-container img:not(.superstar-badge),
 .roster-container[data-portraits="pixel"] .character-container img:not(.superstar-badge) {
   image-rendering: pixelated;
@@ -90,6 +98,28 @@ function rosterFitScale(trailingCount) {
   return Math.min(1, availW / naturalGridW, availH / naturalGridH);
 }
 
+// The same fit for a LINE: every cell at CHAR_SIZE — the captain, the eight and
+// the trailing icons alike — one gap between each, along the line's length and
+// one cell deep across it.
+export function lineFitScale(layout, trailingCount) {
+  const ref = ROSTER_LAYOUTS[layout];
+  const cells = 9 + trailingCount;
+  const length = cells * CHAR_SIZE + (cells - 1) * GAP;
+  const [along, across] = layout === 'row' ? [ref.width, ref.height] : [ref.height, ref.width];
+  return Math.min(1, (along - 2 * PAD) / length, (across - 2 * PAD) / CHAR_SIZE);
+}
+
+/*
+ * The palette on the Roster's OWN page, for the captain box's --accent: the
+ * global accent, or this Roster's pin (this side's, under Separate side styles).
+ * Not part of renderRoster, which also draws inside a container — whose shell
+ * owns that document's palette, and a member rewriting it would repaint every
+ * other occupant.
+ */
+export function applyRosterPalette(settings, team) {
+  OverlayBase.applyDesignSettings('roster', styleNs(settings, 'roster', team));
+}
+
 /**
  * Render the captain-first roster grid for one side into `container`.
  * Behavior-preserving port of roster.html's render(): reads RioData.getRosterSlots
@@ -101,11 +131,19 @@ function rosterFitScale(trailingCount) {
  * resting on a roster is the SAME roster the standalone source shows — one look
  * to configure, not one per host.
  */
-export function renderRoster(container, { state, settings, sb, team }) {
+/*
+ * Returns `{ blank }` — why nothing was drawn, when that is not simply "no game"
+ * (today only the Field layout has such a reason) — for the page to hand to
+ * OverlayBase.setBlank.
+ */
+export function renderRoster(container, { state, settings, sb, team, layout }) {
   injectCss();
-  if (!container) return;
+  if (!container) return { blank: null };
   container.classList.add('roster-container');
   container.innerHTML = '';
+  // The Field layout positions its cells absolutely; every other shape is a
+  // grid, so undo that first rather than inherit it.
+  for (const k of ['display', 'position', 'width', 'height', 'padding']) container.style[k] = '';
 
   // settingOn, not `!== false` — see the note in scoreboard-mount's readToggles.
   const on = OverlayBase.settingOn;
@@ -123,6 +161,39 @@ export function renderRoster(container, { state, settings, sb, team }) {
 
   const hasLogo = slots.some(s => s.kind === 'teamLogo');
   const trailingCount = (showRole ? 1 : 0) + (hasLogo ? 1 : 0);
+  const shape = rosterLayout(layout);
+  container.dataset.layout = shape;
+
+  // The captain box: only where the captain is not already told apart by size
+  // (every layout but the two grids), and on by default there.
+  const boxCaptain = shape !== 'grid' && shape !== 'vgrid' && on(side('captainBox', true), true);
+
+  if (shape === 'field') return renderField(container, { state, sb, team, slots, showSuperstars, boxCaptain });
+
+  if (shape === 'row' || shape === 'column') {
+    // ROW / COLUMN: every slot in one line, in the grid's reading order
+    // (captain, the eight, bat/glove, logo), ALL ONE SIZE. The grid can afford a
+    // captain two rows tall because it has two rows; a line has one, and a
+    // bigger captain there only makes the whole line that much deeper. It leads
+    // the line, which is what says it is the captain.
+    const s = lineFitScale(shape, trailingCount);
+    const cell = CHAR_SIZE * s;
+    container.style.setProperty('--char-size', cell + 'px');
+    container.style.setProperty('--captain-size', cell + 'px');
+    container.style.setProperty('--trailing-size', cell + 'px');
+    container.style.columnGap = GAP * s + 'px';
+    container.style.rowGap = GAP * s + 'px';
+    const track = `repeat(${slots.length}, ${cell}px)`;
+    container.style.gridTemplateColumns = shape === 'row' ? track : `${cell}px`;
+    container.style.gridTemplateRows = shape === 'row' ? `${cell}px` : track;
+    for (const slot of slots) {
+      const div = slotNode(slot, showSuperstars);
+      if (boxCaptain && slot.kind === 'captain') div.classList.add('captain-box');
+      container.appendChild(div);
+    }
+    return { blank: null };
+  }
+
   const s = rosterFitScale(trailingCount);
   const charSize = CHAR_SIZE * s;
   const captainSize = CAPTAIN_SIZE * s;
@@ -134,40 +205,116 @@ export function renderRoster(container, { state, settings, sb, team }) {
   container.style.setProperty('--trailing-size', captainSize + 'px');
   container.style.columnGap = gap + 'px';
   container.style.rowGap = gap + 'px';
-  container.style.gridTemplateRows = `${rowH}px ${rowH}px`;
 
-  let cols = `${captainSize}px repeat(4, ${charSize}px)`;
-  if (showRole)  cols += ` ${captainSize}px`;
-  if (hasLogo)   cols += ` ${captainSize}px`;
-  container.style.gridTemplateColumns = cols;
+  // The VERTICAL grid is this one transposed: the long axis runs down instead of
+  // across, so the captain spans the two COLUMNS at the top and the bat/glove and
+  // logo span them at the foot. Same scale (the canvas is the grid's, turned), so
+  // a character is the same size in either.
+  const tall = shape === 'vgrid';
+  let track = `${captainSize}px repeat(4, ${charSize}px)`;
+  if (showRole)  track += ` ${captainSize}px`;
+  if (hasLogo)   track += ` ${captainSize}px`;
+  const pair = `${rowH}px ${rowH}px`;
+  container.style.gridTemplateColumns = tall ? pair : track;
+  container.style.gridTemplateRows = tall ? track : pair;
+  const along = tall ? 'gridRow' : 'gridColumn';
+  const across = tall ? 'gridColumn' : 'gridRow';
 
-  // Assign explicit grid positions to row-spanning items.
-  let trailingCol = 5;
+  // Assign explicit grid positions to the items spanning both lanes.
+  let trailing = 5;
   for (const slot of slots) {
-    const div = document.createElement('div');
-    div.className = SLOT_CLASS[slot.kind];
+    const div = slotNode(slot, showSuperstars);
     if (slot.kind === 'captain') {
-      div.style.gridColumn = '1';
-      div.style.gridRow = '1 / 3';
+      div.style[along] = '1';
+      div.style[across] = '1 / 3';
     } else if (slot.kind === 'role' || slot.kind === 'teamLogo') {
-      trailingCol++;
-      div.style.gridColumn = String(trailingCol);
-      div.style.gridRow = '1 / 3';
-    }
-    const img = document.createElement('img');
-    img.src = slot.imgUrl;
-    img.onerror = () => img.style.display = 'none';
-    div.appendChild(img);
-    if (showSuperstars && slot.isStarred) {
-      const badge = document.createElement('img');
-      badge.src = `${OverlayBase.BASE_URL}/game_assets/msb/gameIcons/superstar.png`;
-      badge.className = slot.kind === 'captain'
-        ? 'superstar-badge superstar-badge--captain'
-        : 'superstar-badge';
-      div.appendChild(badge);
+      trailing++;
+      div.style[along] = String(trailing);
+      div.style[across] = '1 / 3';
     }
     container.appendChild(div);
   }
+  return { blank: null };
+}
+
+/*
+ * FIELD: each of the nine at the spot of the position they are PLAYING
+ * (`character.{i}.position`, P · C · 1B … RF — live, so a mid-game position
+ * change moves them), every icon CHAR_SIZE, the captain included. The bat/glove
+ * takes the bottom-right corner, from the same slots list as every other layout,
+ * so its switch means the same thing here; the team logo is not drawn.
+ *
+ * A character with no position is not placed: guessing a spot would put a player
+ * somewhere they are not, on the one layout whose whole claim is where everyone
+ * is. A board with NO positions at all — a completed game from the Rio API,
+ * whose record carries none — draws nothing, and says why.
+ */
+function renderField(container, { state, sb, team, slots, showSuperstars, boxCaptain }) {
+  const { width, height } = ROSTER_LAYOUTS.field;
+  container.style.display = 'block';
+  container.style.position = 'relative';
+  container.style.padding = '0';
+  container.style.width = width + 'px';
+  container.style.height = height + 'px';
+  container.style.setProperty('--char-size', CHAR_SIZE + 'px');
+  container.style.setProperty('--captain-size', CHAR_SIZE + 'px');
+  container.style.setProperty('--trailing-size', CHAR_SIZE + 'px');
+
+  const place = (slot, spot, isCaptain = false) => {
+    const div = slotNode(slot, showSuperstars);
+    if (isCaptain) div.classList.add('captain-box');
+    div.style.position = 'absolute';
+    div.style.width = div.style.height = CHAR_SIZE + 'px';
+    div.style.left = (spot[0] - CHAR_SIZE / 2) + 'px';
+    div.style.top = (spot[1] - CHAR_SIZE / 2) + 'px';
+    container.appendChild(div);
+  };
+
+  // Straight off the roster SLOT (`character.{i}`), not matched back by name:
+  // the position is a fact about a slot, and a name lookup would lose one of
+  // two identical characters.
+  let placed = 0, named = 0;
+  const g = OverlayBase.deepGet;
+  const capIdx = Number(g(state, `score.${sb}.player.${team}.rio_captainIndex`, -1));
+  for (let i = 0; i < 9; i++) {
+    const ch = g(state, `score.${sb}.player.${team}.character.${i}`, null) || {};
+    if (!ch.name) continue;
+    named++;
+    const spot = FIELD_SPOTS[ch.position];
+    if (!spot) continue;
+    place({ kind: 'char', name: ch.name, imgUrl: RioData.charIconUrl(ch.name), isStarred: !!ch.is_starred },
+      spot, boxCaptain && i === capIdx);
+    placed++;
+  }
+  if (!placed) {
+    return {
+      blank: named
+        ? 'No fielding positions for this game — a completed game from the Rio API does not record them. Use the Grid, Row or Column layout for it.'
+        : null,
+    };
+  }
+  // The bat/glove only; the team logo is not part of the field (FIELD_SPOTS).
+  for (const slot of slots) if (slot.kind === 'role') place(slot, FIELD_SPOTS.role);
+  return { blank: null };
+}
+
+// One slot's cell: the icon, and its superstar badge when it has one.
+function slotNode(slot, showSuperstars) {
+  const div = document.createElement('div');
+  div.className = SLOT_CLASS[slot.kind];
+  const img = document.createElement('img');
+  img.src = slot.imgUrl;
+  img.onerror = () => img.style.display = 'none';
+  div.appendChild(img);
+  if (showSuperstars && slot.isStarred) {
+    const badge = document.createElement('img');
+    badge.src = `${OverlayBase.BASE_URL}/game_assets/msb/gameIcons/superstar.png`;
+    badge.className = slot.kind === 'captain'
+      ? 'superstar-badge superstar-badge--captain'
+      : 'superstar-badge';
+    div.appendChild(badge);
+  }
+  return div;
 }
 
 /*

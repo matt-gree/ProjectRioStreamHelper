@@ -1,6 +1,6 @@
-<svg viewBox="0 0 380 240" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 380 294" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
   <!--
-    DEFAULT package - Stat CARD (landscape, 380x240): the compact 2x2 stat card
+    DEFAULT package - Stat CARD (landscape, 380x294): the compact 2x2 stat card
     used by the combined Roster + Stats element (rosterstats-mount.js) and by the
     Stat Card container member, both via stats-card-mount.js with
     svgElement:'statscard'. Character icon on the LEFT in a soft well with an
@@ -50,7 +50,22 @@
 
     So all four combinations come from one pair of edges rather than four
     authored layouts, and a card with both captions off is exactly the card that
-    shipped before they existed. (data-h-full / data-h-compact are still honoured
+    shipped before they existed.
+
+    == THE ROSTER IS A THIRD BAND, BELOW THE FOOTER ==========================
+    Optional (the producer's Roster switch), and it owns the bottom edge when it
+    is on: the side's nine in a row at 30 units on a 38 pitch, the captain in
+    an accent ring the mount parks around its slot (the Scoreboard L's roster
+    ring, the same idiom). Authored where it sits UNDER an open footer; with
+    the footer closed the mount lifts the band by data-dy-closed so its rule
+    lands where the footer's would (189.25). card-bg declares the bottom edge
+    for both cases:
+
+      data-roster-open    292  roster under an open footer
+      data-roster-closed  244  roster straight under the stats
+
+    The canvas grew 240 -> 294 to hold it; with the roster off the card ends
+    where it always did and the extra 54 units are transparent. (data-h-full / data-h-compact are still honoured
     for a theme that declares only a footer, which is how slice26's card,
     authored before the header existed, keeps working.)
 
@@ -104,13 +119,14 @@
   <rect data-slot="card-bg" x="2" y="30" width="376" height="208" rx="16"
         data-top-open="2" data-top-closed="30"
         data-bot-open="238" data-bot-closed="206"
+        data-roster-open="292" data-roster-closed="244"
         data-h-full="208" data-h-compact="176"
         style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30);stroke-width:1.5"/>
 
   <g data-slot="content">
     <!-- Header caption: band 2..44.25, caption centred on a 30 baseline -->
     <g data-slot="head-group" opacity="0">
-      <text data-slot="head-text" data-maxw="330" x="190" y="30" text-anchor="middle"
+      <text data-slot="head-text" data-maxw="330" data-x-labelled="20" data-x-bare="20" data-maxr="360" x="190" y="30" text-anchor="middle"
             class="stc-ink" font-size="19" font-weight="700" letter-spacing="0.6"></text>
       <rect x="20" y="44.25" width="340" height="1.5" style="fill:var(--border,#1f1f30)"/>
     </g>
@@ -143,6 +159,22 @@
       <text data-slot="line-label" x="20" y="222" class="stc-lab" font-size="16" font-weight="600"></text>
       <text data-slot="line-text" data-maxw="292" data-x-labelled="68" data-x-bare="20" data-maxr="360"
             x="68" y="222" class="stc-cap" font-size="23" font-weight="700"></text>
+    </g>
+
+    <!-- Roster band: rule on the footer's bottom edge, nine at 30 on a 38 pitch
+         across the 20..360 content width, the captain ringed. -->
+    <g data-slot="roster-group" data-dy-closed="-48" opacity="0">
+      <rect x="20" y="237.25" width="340" height="1.5" style="fill:var(--border,#1f1f30)"/>
+      <rect data-slot="roster-cap-ring" data-pad="3" x="20" y="247" width="36" height="36" rx="8" fill="none" style="stroke:var(--accent,#e60012);stroke-width:2" opacity="0"/>
+      <image data-slot="roster-char-0" x="23" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-1" x="61" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-2" x="99" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-3" x="137" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-4" x="175" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-5" x="213" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-6" x="251" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-7" x="289" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-8" x="327" y="250" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
     </g>
   </g>
 </svg>

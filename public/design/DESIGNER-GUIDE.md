@@ -67,7 +67,7 @@ don't):
 |---|---|
 | Scoreboard (s / l) | 388×156 · 800×460 |
 | Stat card | 452×118 |
-| Container stat card | 380×240 |
+| Container stat card | 380×294 |
 | Results ticker | 1920×80 |
 | Bands (commentary · player plates · lower third · matchup) | 1920×240 · 240 · 320 · 480 |
 | Vertical scorecard | 496×766 |

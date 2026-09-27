@@ -1,6 +1,6 @@
-<svg viewBox="0 0 380 240" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+<svg viewBox="0 0 380 294" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
   <!--
-    CLASSIC package - Stat CARD (landscape, 380x240): the default package's 2x2
+    CLASSIC package - Stat CARD (landscape, 380x294): the default package's 2x2
     card geometry, painted with the user's Design-tab CSS variables instead of
     the Rio brand palette. data-design-vars="app" opts in, so the mount runs
     applyDesignSettings and accent / card background / text / border / shadow
@@ -108,12 +108,13 @@
   <rect data-slot="card-bg" x="8" y="46" width="364" height="186" rx="12"
         data-top-open="8" data-top-closed="46"
         data-bot-open="232" data-bot-closed="194"
+        data-roster-open="286" data-roster-closed="244"
         style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
 
   <g data-slot="content">
     <!-- Header caption: band 8..44.25, caption centred on a 30 baseline -->
     <g data-slot="head-group" opacity="0">
-      <text data-slot="head-text" data-maxw="330" x="190" y="30" text-anchor="middle"
+      <text data-slot="head-text" data-maxw="330" data-x-labelled="20" data-x-bare="20" data-maxr="360" x="190" y="30" text-anchor="middle"
             class="cstc-head" font-size="19" font-weight="700" letter-spacing="0.6"></text>
       <rect x="20" y="44.25" width="340" height="1.5" style="fill:rgba(255,255,255,0.12)"/>
     </g>
@@ -156,6 +157,25 @@
       <text data-slot="line-label" x="20" y="219" class="cstc-sub" font-size="16" font-weight="600"></text>
       <text data-slot="line-text" data-maxw="284" data-x-labelled="76" data-x-bare="20" data-maxr="360"
             x="76" y="219" class="cstc-cap" font-size="23" font-weight="700"></text>
+    </g>
+
+    <!-- Roster band (the producer's Roster switch): the side's nine under the
+         footer, the captain in the accent ring Scoreboard L draws, and the same
+         8 units of bleed as every other open edge - 286 on a 294 canvas. With
+         the footer closed the mount lifts it by data-dy-closed, so its rule
+         lands where the footer's would (189.25). -->
+    <g data-slot="roster-group" data-dy-closed="-42" opacity="0">
+      <rect x="20" y="231.25" width="340" height="1.5" style="fill:rgba(255,255,255,0.12)"/>
+      <rect data-slot="roster-cap-ring" data-pad="3" x="20" y="241" width="36" height="36" rx="7" fill="none" style="stroke:var(--accent, #f59e0b);stroke-width:1.5" opacity="0"/>
+      <image data-slot="roster-char-0" x="23" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-1" x="61" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-2" x="99" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-3" x="137" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-4" x="175" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-5" x="213" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-6" x="251" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-7" x="289" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-8" x="327" y="244" width="30" height="30" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
     </g>
   </g>
 </svg>

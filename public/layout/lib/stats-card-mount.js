@@ -1,7 +1,7 @@
 // stats-card-mount.js — the shared stat-line mount, worn two ways.
 //
 // ONE mount, two elements: the wide Stat Bar (`statsbar`, 452x118) and the 2x2
-// Stat Card (`statscard`, 380x240). Each owns a dedicated ?team= source; the
+// Stat Card (`statscard`, 380x294). Each owns a dedicated ?team= source; the
 // card is ALSO a container member, and both of its paths pass the same pair, so
 // it is one element configured once wherever it is drawn. The caller picks
 // which card by passing `settingsType` + `svgElement`; the defaults below are
@@ -31,14 +31,27 @@
 //   stat-{i}-value / stat-{i}-label (text, i = 0..5; RioData emits 4 today)
 //   line-group(g)      bottom row wrapper (divider + texts), hidden when empty
 //   line-label(text)   "Game" prefix, bound only for a HUD game's line
+//   roster-group(g)    the optional roster band, below the footer. Authored
+//                      under an OPEN footer; data-dy-closed is how far it lifts
+//                      when the footer is closed. card-bg's data-roster-open /
+//                      data-roster-closed are the card's bottom edge with the
+//                      band on under an open / closed footer.
+//   roster-char-{i}(image, i = 0..8) the side's nine
+//   roster-cap-ring(shape) parked around the captain's slot (data-pad)
 //   line-text(text,maxw) the game line itself. A theme that LEFT-ALIGNS it beside
 //                      that label declares data-x-labelled / data-x-bare (its two
 //                      left edges) and data-maxr (its one right bound), and the
 //                      mount picks — see placeLine.
 //
+// Caption alignment: subLineAlign / topLineAlign ('left' | 'center' | 'right')
+// align the header and the bottom line on the card's row, the bottom line
+// taking its "Game" label with it — see captionSpan / captionGroupX in
+// mount-utils.js. UNSET means the theme's own alignment, untouched, so a
+// package that authored a centred line keeps it until the producer picks one.
+//
 // Settings: overlays.{type}.transitionType ('fade' | 'none') gates the batter-
 // change dissolve; subLine / subLineText choose the footer's content and
-// topLine / topLineText the header's. Stat-value changes flash through
+// topLine / topLineText the header's; showRoster adds the roster band. Stat-value changes flash through
 // var(--stat-flash) (falls back to the accent). statValueColor / subtextColor
 // keep working on app-vars themes (classic) via --stat-value-color /
 // --stat-subtext-color.
@@ -51,12 +64,13 @@
 
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
-import { lineTextBox, layoutStatCells } from './mount-utils.js';
+import { lineTextBox, captionSpan, captionGroupX, layoutStatCells } from './mount-utils.js';
 import { styleNs, styleSetting } from './side-styles.js';
 
 const ELEMENT = 'statsbar';
 const DEFAULT_PACKAGE = 'default';
 const MAX_STATS = 6;
+const ALIGNS = new Set(['left', 'center', 'right']);
 
 const FALLBACK_SVG = `
 <svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
@@ -122,6 +136,9 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   let lineLaidOut = false;
 
   let gsap = null;
+  // What each band node was last sent to, per property (see setBands). Keyed
+  // by node, so a theme swap — which rebuilds every slot — starts clean.
+  const tweenTargets = new WeakMap();
   ensureGsap().then(lib => { if (!disposed) gsap = lib; });
 
   const g = OverlayBase.deepGet;
@@ -141,13 +158,14 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   function resolveLine(info, settings) {
     const mode = sideSetting(settings, 'subLine', 'gameLine');
     if (mode === 'off') return { show: false, label: '', text: '' };
+    const align = sideSetting(settings, 'subLineAlign', null);
     if (mode === 'custom') {
       const text = String(sideSetting(settings, 'subLineText', '') || '').trim();
-      return { show: !!text, label: '', text };
+      return { show: !!text, label: '', text, align };
     }
     const text = info.gameLine || info.bottomLabel || '';
     const label = info.gameLine ? info.bottomLabel : '';
-    return { show: !!text, label, text };
+    return { show: !!text, label, text, align };
   }
 
   /*
@@ -164,45 +182,174 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
    */
   function resolveHead(info, settings) {
     const mode = sideSetting(settings, 'topLine', 'off');
+    const align = sideSetting(settings, 'topLineAlign', null);
     if (mode === 'custom') {
       const text = String(sideSetting(settings, 'topLineText', '') || '').trim();
-      return { show: !!text, text };
+      return { show: !!text, text, align };
     }
     if (mode === 'auto') {
       const name = String(info.gameMode || '').trim();
-      return { show: !!name, text: name ? `${name} Stats` : '' };
+      return { show: !!name, text: name ? `${name} Stats` : '', align };
     }
     return { show: false, text: '' };
   }
 
+  /*
+   * Resolve the ROSTER band: the side's nine from the board, the captain by
+   * INDEX (rio_captainIndex, never a guess at slot 0). Off unless the producer
+   * turned it on, and off on a theme that draws no band (no roster-open /
+   * roster-closed on card-bg, so the card has nowhere to put it). Two or more
+   * characters, like the Scoreboard L's band: a completed record with no roster
+   * still has its captain, and one icon is not a roster.
+   */
+  function resolveRoster(state, settings) {
+    const off = { show: false, names: [], capIdx: null };
+    if (!OverlayBase.settingOn(sideSetting(settings, 'showRoster', false), false)) return off;
+    const bg = engine.slots['card-bg'];
+    if (!engine.slots['roster-group'] || !bg ||
+        !Number.isFinite(parseFloat(bg.getAttribute('data-roster-open')))) return off;
+    const names = [];
+    for (let i = 0; i < 9; i++) {
+      names.push(String(g(state, `score.${SB}.player.${TEAM}.character.${i}.name`, '') || ''));
+    }
+    if (names.filter(Boolean).length < 2) return off;
+    const cap = g(state, `score.${SB}.player.${TEAM}.rio_captainIndex`, null);
+    const capIdx = cap == null || cap === '' ? null : Number(cap);
+    return { show: true, names, capIdx: Number.isFinite(capIdx) ? capIdx : null };
+  }
+
+  // The theme's own x / text-anchor / data-maxw for a caption, read once per
+  // node. Alignment rewrites all three, so every later pass has to start from
+  // what the theme authored, not from the previous pass's answer — and an
+  // alignment set back to unset has to be able to put them back.
+  const authored = new WeakMap();
+  function baseOf(el) {
+    let b = authored.get(el);
+    if (!b) {
+      b = {
+        x: parseFloat(el.getAttribute('x')),
+        anchor: el.getAttribute('text-anchor') || 'start',
+        maxw: parseFloat(el.getAttribute('data-maxw')),
+        rawMaxw: el.getAttribute('data-maxw'),
+      };
+      authored.set(el, b);
+    }
+    return b;
+  }
+
+  // Write a caption's geometry, telling the fit when it moved. refitText skips
+  // a slot whose TEXT hasn't changed, so a bound that moved under unchanged
+  // copy has to say so or the line keeps the old fit.
+  //
+  // `x` null leaves the position alone: an aligned line's x is settled AFTER
+  // its fit (settleLineGroup), and resetting it here every frame would read as
+  // a moved bound and refit the line on every HUD frame.
+  function setGeometry(el, x, anchor, maxw) {
+    const curAnchor = el.getAttribute('text-anchor') || 'start';
+    if ((x == null || parseFloat(el.getAttribute('x')) === x) && curAnchor === anchor &&
+        el.getAttribute('data-maxw') === maxw) return;
+    if (x != null) el.setAttribute('x', String(x));
+    el.setAttribute('text-anchor', anchor);
+    if (maxw == null) el.removeAttribute('data-maxw');
+    else el.setAttribute('data-maxw', maxw);
+    engine.invalidateFit(el);
+  }
+
+  function restoreAuthored(el) {
+    const base = baseOf(el);
+    setGeometry(el, base.x, base.anchor, base.rawMaxw);
+  }
+
+  function setX(el, x) {
+    if (el && parseFloat(el.getAttribute('x')) !== x) el.setAttribute('x', String(x));
+  }
+
+  // Place the header caption: the theme's centred line, unless the producer
+  // aligned it — then on the card's row (captionSpan in mount-utils.js).
+  function placeHead(align) {
+    const el = engine.slots['head-text'];
+    if (!el) return;
+    const span = ALIGNS.has(align) ? captionSpan(el, baseOf(el)) : null;
+    if (!span) { restoreAuthored(el); return; }
+    const maxw = String(span.end - span.start);
+    if (align === 'center') setGeometry(el, (span.start + span.end) / 2, 'middle', maxw);
+    else if (align === 'right') setGeometry(el, span.end, 'end', maxw);
+    else setGeometry(el, span.start, 'start', maxw);
+  }
+
+  // A producer-aligned bottom line, waiting on its fit: the line's width is
+  // only known once refitText has sized it, so the group is placed after it
+  // (settleLineGroup). Null while the theme's own alignment stands.
+  let lineGroup = null;
+
   // Place the bottom line, which is left-aligned beside its label on themes
   // that say where — see lineTextBox in mount-utils.js for why the label being
   // conditional is what makes this two authored positions rather than one.
-  function placeLine(hasLabel) {
+  //
+  // A producer's alignment moves the label WITH the line: "Game" names the line
+  // beside it, so the two are one group, aligned on the card's row
+  // (captionGroupX). Aligning the line alone centred it in whatever the label
+  // left over, which read as off-centre by half the label.
+  function placeLine(hasLabel, align) {
     const el = engine.slots['line-text'];
     const label = engine.slots['line-label'];
-    // The label's real end, in whatever face the producer set it in — the
+    if (!el) return;
+    baseOf(el);                             // read before anything moves it
+    if (label) baseOf(label);
+    // The label's real width, in whatever face the producer set it in — the
     // authored `data-x-labelled` assumes the theme's own. Half the label's
     // type size is the gap, which is roughly what the shipped themes leave.
-    let labelEnd = null, gap = 0;
+    let labelW = 0, gap = 0;
     if (hasLabel && label && label.getComputedTextLength) {
       try {
         const len = label.getComputedTextLength();
         if (len > 0) {
-          labelEnd = parseFloat(label.getAttribute('x')) + len;
+          labelW = len;
           gap = 0.5 * (parseFloat(label.getAttribute('font-size')) || 0);
         }
       } catch { /* detached or unrendered: keep the authored edge */ }
     }
+
+    const span = ALIGNS.has(align) ? captionSpan(el, baseOf(el)) : null;
+    if (span) {
+      // The fit bound is the row minus the label, whatever the alignment — so
+      // a line fits the same size left, centred or right.
+      // The label-to-line spacing is the theme's where it says so
+      // (data-x-labelled), never less than the measured label plus its gap —
+      // so an explicit Left draws exactly what the theme's own layout does.
+      const authoredLead = parseFloat(el.getAttribute('data-x-labelled')) - span.start;
+      const lead = labelW > 0
+        ? Math.max(labelW + gap, Number.isFinite(authoredLead) ? authoredLead : 0) : 0;
+      setGeometry(el, null, 'start', String(span.end - span.start - lead));
+      lineGroup = { span, align, labelW: labelW > 0 ? lead - gap : 0, gap };
+      return;
+    }
+
+    lineGroup = null;
+    if (label) setX(label, baseOf(label).x);
+    const labelEnd = labelW > 0 ? baseOf(label).x + labelW : null;
     const box = lineTextBox(el, hasLabel, labelEnd, gap);
-    if (!box) return;                       // centred theme: leave it alone
-    if (parseFloat(el.getAttribute('x')) === box.x &&
-        parseFloat(el.getAttribute('data-maxw')) === box.maxw) return;
-    el.setAttribute('x', String(box.x));
-    el.setAttribute('data-maxw', String(box.maxw));
-    // refitText skips a slot whose TEXT hasn't changed, so a bound that moved
-    // under unchanged copy has to say so or the line keeps the old fit.
-    engine.invalidateFit(el);
+    if (box) setGeometry(el, box.x, 'start', String(box.maxw));
+    else restoreAuthored(el);               // centred theme: its own geometry
+  }
+
+  // Place an aligned label + line group now that the line has its fitted size.
+  function settleLineGroup() {
+    if (!lineGroup) return;
+    const el = engine.slots['line-text'];
+    if (!el) return;
+    let textW = 0;
+    try { textW = el.getComputedTextLength ? el.getComputedTextLength() : 0; }
+    catch { /* unrendered: place it as if empty */ }
+    const { span, align, labelW, gap } = lineGroup;
+    const { labelX, textX } = captionGroupX(span, align, labelW, gap, textW);
+    setX(engine.slots['line-label'], labelX);
+    setX(el, textX);
+  }
+
+  function refit() {
+    engine.refitText();
+    settleLineGroup();
   }
 
   function flash(el) {
@@ -230,7 +377,11 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   // how slice26's card keeps behaving exactly as it did. A theme that declares
   // neither keeps its authored geometry — the mount can't invent where a card's
   // content stops.
-  function cardEdges(bg, showHead, showLine) {
+  //
+  // The roster band, where a theme draws one, owns the bottom edge whenever it
+  // is on: data-roster-open / data-roster-closed are that edge under an open
+  // and a closed footer. A theme without the pair never shows the band.
+  function cardEdges(bg, showHead, showLine, showRoster) {
     if (!bg) return null;
     const num = (name) => parseFloat(bg.getAttribute(name));
     const topOpen = num('data-top-open'), topClosed = num('data-top-closed');
@@ -238,7 +389,12 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     if (Number.isFinite(topOpen) && Number.isFinite(topClosed) &&
         Number.isFinite(botOpen) && Number.isFinite(botClosed)) {
       const y = showHead ? topOpen : topClosed;
-      return { y, height: (showLine ? botOpen : botClosed) - y };
+      let bottom = showLine ? botOpen : botClosed;
+      if (showRoster) {
+        const r = num(showLine ? 'data-roster-open' : 'data-roster-closed');
+        if (Number.isFinite(r)) bottom = r;
+      }
+      return { y, height: bottom - y };
     }
     const hFull = num('data-h-full'), hCompact = num('data-h-compact');
     if (Number.isFinite(hFull) && Number.isFinite(hCompact)) {
@@ -254,13 +410,21 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
   // fades faster than the edge travels (and, on the way in, only after the edge
   // has cleared it) so copy never appears outside the card. First paint and
   // theme swaps snap: `lineLaidOut` is the scorecard's `laidOut`.
-  function setBands(showHead, showLine) {
+  //
+  // The roster band also MOVES: it is authored under an open footer and lifts
+  // by data-dy-closed when the footer closes, so it always sits directly under
+  // whatever is above it. Its offset rides the same edge tween.
+  function setBands(showHead, showLine, showRoster) {
     const bg = engine.slots['card-bg'];
-    const edges = cardEdges(bg, showHead, showLine);
+    const edges = cardEdges(bg, showHead, showLine, showRoster);
+    const roster = engine.slots['roster-group'];
     const bands = [
       [engine.slots['head-group'], showHead],
       [engine.slots['line-group'], showLine],
+      [roster, showRoster],
     ];
+    const dy = showLine ? 0 : (parseFloat(roster?.getAttribute('data-dy-closed')) || 0);
+    const rosterAt = `translate(0,${dy})`;
 
     // No gsap yet (it loads async) or nothing on screen to move: place it.
     if (!gsap || !lineLaidOut) {
@@ -273,18 +437,38 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
         if (edges.y != null) bg.setAttribute('y', edges.y);
         bg.setAttribute('height', edges.height);
       }
+      if (roster) roster.setAttribute('transform', rosterAt);
+      for (const [group, show] of bands) if (group) tweenTargets.set(group, { opacity: show });
+      if (roster) tweenTargets.set(roster, { ...tweenTargets.get(roster), attr: rosterAt });
+      if (bg && edges) tweenTargets.set(bg, { attr: `${edges.y}:${edges.height}` });
       lineLaidOut = true;
       return;
     }
 
+    // Tween only what CHANGED, and a new tween KILLS the old one's claim on
+    // the same property — including one still waiting out its delay. This runs
+    // on every update (every HUD frame), and a show fade carries a delay:
+    // re-issued blindly, a show queued by one update started AFTER the hide
+    // the next update issued, and won — two quick setting changes left a band
+    // drawn outside a card that had already closed over it. Keyed per node AND
+    // property, because the roster band tweens both its offset and its fade.
+    const tween = (el, prop, key, vars) => {
+      if (!el) return;
+      const seen = tweenTargets.get(el) || {};
+      if (seen[prop] === key) return;
+      tweenTargets.set(el, { ...seen, [prop]: key });
+      gsap.killTweensOf(el, prop);
+      gsap.to(el, vars);
+    };
+
+    tween(roster, 'attr', rosterAt, { attr: { transform: rosterAt }, duration: 0.45, ease: 'power3.out' });
     if (bg && edges) {
       const attr = { height: edges.height };
       if (edges.y != null) attr.y = edges.y;
-      gsap.to(bg, { attr, duration: 0.45, ease: 'power3.out' });
+      tween(bg, 'attr', `${edges.y}:${edges.height}`, { attr, duration: 0.45, ease: 'power3.out' });
     }
     for (const [group, show] of bands) {
-      if (!group) continue;
-      gsap.to(group, {
+      tween(group, 'opacity', show, {
         opacity: show ? 1 : 0,
         duration: show ? 0.28 : 0.18,
         delay: show ? 0.14 : 0,
@@ -293,7 +477,28 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     }
   }
 
-  function bind(info, { flashChanges, line, head }) {
+  // The side's nine into the roster band, the captain ring parked around the
+  // captain's slot — the Scoreboard L's bindRoster, for one side.
+  function bindRoster(roster) {
+    let capEl = null;
+    for (let i = 0; i < 9; i++) {
+      const name = roster.names[i] || '';
+      engine.setImage(`roster-char-${i}`, name && window.RioData ? RioData.charIconUrl(name) : '');
+      if (name && i === roster.capIdx) capEl = engine.slots[`roster-char-${i}`];
+    }
+    const ring = engine.slots['roster-cap-ring'];
+    if (!ring) return;
+    if (capEl) {
+      const pad = parseFloat(ring.getAttribute('data-pad')) || 3;
+      ring.setAttribute('x', (parseFloat(capEl.getAttribute('x')) || 0) - pad);
+      ring.setAttribute('y', (parseFloat(capEl.getAttribute('y')) || 0) - pad);
+      ring.setAttribute('opacity', '1');
+    } else {
+      ring.setAttribute('opacity', '0');
+    }
+  }
+
+  function bind(info, { flashChanges, line, head, roster }) {
     engine.setImage('char-icon', info.charIconUrl || '');
 
     for (let i = 0; i < MAX_STATS; i++) {
@@ -320,12 +525,16 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     if (line.show) {
       engine.setText('line-label', line.label);
       engine.setText('line-text', line.text);
-      placeLine(!!line.label);
+      placeLine(!!line.label, line.align);
     }
-    if (head.show) engine.setText('head-text', head.text, { optional: true });
-    setBands(head.show, line.show);
+    if (head.show) {
+      engine.setText('head-text', head.text, { optional: true });
+      placeHead(head.align);
+    }
+    if (roster.show) bindRoster(roster);
+    setBands(head.show, line.show, roster.show);
 
-    engine.refitText();
+    refit();
   }
 
   async function update(state, settings) {
@@ -368,6 +577,7 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
 
     const line = resolveLine(info, settings);
     const head = resolveHead(info, settings);
+    const roster = resolveRoster(state, settings);
 
     const content = engine.slots['content'];
     if (charChanged && wasShowing && useFade(settings) && content) {
@@ -378,17 +588,17 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
       content.style.opacity = '0';
       fadeTimer = setTimeout(() => {
         if (disposed || content !== engine.slots['content']) return;
-        bind(info, { flashChanges: false, line, head });
+        bind(info, { flashChanges: false, line, head, roster });
         content.style.transition = 'opacity 0.25s ease';
         content.style.opacity = '1';
       }, 200);
     } else {
       if (content) { content.style.transition = ''; content.style.opacity = '1'; }
-      bind(info, { flashChanges: !charChanged && useFade(settings), line, head });
+      bind(info, { flashChanges: !charChanged && useFade(settings), line, head, roster });
     }
 
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
-      if (!disposed) engine.refitText();
+      if (!disposed) refit();
     });
   }
 
@@ -396,7 +606,7 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     disposed = true;
     if (fadeTimer) clearTimeout(fadeTimer);
     if (gsap) {
-      for (const slot of ['line-group', 'card-bg']) {
+      for (const slot of ['line-group', 'card-bg', 'roster-group']) {
         if (engine.slots[slot]) gsap.killTweensOf(engine.slots[slot]);
       }
     }

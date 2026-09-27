@@ -17,7 +17,7 @@
   Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
   (/design/{package}/statscard.svg), the binding/transitions in
   stats-card-mount.js, the data resolution in RioData.getStatsLine. Drop into
-  OBS as a 380x240 browser source — the canvas `body` declares below, and the
+  OBS as a 380x294 browser source — the canvas `body` declares below, and the
   one `theme_contracts.CONTRACTS['statscard']` pins.
 -->
 <head>
@@ -27,11 +27,11 @@
        theme opts into them (e.g. Classic). `topLine`/`topLineText` are the pair
        the bar does NOT declare: the header caption is a band in statscard.svg,
        and statsbar.svg has no room for one. -->
-  <meta name="overlay-settings" content="transitionType, subLine, subLineText, topLine, topLineText, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow" />
+  <meta name="overlay-settings" content="transitionType, subLine, subLineText, subLineAlign, topLine, topLineText, topLineAlign, showRoster, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow" />
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    body { width: 380px; height: 240px; }
+    body { width: 380px; height: 294px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>
@@ -49,7 +49,7 @@
     const TEAM = parseInt(params.get('team')) || 1;
 
     document.body.dataset.refW = 380;
-    document.body.dataset.refH = 240;
+    document.body.dataset.refH = 294;
 
     const host = document.getElementById('host');
     // settingsType + svgElement are the two the container member passes too —

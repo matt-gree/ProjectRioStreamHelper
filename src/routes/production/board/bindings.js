@@ -4,6 +4,7 @@ import { useObsStore } from '../../../context/obs';
 import { stageOrRun, usePending } from '../../../context/staging';
 import { sizeOptionFor } from '../elements';
 import { variantParams } from '../sources/instances';
+import { ROSTER_LAYOUTS, rosterLayout } from '../../../../public/layout/lib/roster-layouts.js';
 
 /*
  * What is left of the OBS binding layer: creating a source's URL, toggling one,
@@ -47,10 +48,17 @@ export function instanceUrl(element, board, variant = '') {
  * that has its own canvas. The scoreboard's three sizes are three different
  * browser sources (388×156 / 800×460), so a strip offering to copy
  * "Scoreboard — Small" has to quote Small's dimensions, not the element's
- * default. Every other element answers with exactly what it did before.
+ * default. A Roster in a Row or Column layout is the same case on another axis
+ * (`?layout=`, roster-layouts.js). Every other element answers with exactly
+ * what it did before.
  */
 export function placementDims(placement) {
     const el = placement?.element;
+    const layout = variantParams(placement?.variant).find(([p]) => p === 'layout')?.[1];
+    if (layout) {
+        const { width, height } = ROSTER_LAYOUTS[rosterLayout(layout)];
+        return { width, height };
+    }
     const opt = sizeOptionFor(el, placement?.variant);
     return { width: opt?.width ?? el?.width, height: opt?.height ?? el?.height };
 }

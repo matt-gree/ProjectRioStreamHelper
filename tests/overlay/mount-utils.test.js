@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCardRail, boxRowSides, linescoreColumns, prettyStadium, layoutBox, lineTextBox, layoutStatCells, pinBesideText, applyTextPins } from '../../public/layout/lib/mount-utils.js';
+import { applyCardRail, boxRowSides, linescoreColumns, prettyStadium, layoutBox, lineTextBox, captionSpan, captionGroupX, layoutStatCells, pinBesideText, applyTextPins } from '../../public/layout/lib/mount-utils.js';
 
 /*
  * Two rules a scoreboard gets wrong SILENTLY — nothing throws, nothing logs, and
@@ -288,6 +288,57 @@ describe('lineTextBox', () => {
     it('declines a bound that is left of the start, and a missing slot', () => {
         expect(lineTextBox(lineEl({ ...BAR, 'data-maxr': '40' }), true)).toBeNull();
         expect(lineTextBox(null, true)).toBeNull();
+    });
+});
+
+/*
+ * captionSpan / captionGroupX — the producer's left / center / right for a stat
+ * card's caption line. The row is the CARD's, and the "Game" label travels with
+ * the line it names: centred, the pair is centred on the card, not the line in
+ * what the label left over (which read as off-centre by half the label).
+ */
+describe('captionSpan', () => {
+    it('is the bare row on a theme that declares the trio', () => {
+        expect(captionSpan(lineEl(BAR), { x: 56, anchor: 'start', maxw: 386 })).toEqual({ start: 12, end: 442 });
+    });
+
+    it('recovers the row from authored geometry on a theme without it', () => {
+        const el = lineEl({ 'data-maxw': '330' });
+        expect(captionSpan(el, { x: 190, anchor: 'middle', maxw: 330 })).toEqual({ start: 25, end: 355 });
+        expect(captionSpan(el, { x: 400, anchor: 'end', maxw: 100 })).toEqual({ start: 300, end: 400 });
+        expect(captionSpan(el, { x: 10, anchor: 'start', maxw: 100 })).toEqual({ start: 10, end: 110 });
+    });
+
+    it('declines a theme that gives no row at all', () => {
+        expect(captionSpan(lineEl({}), { x: 190, anchor: 'middle', maxw: NaN })).toBeNull();
+        expect(captionSpan(null, { x: 0, maxw: 10 })).toBeNull();
+    });
+});
+
+describe('captionGroupX', () => {
+    const span = { start: 12, end: 442 };            // 430 wide, centre 227
+
+    it('centres label + gap + line as one group on the card', () => {
+        // 40 label + 7 gap + 100 line = 147 → starts at 227 - 73.5.
+        expect(captionGroupX(span, 'center', 40, 7, 100)).toEqual({ labelX: 153.5, textX: 200.5 });
+    });
+
+    it('right-aligns the group, label leading', () => {
+        expect(captionGroupX(span, 'right', 40, 7, 100)).toEqual({ labelX: 295, textX: 342 });
+    });
+
+    it('left-aligns at the row start', () => {
+        expect(captionGroupX(span, 'left', 40, 7, 100)).toEqual({ labelX: 12, textX: 59 });
+    });
+
+    it('is the line alone when there is no label', () => {
+        expect(captionGroupX(span, 'center', 0, 7, 100)).toEqual({ labelX: 177, textX: 177 });
+    });
+
+    /* A line that fitted to its bound fills the row, so no alignment can push
+     * the group past the row's start. */
+    it('never starts left of the row', () => {
+        expect(captionGroupX(span, 'right', 40, 7, 500)).toEqual({ labelX: 12, textX: 59 });
     });
 });
 

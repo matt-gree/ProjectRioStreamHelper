@@ -145,7 +145,7 @@ export const MEMBERS = {
     // different pictures at different sizes; a container holds whichever one its
     // look calls for.
     statscard: {
-        size: [380, 240],
+        size: [380, 294],
         // Binds its side at MOUNT time (mountStatsCard closes over sb/team and
         // resolves the line itself), so it takes `sel` here and declares an
         // identity below — a scope change is a new layer, not an update.

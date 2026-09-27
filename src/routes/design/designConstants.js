@@ -17,6 +17,9 @@
 // two cards are configured independently. BOTH now own a dedicated ?team=
 // source; the card is additionally a container member, and its two paths share
 // one namespace, so it is one element wherever it is drawn.
+// A caption's alignment, shared by the stat cards' two caption lines.
+const ALIGN_OPTIONS = [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }];
+
 const STAT_CARD_SETTINGS = [
     { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
     { key: 'subLine', type: 'select', label: 'Bottom Line', description: 'What the bottom row shows: the live game line, your own text, or nothing (the card shrinks)', options: [{ value: 'gameLine', label: 'Game Line', railLabel: 'Game' }, { value: 'custom', label: 'Custom Text', railLabel: 'Custom' }, { value: 'off', label: 'Off' }], defaultValue: 'gameLine' },
@@ -24,6 +27,9 @@ const STAT_CARD_SETTINGS = [
     // it holds reaches the card, so it is INERT rather than merely inactive —
     // which is the bar for hiding a control instead of disabling it.
     { key: 'subLineText', type: 'text', showWhen: { key: 'subLine', is: 'custom' }, label: 'Custom Bottom Text', description: 'Shown when Bottom Line is set to Custom Text', placeholder: 'e.g. Season Stats' },
+    // Where the caption sits inside the row the theme gives it (alignedTextBox in
+    // mount-utils.js). `isNot: 'off'`: every mode but Off draws a line to align.
+    { key: 'subLineAlign', type: 'select', showWhen: { key: 'subLine', isNot: 'off' }, label: 'Bottom Align', description: 'Which edge the bottom line sits on. A centred or right-aligned game line still clears its "Game" label.', options: ALIGN_OPTIONS, defaultValue: 'left' },
     // appPalette: reaches the card through --stat-value-color / --stat-subtext-color,
     // which a full-art theme's mount CLEARS along with the rest of the app palette
     // (clearDesignSettings in overlay-base.js). Dead under such a theme, so the UI
@@ -44,6 +50,7 @@ const STAT_CARD_SETTINGS = [
 const TOP_LINE_SETTINGS = [
     { key: 'topLine', type: 'select', label: 'Top Line', description: 'A caption above the stats: your own text, the game mode ("Stars On Showdown XXI Stats"), or nothing (the card shrinks)', options: [{ value: 'off', label: 'Off' }, { value: 'custom', label: 'Custom Text' }, { value: 'auto', label: 'Game Mode' }], defaultValue: 'off' },
     { key: 'topLineText', type: 'text', showWhen: { key: 'topLine', is: 'custom' }, label: 'Custom Top Text', description: 'Shown when Top Line is set to Custom Text', placeholder: 'e.g. Tournament Stats' },
+    { key: 'topLineAlign', type: 'select', showWhen: { key: 'topLine', isNot: 'off' }, label: 'Top Align', description: 'Which edge the top line sits on.', options: ALIGN_OPTIONS, defaultValue: 'center' },
 ];
 
 export const LAYOUT_SETTINGS = {
@@ -154,6 +161,18 @@ export const LAYOUT_SETTINGS = {
             description: 'Scale the character art up crisp and blocky, matching the scoreboard and stat cards. Off blends it smooth.',
             defaultValue: false,
         },
+        /*
+         * `layouts`: the Roster sources this setting reaches — the layout is the
+         * SOURCE's (`?layout=`, public/layout/lib/roster-layouts.js), so it is
+         * gated the way `sizes` gates a scoreboard setting. Both grids tell the
+         * captain apart by SIZE; the line and field layouts draw everyone the
+         * same size, and this box is what marks the captain there.
+         */
+        {
+            key: 'captainBox', type: 'switch', label: 'Captain Box', layouts: ['row', 'column', 'field'],
+            description: 'An accent box around the captain. Only the Row, Column and Field layouts draw it — in the grids the captain is the big one.',
+            defaultValue: true,
+        },
     ],
     // Stat Bar — the wide per-side stat card as its OWN source
     // (?scoreboard=N&team=T), drawing whoever that side has on the field. One
@@ -164,7 +183,12 @@ export const LAYOUT_SETTINGS = {
     // namespace, so the two cards are configured independently; the Production
     // stage reaches these from the card's own rack row or from its row nested
     // under a container, which are the same panel writing the same keys.
-    statscard: [...STAT_CARD_SETTINGS, ...TOP_LINE_SETTINGS],
+    // + the ROSTER band only this card draws (below the footer; the card is
+    // 380x294 to hold it).
+    statscard: [
+        ...STAT_CARD_SETTINGS, ...TOP_LINE_SETTINGS,
+        { key: 'showRoster', type: 'switch', label: 'Roster', description: "The side's nine in a row under the card, the captain boxed. Off drops the band (the card shrinks).", defaultValue: false },
+    ],
     /*
      * Player Name — one side's name as its own source.
      *
@@ -538,6 +562,16 @@ export function settingReachesSize(def, type, size) {
     return def.sizes.includes(sizeCodeFor(type, size));
 }
 
+/*
+ * The same gate on the Roster's LAYOUT (`?layout=`, absent = grid). A setting
+ * declaring `layouts` is dropped from a source drawing any other — the captain
+ * box on a grid, where nothing would move.
+ */
+export function settingReachesLayout(def, layout) {
+    if (!def?.layouts) return true;
+    return def.layouts.includes(layout || 'grid');
+}
+
 // ── Which layouts can honour a PER-ELEMENT override ──
 // The settings types whose mount calls OverlayBase.applyDesignSettings, which is
 // the only code that ever reads `overlays.{type}.{key}` on top of the global
@@ -563,7 +597,7 @@ export const OVERRIDE_CAPABLE_TYPES = [
     'commentary', 'lowerthird', 'matchup', 'playerplates', 'schedule', 'ticker',
     // Unconditional — no theme SVG exists for these, so the palette is the only
     // thing that styles them under every package.
-    'eventheader', 'playername',
+    'eventheader', 'playername', 'roster',
 ];
 
 // ── Global design keys eligible for per-layout override ──

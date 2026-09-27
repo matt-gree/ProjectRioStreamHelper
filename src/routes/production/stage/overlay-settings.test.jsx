@@ -198,6 +198,16 @@ describe('groupDefs', () => {
 describe('ElementStyleSettings — a detail follows its master', () => {
     const card = () => render(<ElementStyleSettings type="statscard" label="Stat Card" />);
 
+    /* The roster band is drawn only by `statscard.svg`; the wide bar has no
+     * band to put it in, so it is never offered there. */
+    it('offers the roster band on the Stat Card and not on the Stat Bar', () => {
+        card();
+        expect(screen.getByText('Roster')).toBeInTheDocument();
+        cleanup();
+        render(<ElementStyleSettings type="statsbar" label="Stat Bar" />);
+        expect(screen.queryByText('Roster')).not.toBeInTheDocument();
+    });
+
     it('hides the custom text while another mode owns the line', () => {
         card();
         expect(screen.getByText('Bottom Line')).toBeInTheDocument();   // the master
@@ -218,6 +228,22 @@ describe('ElementStyleSettings — a detail follows its master', () => {
      * mode, not after Go Live — otherwise choosing "Custom Text" looks like it
      * did nothing.
      */
+    /* `isNot`: alignment has a job in every mode but Off — so the default
+     * game line shows it, and turning the line off takes it away. */
+    it('offers a caption alignment until its line is switched off', () => {
+        card();
+        expect(screen.getByText('Bottom Align')).toBeInTheDocument();
+        // The top line defaults to Off, so there is nothing to align yet.
+        expect(screen.queryByText('Top Align')).not.toBeInTheDocument();
+    });
+
+    it('drops the alignment when its line is off, and offers it when it is on', () => {
+        useSettingsStore.setState({ overlays: { statscard: { subLine: 'off', topLine: 'auto' } }, production: {} });
+        card();
+        expect(screen.queryByText('Bottom Align')).not.toBeInTheDocument();
+        expect(screen.getByText('Top Align')).toBeInTheDocument();
+    });
+
     it('reveals it from a staged master, before the change goes live', () => {
         useStagingStore.setState({
             pending: { 'settings:overlays.statscard.subLine': { value: 'custom' } },

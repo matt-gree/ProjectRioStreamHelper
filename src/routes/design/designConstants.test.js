@@ -9,6 +9,7 @@ import {
     DEFAULT_PORT_COLORS,
     OVERRIDE_CAPABLE_TYPES,
     THEME_ELEMENT,
+    settingReachesLayout,
     themeElementFor,
     overrideReaches,
     settingOn,
@@ -167,9 +168,9 @@ describe('OVERRIDE_CAPABLE_TYPES', () => {
      * ABSENT type means "no theme SVG draws this", which is what makes the
      * Event Header and Player Name the two elements the palette always reaches.
      */
-    it('gives every themed type a theme stem, and the two unthemed ones none', () => {
+    it('gives every themed type a theme stem, and the unthemed ones none', () => {
         const unthemed = OVERRIDE_CAPABLE_TYPES.filter(t => !THEME_ELEMENT[t]);
-        expect(unthemed.sort()).toEqual(['eventheader', 'playername']);
+        expect(unthemed.sort()).toEqual(['eventheader', 'playername', 'roster']);
     });
 
     it('resolves the scoreboard’s stem from the source’s size', () => {
@@ -508,5 +509,20 @@ describe('overrideReaches', () => {
             .toContain("readSetting(SETTINGS_TYPE, 'showLogo'");
         expect(overrideReaches('showLogo', 'scoreboard')).toBe(true);
         expect(overrideReaches('showLogo', 'ticker')).toBe(false);
+    });
+});
+
+/*
+ * The Roster's captain box reaches the layouts that draw everyone one size, and
+ * no other — in either grid the captain is already the big one.
+ */
+describe('settingReachesLayout', () => {
+    const box = LAYOUT_SETTINGS.roster.find(d => d.key === 'captainBox');
+    it('offers the captain box on the line and field layouts only', () => {
+        for (const l of ['row', 'column', 'field']) expect(settingReachesLayout(box, l)).toBe(true);
+        for (const l of ['grid', 'vgrid', undefined]) expect(settingReachesLayout(box, l)).toBe(false);
+    });
+    it('passes a setting that names no layouts everywhere', () => {
+        expect(settingReachesLayout({ key: 'x' }, 'field')).toBe(true);
     });
 });

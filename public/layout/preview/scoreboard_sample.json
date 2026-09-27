@@ -85,39 +85,48 @@
           "character": {
             "0": {
               "name": "Paratroopa(G)",
-              "is_starred": false
+              "is_starred": false,
+              "position": "CF"
             },
             "1": {
               "name": "Bowser",
-              "is_starred": false
+              "is_starred": false,
+              "position": "1B"
             },
             "2": {
               "name": "Yoshi",
-              "is_starred": false
+              "is_starred": false,
+              "position": "LF"
             },
             "3": {
               "name": "Birdo",
-              "is_starred": false
+              "is_starred": false,
+              "position": "P"
             },
             "4": {
               "name": "Petey",
-              "is_starred": false
+              "is_starred": false,
+              "position": "C"
             },
             "5": {
               "name": "Magikoopa(B)",
-              "is_starred": false
+              "is_starred": false,
+              "position": "SS"
             },
             "6": {
               "name": "Pianta(R)",
-              "is_starred": false
+              "is_starred": false,
+              "position": "3B"
             },
             "7": {
               "name": "Luigi",
-              "is_starred": false
+              "is_starred": false,
+              "position": "2B"
             },
             "8": {
               "name": "Dixie",
-              "is_starred": false
+              "is_starred": false,
+              "position": "RF"
             }
           },
           "youtube": "Baltor And Buddies",
@@ -155,39 +164,48 @@
           "character": {
             "0": {
               "name": "Toadsworth",
-              "is_starred": false
+              "is_starred": false,
+              "position": "C"
             },
             "1": {
               "name": "DK",
-              "is_starred": false
+              "is_starred": false,
+              "position": "1B"
             },
             "2": {
               "name": "Waluigi",
-              "is_starred": false
+              "is_starred": false,
+              "position": "2B"
             },
             "3": {
               "name": "Bro(H)",
-              "is_starred": false
+              "is_starred": false,
+              "position": "3B"
             },
             "4": {
               "name": "King Boo",
-              "is_starred": false
+              "is_starred": false,
+              "position": "SS"
             },
             "5": {
               "name": "Boo",
-              "is_starred": false
+              "is_starred": false,
+              "position": "P"
             },
             "6": {
               "name": "Wario",
-              "is_starred": false
+              "is_starred": false,
+              "position": "LF"
             },
             "7": {
               "name": "Mario",
-              "is_starred": false
+              "is_starred": false,
+              "position": "CF"
             },
             "8": {
               "name": "Noki(G)",
-              "is_starred": false
+              "is_starred": false,
+              "position": "RF"
             }
           },
           "youtube": "MattGree",

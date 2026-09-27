@@ -8,7 +8,7 @@ import { settingOn } from '../routes/design/designConstants';
 import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/sourcename';
 import { notifications } from '../lib/notify';
 import {
-    renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, isCropped, stretchOf,
+    renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, reshapePatch, isCropped, stretchOf,
     inputSize, sameInputSize, typeScaleOf,
 } from '../lib/obs-transform';
 
@@ -441,6 +441,41 @@ export const useObsStore = create((set) => ({
         }).filter(Boolean));
 
         return { width: plan.width, height: plan.height, scenes: occurrences.length, url };
+    },
+
+    /*
+     * Give a browser source a new URL AND a new resolution in one write — the
+     * Roster switching layout, whose `?layout=` names a different canvas
+     * (public/layout/lib/roster-layouts.js). One SetInputSettings, so the page
+     * reloads once, at the new size, drawing the new shape: two writes would
+     * put a frame on air of one layout on the other's canvas.
+     *
+     * Every scene drawing the source keeps its SCALE (`reshapePatch`): an
+     * unbounded item needs nothing, a bounded one has its box re-solved so the
+     * new shape is not squeezed into the old one. A crop anywhere refuses,
+     * before the write, for `redrawSourceAtSize`'s reason — it is in source
+     * pixels, and the source is about to be a different picture.
+     */
+    reshapeBrowserSource: async ({ sourceName, url, width, height }) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        const occurrences = await itemsOfSource(sourceName);
+        if (occurrences.some(o => isCropped(o.transform))) {
+            throw new Error('This source is cropped in at least one scene — changing its '
+                + 'shape would move what the crop cuts. Remove the crop in OBS first.');
+        }
+        await obs.call('SetInputSettings', {
+            inputName: sourceName,
+            inputSettings: { url, width, height },
+            overlay: true,
+        });
+        await Promise.all(occurrences.map((o) => {
+            const patch = reshapePatch(o.transform, width, height);
+            if (!patch) return null;
+            return obs.call('SetSceneItemTransform', {
+                sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: patch,
+            }).catch(() => { /* one scene's correction failing must not strand the rest */ });
+        }).filter(Boolean));
+        return { sourceName, scenes: occurrences.length };
     },
 
     // Pull a scene's items into the mirror and keep them live from then on.

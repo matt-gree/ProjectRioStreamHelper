@@ -290,6 +290,50 @@ export function lineTextBox(el, hasLabel, labelEnd = null, gap = 0) {
   return { x, maxw: right - x };
 }
 
+// A caption line aligned left / center / right by the PRODUCER rather than by
+// the theme (the stat cards' `subLineAlign` / `topLineAlign`).
+//
+// The alignment is on the CARD's row, not on whatever is left of it: a theme
+// that declares the lineTextBox trio gives the row as data-x-bare..data-maxr
+// (the bare edge, because the row is the same row with or without a label);
+// any other theme's row is recovered from the AUTHORED x, text-anchor and
+// data-maxw, which between them already say where the line may run. The
+// authored values are passed in (`base`), never read off the node, because the
+// caller rewrites all three and a second pass must not align against the first
+// pass's answer.
+//
+// Returns { start, end }, or null when the theme gives no row at all (no
+// data-maxw), in which case the authored geometry stands.
+export function captionSpan(el, base) {
+  if (!el || !base) return null;
+  const box = lineTextBox(el, false);
+  if (box) return { start: box.x, end: box.x + box.maxw };
+  const { x, anchor, maxw } = base;
+  if (!Number.isFinite(x) || !Number.isFinite(maxw) || maxw <= 0) return null;
+  if (anchor === 'middle') return { start: x - maxw / 2, end: x + maxw / 2 };
+  if (anchor === 'end') return { start: x - maxw, end: x };
+  return { start: x, end: x + maxw };
+}
+
+// Where a label + line GROUP sits in its row. The "Game" label belongs to the
+// line it names, so an aligned line takes its label with it: centred, the two
+// together are centred on the card, rather than the line alone being centred
+// in whatever the label left over (which reads as off-centre by half the
+// label). With no label (`labelW` 0) the group is the line alone.
+//
+// `textW` is the line's MEASURED width after its auto-fit, so this runs after
+// the fit; the fit's own bound is the row minus the label, which never depends
+// on the alignment. Returns the two left edges, both drawn text-anchor start.
+export function captionGroupX(span, align, labelW, gap, textW) {
+  const lead = labelW > 0 ? labelW + gap : 0;
+  const group = lead + Math.max(0, textW);
+  let x = span.start;
+  if (align === 'center') x = span.start + (span.end - span.start - group) / 2;
+  else if (align === 'right') x = span.end - group;
+  x = Math.max(span.start, x);
+  return { labelX: x, textX: x + lead };
+}
+
 // How much of a cell its value may fill before auto-fit bites. The remainder is
 // the gutter, so it scales with the column: a 3-character AB gets a narrower
 // gap than a 5-character AVG, which is what keeps each label glued to its own

@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="overlay-settings" content="accentColor,showSuperstars,showRoleIcon,showTeamLogo,pixelPortraits" />
+  <meta name="overlay-settings" content="accentColor,showSuperstars,showRoleIcon,showTeamLogo,pixelPortraits,captainBox" />
   <style>
     body {
       overflow: hidden;
@@ -29,9 +29,15 @@
   <script src="/layout/lib/overlay-base.js"></script>
   <script src="/layout/lib/rio-data.js"></script>
   <script type="module">
-    import { renderRoster } from '/layout/lib/roster-mount.js';
+    import { renderRoster, applyRosterPalette } from '/layout/lib/roster-mount.js';
+    import { ROSTER_LAYOUTS, rosterLayout } from '/layout/lib/roster-layouts.js';
 
-    const REF_W = 452, REF_H = 140;
+    const params = new URLSearchParams(window.location.search);
+    // ?layout=grid|row|column — the SOURCE's shape, and so its canvas: the
+    // console resizes the OBS source to match when it switches one
+    // (roster-layouts.js). Absent is the grid, at the 452x140 the body declares.
+    const LAYOUT = rosterLayout(params.get('layout'));
+    const REF_W = ROSTER_LAYOUTS[LAYOUT].width, REF_H = ROSTER_LAYOUTS[LAYOUT].height;
     document.body.dataset.refW = REF_W;
     document.body.dataset.refH = REF_H;
     let viewportScale = 1;
@@ -61,14 +67,19 @@
     window.addEventListener('resize', autoScale);
     autoScale();
 
-    const params = new URLSearchParams(window.location.search);
     const SCOREBOARD = parseInt(params.get('scoreboard')) || 1;
     const TEAM_NUM = parseInt(params.get('team')) || 1;
     const { state, settings } = OverlayBase;
 
     function render() {
       const container = document.getElementById('roster-container');
-      renderRoster(container, { state, settings, sb: SCOREBOARD, team: TEAM_NUM });
+      // The palette, for the captain box's --accent: the global accent, or this
+      // Roster's own pin (and this side's, under Separate side styles). The
+      // `accentColor` this page has always whitelisted reached nothing until a
+      // part of it was drawn in the accent.
+      applyRosterPalette(settings, TEAM_NUM);
+      const { blank } = renderRoster(container, { state, settings, sb: SCOREBOARD, team: TEAM_NUM, layout: LAYOUT });
+      OverlayBase.setBlank(blank, `Roster ${TEAM_NUM}`);
       applyOuterScale(container);
     }
 
@@ -84,7 +95,7 @@
         || key === `score.${SCOREBOARD}.game_completed`,
       shouldRenderSettings: (key) =>
         key.startsWith('overlays.roster.')
-        || key === 'overlays.global.splitSides'
+        || key.startsWith('overlays.global.')
         || key === 'project_rio.hud_enabled',
     });
   </script>

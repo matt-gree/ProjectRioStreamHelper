@@ -67,6 +67,11 @@ _MODIFIERS = {
     "topclosed": "top-closed", "top-closed": "top-closed",
     "botopen": "bot-open", "bot-open": "bot-open",
     "botclosed": "bot-closed", "bot-closed": "bot-closed",
+    # ...and the bottom edge with the roster band under an open / closed footer,
+    # plus how far that band lifts when the footer closes.
+    "rosteropen": "roster-open", "roster-open": "roster-open",
+    "rosterclosed": "roster-closed", "roster-closed": "roster-closed",
+    "dyclosed": "dy-closed", "dy-closed": "dy-closed",
     # Stat bar / stat card: the bottom line's two LEFT edges (with and without
     # its "Game" label) against its one right bound. A trio, like the meld pairs
     # above — a theme carrying fewer than three falls back to its authored,

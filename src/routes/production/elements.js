@@ -257,8 +257,8 @@ export const ELEMENTS = [
         name: 'Stat Card',
         /*
          * The same stat line as the Stat Bar, wearing the design package's
-         * `statscard` element — the compact 2x2 card, 380x240, with the header
-         * band the wide bar has no room for.
+         * `statscard` element — the compact 2x2 card, 380x294, with the header
+         * band the wide bar has no room for, and an optional roster band.
          *
          * A TOP-LEVEL ELEMENT WITH ITS OWN SOURCE, and a container member too —
          * the Roster's shape exactly. It was a member and NOTHING else, which
@@ -277,6 +277,10 @@ export const ELEMENTS = [
          * be at least this tall to hold it — the seeded "Roster + Stats" pair is
          * 452x240, which is where the height comes from.
          *
+         * 380x294 since the card grew a third optional band, the side's nine
+         * (the Roster switch), below the footer: 54 units more. With the roster
+         * off those 54 units are transparent canvas under the card.
+         *
          * No `scope: 'board'` — settings are global (`overlays.statscard.*`) and
          * its two sources differ by ?team=, which the instance grammar reads off
          * the URL as a variant. Same shape as the Stat Bar, Roster, Player Name
@@ -292,7 +296,7 @@ export const ELEMENTS = [
         flavor: 'direct',
         url: '/layout/scoreboard1/statscard.html',
         width: 380,
-        height: 240,
+        height: 294,
         // Anchored to the full path, like the bar's and the roster's — a bare
         // /statscard/i would also answer to `container.html?container=statscard`,
         // i.e. a CONTAINER claiming to be one of its own occupants.

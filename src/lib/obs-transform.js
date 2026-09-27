@@ -300,3 +300,30 @@ export function rescaleForSource(t, source) {
         scaleY: sign(t.scaleY) * (size.height / h),
     };
 }
+
+/*
+ * ── A SOURCE THAT CHANGES SHAPE ─────────────────────────────────────────────
+ *
+ * The opposite of a redraw. `rescaleForSource` keeps each item the size it IS
+ * while the page re-renders at a new resolution; a Roster switching Grid → Row
+ * is a different PICTURE, and has to come out wider and shorter on the canvas.
+ * What it keeps is the SCALE: a 52px character is drawn exactly as big in a row
+ * as it was in the grid, so switching changes the arrangement and nothing else.
+ *
+ * An unbounded item already does that — `scale` multiplies whatever the input
+ * is — so it needs no patch at all, and grows from whatever alignment point the
+ * producer set in OBS. A BOUNDED item would instead squeeze the new shape into
+ * the old box, so its box is re-solved at the scale it was drawing at: the
+ * box's fit of the old input, applied to the new one.
+ *
+ * Crop is the caller's refusal, as it is for a redraw: it is stated in source
+ * pixels and the source is about to be a different picture.
+ */
+export function reshapePatch(t, width, height) {
+    if (!t || !inBounds(t)) return null;
+    const box = renderedSize(t);
+    const old = croppedSize(t);
+    if (!box || !(old.width > 0 && old.height > 0) || !(width > 0 && height > 0)) return null;
+    const s = Math.min(box.width / old.width, box.height / old.height);
+    return { boundsWidth: width * s, boundsHeight: height * s };
+}

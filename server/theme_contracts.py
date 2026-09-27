@@ -318,5 +318,5 @@ CONTRACTS: dict[str, Contract] = {
     # canvas — the mount crops a theme authored that way to its own card box
     # (ensureCardBox/reframeLegacyCanvas), so it lands at full size here.
     "scorecard": Contract((496, 766), "xMidYMid meet", alt_canvases=((1920, 1080),)),
-    "statscard": Contract((380, 240), "xMidYMid meet"),
+    "statscard": Contract((380, 294), "xMidYMid meet"),
 }

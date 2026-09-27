@@ -60,6 +60,8 @@ describe('instance ids', () => {
 describe('variants', () => {
     it('takes a tag from every distinguishing param the URL names', () => {
         expect(variantOf('http://x/layout/scoreboard1/roster.html?team=2')).toBe('t2');
+        // A Roster's layout is a variant (its own canvas); the grid is absent.
+        expect(variantOf('http://x/layout/scoreboard1/roster.html?team=2&layout=row')).toBe('t2.yrow');
         expect(variantOf('http://x/layout/scoreboard1/scoreboard.html?scoreboard=2&size=s')).toBe('zs');
         expect(variantOf('http://x/layout/scoreboard1/stats.html?team=1&size=l')).toBe('t1.zl');
     });

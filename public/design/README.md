@@ -32,7 +32,7 @@ still applies verbatim when authoring by hand.
 ├── scoreboard-l.svg     # horizontal scoreboard, 800×460
 ├── ticker.svg           # the Results Ticker marquee bar, 1920×80
 ├── statsbar.svg         # the per-team batter/pitcher stat bar, 452×118
-├── statscard.svg        # the container-scoped stat card, 380×240
+├── statscard.svg        # the container-scoped stat card, 380×294
 └── sources/             # (optional) raw design exports, ignored by the app
 ```
 
@@ -602,7 +602,7 @@ batter-change dissolve target).
 ### `statscard.svg`
 
 **The same element at a different aspect** — same mount, same slots, same
-`RioData.getStatsLine` resolution as `statsbar.svg`, authored 380×240 as a 2×2
+`RioData.getStatsLine` resolution as `statsbar.svg`, authored 380×294 as a 2×2
 grid instead of a four-across bar. It is what the **Stat Card** container member
 renders (`fed-container.js`) — including what a container flashes over its
 resting roster on a batter change; there is no standalone Stats Card source. A package that themes `statsbar` and not `statscard` gets the
@@ -618,11 +618,24 @@ pair of authored positions rather than four layouts — declare them on `card-bg
 | `data-top-open` / `data-top-closed` | `y`, with and without the header |
 | `data-bot-open` / `data-bot-closed` | bottom edge, with and without the line |
 
+A third optional band, the **roster** (`roster-group`, the producer's Roster
+switch), sits under the footer: nine `roster-char-{0..8}` images and a
+`roster-cap-ring` shape the mount parks around the captain's slot (`data-pad`,
+as on Scoreboard L). Author it under an OPEN footer and give the group
+`data-dy-closed` — how far it lifts when the footer closes — then declare the
+bottom edge for both cases on `card-bg`:
+
+| attribute | the card's… |
+|---|---|
+| `data-roster-open` / `data-roster-closed` | bottom edge with the roster on, under an open / closed footer |
+
+A theme without the pair never shows the band, whatever the switch says.
+
 The mount animates between them at the scorecard's 0.45s `power3.out`, fading
 each band clear of its travelling edge. A theme with a footer and no header may
 declare `data-h-full` / `data-h-compact` (heights, fixed top edge) instead; a
 theme declaring neither keeps its authored geometry. A theme still authored at
-the older 380×220 renders at natural size, centred in the taller box — nothing
+the older 380×220 or 380×240 renders at natural size, centred in the taller box — nothing
 scales — which is how `slice26`'s card keeps working untouched.
 
 One more difference from `statsbar.svg`: the mount stamps `data-team` on the root

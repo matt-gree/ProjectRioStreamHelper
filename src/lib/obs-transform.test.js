@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     BOUNDS_NONE, renderedSize, sizeMatchTransform,
     renderFactor, redrawPlan, rescaleForSource, isCropped, stretchOf, SCALE_TOLERANCE,
-    inputSize, sameInputSize, typeScaleOf,
+    inputSize, sameInputSize, typeScaleOf, reshapePatch,
 } from './obs-transform';
 import {
     requestedScale, fitToHeight, heightForNameSize,
@@ -357,5 +357,28 @@ describe('matching a pair whose type is drawn at an absolute size', () => {
         expect(renderedSize(matched)).toEqual(renderedSize(stretched));
         expect(drawnNamePx(matched)).toBeCloseTo(drawnNamePx(stretched), 5);
         expect(stretchOf(matched)).toBeCloseTo(2, 5);
+    });
+});
+
+/*
+ * reshapePatch — a Roster switching layout is a different PICTURE, so it keeps
+ * the SCALE (a character is as big in a row as in the grid) rather than the size.
+ */
+describe('reshapePatch — a source that changes shape', () => {
+    it('leaves an unbounded item alone: its scale already carries over', () => {
+        expect(reshapePatch(item({ scaleX: 0.5, scaleY: 0.5 }), 628, 68)).toBeNull();
+    });
+
+    it('re-solves a bounding box at the scale it was drawing at', () => {
+        // A 452x140 grid in a 226x70 box is drawn at 0.5; a 628x68 row at 0.5.
+        const bounded = item({ boundsType: 'OBS_BOUNDS_SCALE_INNER', boundsWidth: 226, boundsHeight: 70 });
+        expect(reshapePatch(bounded, 628, 68)).toEqual({ boundsWidth: 314, boundsHeight: 34 });
+    });
+
+    it('reads a letterboxed box by its binding axis', () => {
+        // 452x140 fitted into 452x280 is drawn at 1 (width binds); the column
+        // keeps 1, not the box's 2x height.
+        const bounded = item({ boundsType: 'OBS_BOUNDS_SCALE_INNER', boundsWidth: 452, boundsHeight: 280 });
+        expect(reshapePatch(bounded, 68, 628)).toEqual({ boundsWidth: 68, boundsHeight: 628 });
     });
 });

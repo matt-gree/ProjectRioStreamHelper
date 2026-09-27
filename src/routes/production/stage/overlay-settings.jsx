@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '../../../context/store';
 import { usePending } from '../../../context/staging';
 import { Text } from '../../../components/ui/primitives';
-import { LAYOUT_SETTINGS, THEME_ELEMENT, settingReachesSize } from '../../design/designConstants';
+import { LAYOUT_SETTINGS, THEME_ELEMENT, settingReachesLayout, settingReachesSize } from '../../design/designConstants';
 import { usePaintedByApp } from '../../design/designPackage';
 import {
     SegmentedRow, ToggleRow, ToggleChip, ToggleChips, TextRow, NumberRow, FractionRow, ColorRow, KIT_LABEL, KIT_SECTION,
@@ -107,7 +107,9 @@ function useShowWhen(os, def) {
     // Read the STAGED value too, so choosing the mode reveals the field now
     // rather than after Go Live.
     const v = staged ? staged.value : resolveSetting(os.bag, masterDef, os.board);
-    return 'is' in gate ? v === gate.is : !!v;
+    if ('is' in gate) return v === gate.is;
+    if ('isNot' in gate) return v !== gate.isNot;
+    return !!v;
 }
 
 /*
@@ -481,15 +483,17 @@ export const OverlaySettingGroups = memo(function OverlaySettingGroups({ os, typ
  * sizes are one layout file with one `<meta>`, so a setting whose part exists
  * only at some of them is dropped here rather than offered everywhere (ELO on
  * the Small board, which has no completed-game cluster to draw it in). See
- * settingReachesSize.
+ * settingReachesSize. `layout` is the same filter for a Roster's `?layout=`
+ * (settingReachesLayout).
  */
-export const ElementStyleSettings = memo(function ElementStyleSettings({ type, board, label, exclude, size }) {
+export const ElementStyleSettings = memo(function ElementStyleSettings({ type, board, label, exclude, size, layout }) {
     const ns = board != null ? `${type}.${board}` : type;
     const os = useOverlaySettings(type, ns, label ?? type, board ?? null);
     const defs = useLiveDefs(type, (LAYOUT_SETTINGS[type] ?? []).filter(
         def => RENDERABLE.has(def.type)
             && !exclude?.includes(def.key)
-            && settingReachesSize(def, type, size),
+            && settingReachesSize(def, type, size)
+            && settingReachesLayout(def, layout),
     ));
     if (defs.length === 0) return null;
     return (

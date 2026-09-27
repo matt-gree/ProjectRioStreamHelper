@@ -91,6 +91,9 @@ const VARIANT_PARAMS = [
     // rows instead of two rows sharing one id.
     ['dir', 'd', (v) => ({ left: 'Point Left', right: 'Point Right' }[v] ?? v)],
     ['port', 'p', (v) => `Port ${v}`],
+    // The Roster's shape (public/layout/lib/roster-layouts.js). Grid is the
+    // absent param, so it earns no tag and a grid source keeps the id it had.
+    ['layout', 'y', (v) => ({ vgrid: 'Vertical Grid', row: 'Row', column: 'Column', field: 'Field' }[v] ?? v)],
 ];
 
 /*

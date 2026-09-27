@@ -28,6 +28,8 @@ const DISTINGUISHING_PARAMS = [
     ['size', null],
     ['team', null],
     ['port', null],
+    // The Roster's shape; absent is the grid (roster-layouts.js).
+    ['layout', 'grid'],
     ['winners_only', null],
     ['losers_only', null],
 ];
