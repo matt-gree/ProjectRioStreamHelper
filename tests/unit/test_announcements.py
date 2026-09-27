@@ -42,6 +42,8 @@ def test_parse_version(raw, expected):
     ("v2.0.0", "2.0.0", False),
     ("v2.0.0-prerelease.16", "2.0.0", False),  # never offer a downgrade
     ("v2.0.1", "2.0.0", True),
+    ("v2.0.0", "2.0.0-9-g2796ca7c-dirty", False),  # why: describe PAST a release
+    ("v2.0.1", "2.0.0-9-g2796ca7c", True),
     ("v1.9.0", "2.0.0-prerelease.3", False),
 ])
 def test_release_key_orders_prereleases_below_their_release(tag, current, newer):

@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { Anchor, Stack, Text } from '../components/ui/primitives';
+import { Button } from '../components/ui/button';
 import { useSocket, useSocketSubscribe } from './socket';
+import { openUpdateSettings } from './updater';
 
 // Maps a severity to the matching sonner toast variant.
 const SEVERITY_VARIANT = {
@@ -17,6 +19,11 @@ function renderAnnouncement(item) {
     return (
         <Stack gap="xs">
             {item.body && <Text size="sm">{item.body}</Text>}
+            {item.action === 'update' && (
+                <Button size="xs" className="w-fit" onClick={openUpdateSettings}>
+                    Update…
+                </Button>
+            )}
             {item.link_url && (
                 <Anchor
                     href={item.link_url}

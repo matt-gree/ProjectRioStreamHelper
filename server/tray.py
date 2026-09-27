@@ -56,6 +56,17 @@ class Tray:
             cls.icon.stop()
 
     @classmethod
+    def request_exit(cls):
+        """`on_exit`, from any thread — the updater calls it off the server
+        thread, and AppKit only takes the tray's teardown on the main one."""
+        try:
+            from PyObjCTools import AppHelper
+            AppHelper.callAfter(cls.on_exit)
+        except Exception:
+            logger.exception("[Tray] could not marshal exit to the main thread")
+            cls.on_exit()
+
+    @classmethod
     def on_open_logs(cls, _icon=None, _item=None):
         """Reveal the logs folder in Finder / Explorer."""
         from server.paths import logs_dir, reveal_path

@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import tkinter as tk
 import webbrowser
 from pathlib import Path
@@ -47,6 +48,20 @@ class WinWindow:
             os._exit(0)
 
         root.protocol("WM_DELETE_WINDOW", _exit)
+
+        # The updater asks for an exit from the server thread, and Tk may only
+        # be touched from this one — so it sets a flag this loop polls.
+        exit_requested = threading.Event()
+
+        def _poll_exit():
+            if exit_requested.is_set():
+                _exit()
+            else:
+                root.after(250, _poll_exit)
+
+        root.after(250, _poll_exit)
+        from server.updater import Updater
+        Updater.set_exit_hook(exit_requested.set)
 
         tk.Label(root, text=name, font=("Segoe UI", 11, "bold")).pack(padx=24, pady=(16, 2))
         tk.Label(root, text=f"v{version}", font=("Segoe UI", 9), fg="#888888").pack()

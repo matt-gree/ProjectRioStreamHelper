@@ -74,6 +74,11 @@ def _release_key(v: str | None) -> tuple:
     if "-" not in tail:
         return (base, 1, ())
     pre = tail.split("-", 1)[1]
+    # A describe straight off a RELEASE tag (`2.0.0-9-gabc[-dirty]`) is nine
+    # commits PAST 2.0.0, not a preview of it — read as a prerelease, every dev
+    # build after a release was offered the release it is built on.
+    if re.fullmatch(r"\d+-g[0-9a-f]+(-dirty)?", pre):
+        return (base, 1, ())
     nums = re.findall(r"\d+", pre.split("-")[0])
     return (base, 0, tuple(int(n) for n in nums))
 
@@ -205,16 +210,24 @@ class Announcements:
                     )
                     if r.status_code == 200:
                         rel = r.json()
+                        # One fetch feeds both: the toast below and the
+                        # Settings row that downloads and installs it.
+                        from server.updater import Updater
+                        await Updater.note_release(rel)
                         tag = (rel.get("tag_name") or "").strip()
                         url = rel.get("html_url") or ""
                         if tag and _release_key(tag) > _release_key(current_version):
                             items.append({
                                 "id": f"update-{tag}",
                                 "title": f"Update available: {tag}",
-                                "body": "A new version of PRSH is available on GitHub.",
+                                "body": "A new version of PRSH is ready to download.",
                                 "severity": "info",
                                 "link_url": url,
-                                "link_text": "View release",
+                                "link_text": "What’s new",
+                                # The toast's button opens Settings → Updates,
+                                # where the download and the restart are two
+                                # separate presses the producer times.
+                                "action": "update",
                             })
                     elif r.status_code != 404:
                         logger.debug("[Announcements] release fetch HTTP {}", r.status_code)

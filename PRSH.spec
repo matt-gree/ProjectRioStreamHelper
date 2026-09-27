@@ -230,6 +230,10 @@ a = Analysis(
         'PIL',
         'pystray',
         'pystray._darwin',   # macOS tray backend
+        # Tray.request_exit marshals the updater's exit onto the main thread;
+        # imported lazily, so nothing else would make PyInstaller trace it.
+        # (Absent on Windows, where it only logs a not-found and is unused.)
+        'PyObjCTools.AppHelper',
         'pystray._win32',    # Windows tray backend
 
         # Data science (required by pyrio)
@@ -258,6 +262,8 @@ a = Analysis(
         'server.win_window',
         'server.announcements',
         'server.api.v1.announcements',
+        'server.updater',
+        'server.api.v1.update',
         'server.api.v1.logs',
         'server.port_conflict',
 

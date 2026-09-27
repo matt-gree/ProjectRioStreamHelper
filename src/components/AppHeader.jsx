@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 import { useConfigStore } from '../context/store';
 import { useSocket } from '../context/socket';
+import { OPEN_SETTINGS_EVENT } from '../context/updater';
 import { Button } from './ui/button';
 import { SimpleTooltip } from './ui/simple-tooltip';
 import { Title } from './ui/primitives';
@@ -17,6 +18,12 @@ export default function AppHeader({ tabs = [] }) {
     const location = useLocation();
 
     const socket = useSocket();
+
+    useEffect(() => {
+        const open = () => setSettingsOpen(true);
+        window.addEventListener(OPEN_SETTINGS_EVENT, open);
+        return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open);
+    }, []);
 
     useEffect(() => {
         setConnected(socket.connected);

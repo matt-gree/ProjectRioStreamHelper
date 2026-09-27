@@ -63,10 +63,50 @@ Name: "{app}\Uninstall {#AppShortName}"; Filename: "{uninstallexe}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppShortName}"; Flags: nowait postinstall skipifsilent
+; The in-app updater (server/updater.py) runs this installer /SILENT, which
+; skips the postinstall entry above — so it asks for the relaunch explicitly.
+; runasoriginaluser: the installer is elevated, PRSH must not be.
+Filename: "{app}\{#AppExeName}"; Parameters: "--after-update"; Flags: nowait runasoriginaluser; Check: RelaunchRequested
 
 [Code]
 var
   DeleteUserData: Boolean;
+
+const
+  SYNCHRONIZE = $00100000;
+
+function OpenProcess(dwDesiredAccess: Cardinal; bInheritHandle: Boolean; dwProcessId: Cardinal): THandle;
+  external 'OpenProcess@kernel32.dll stdcall';
+function WaitForSingleObject(hHandle: THandle; dwMilliseconds: Cardinal): Cardinal;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+function CloseHandle(hObject: THandle): Boolean;
+  external 'CloseHandle@kernel32.dll stdcall';
+
+// /WAITPID=<pid>: the in-app updater launches this installer and THEN exits,
+// so the files it is about to replace are still open when setup starts. Wait
+// (up to 30s) for that process to be gone before touching anything.
+function InitializeSetup: Boolean;
+var
+  Pid: Cardinal;
+  H: THandle;
+begin
+  Result := True;
+  Pid := StrToIntDef(ExpandConstant('{param:WAITPID|0}'), 0);
+  if Pid <> 0 then
+  begin
+    H := OpenProcess(SYNCHRONIZE, False, Pid);
+    if H <> 0 then
+    begin
+      WaitForSingleObject(H, 30000);
+      CloseHandle(H);
+    end;
+  end;
+end;
+
+function RelaunchRequested: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
 
 procedure InitializeUninstallProgressForm;
 begin

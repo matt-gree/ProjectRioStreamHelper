@@ -13,6 +13,7 @@ import { comboFromEvent } from '../context/staging';
 import { SupportLinks } from './SupportLinks';
 import { SIDE_LABEL_MODES, useSideLabels } from '../routes/production/sides';
 import { setSplitSides, useSplitSides } from '../routes/design/sideStyles';
+import { useUpdateStore, checkForUpdate, downloadUpdate, installUpdate } from '../context/updater';
 
 // Click-to-record hotkey field: focus it, press a combo, done. Esc cancels.
 function HotkeyInput({ id, value, onChange }) {
@@ -73,6 +74,123 @@ function exportEnabled(disabled) {
     if (disabled === undefined || disabled === null) return false; // default: off
     if (typeof disabled === 'string') return ['', '0', 'false', 'no', 'off'].includes(disabled.trim().toLowerCase());
     return !disabled;
+}
+
+function pct(status) {
+    const size = status?.asset?.size;
+    return size ? Math.min(100, Math.floor((status.downloaded / size) * 100)) : null;
+}
+
+/*
+ * Check → Download → Restart, one button at a time. The download and the
+ * restart are separate presses on purpose: installing restarts the server and
+ * every OBS source blanks while it does, so WHEN is the producer's call.
+ */
+function UpdateSection({ opened }) {
+    const ids = { auto: useId() };
+    const status = useUpdateStore(s => s.status);
+    const setSetting = useSettingsStore(state => state.setItem);
+    const autoCheck = useSettingsStore(state => state?.announcements?.check_for_updates) !== false;
+    const [busy, setBusy] = useState(false);
+    const [confirm, setConfirm] = useState(false);
+
+    useEffect(() => { if (!opened) setConfirm(false); }, [opened]);
+
+    const run = useCallback(async (fn, failure) => {
+        setBusy(true);
+        try { await fn(); } catch (e) {
+            notifications.show({ message: e?.message || failure, color: 'red' });
+        }
+        setBusy(false);
+    }, []);
+
+    const state = status?.state || 'idle';
+    const latest = status?.latest;
+    const noAsset = state === 'available' && !status?.asset;
+    const blocked = status && !status.can_install;
+
+    let hint;
+    let action = null;
+    switch (state) {
+    case 'checking':
+        hint = 'Checking GitHub…';
+        action = <Button size="xs" variant="outline" disabled><Loader size={12} />Checking</Button>;
+        break;
+    case 'up_to_date':
+        hint = `You’re on the latest version${status?.current ? ` (v${status.current})` : ''}.`;
+        break;
+    case 'available':
+        hint = noAsset
+            ? `${latest} is out, but has no download for this computer.`
+            : blocked ? `${latest} is out. ${status.blocker}` : `${latest} is ready to download.`;
+        if (!noAsset && !blocked) {
+            action = (
+                <Button size="xs" onClick={() => run(downloadUpdate, 'Couldn’t start the download')} disabled={busy}>
+                    Download{status.asset?.size ? ` (${Math.round(status.asset.size / 1e6)} MB)` : ''}
+                </Button>
+            );
+        }
+        break;
+    case 'downloading':
+        hint = `Downloading ${latest}${pct(status) !== null ? ` — ${pct(status)}%` : '…'}`;
+        action = <Button size="xs" variant="outline" disabled><Loader size={12} />Downloading</Button>;
+        break;
+    case 'ready':
+        hint = `${latest} is downloaded. Updating restarts PRSH, and overlays go blank for a few seconds.`;
+        action = confirm ? (
+            <>
+                <Button size="xs" variant="ghost" onClick={() => setConfirm(false)} disabled={busy}>Cancel</Button>
+                <Button size="xs" onClick={() => run(installUpdate, 'Couldn’t start the update')} disabled={busy}>
+                    {busy && <Loader size={12} />}
+                    Restart now
+                </Button>
+            </>
+        ) : (
+            <Button size="xs" onClick={() => setConfirm(true)}>Restart to update</Button>
+        );
+        break;
+    case 'installing':
+        hint = 'Updating. This tab reloads when PRSH is back.';
+        action = <Button size="xs" variant="outline" disabled><Loader size={12} />Updating</Button>;
+        break;
+    case 'error':
+        hint = status?.error || 'Something went wrong.';
+        break;
+    default:
+        hint = 'Not checked yet.';
+    }
+    if (!action) {
+        action = (
+            <Button size="xs" variant="outline" onClick={() => run(checkForUpdate, 'Couldn’t check for updates')} disabled={busy}>
+                {busy && <Loader size={12} />}
+                {state === 'idle' ? 'Check now' : 'Check again'}
+            </Button>
+        );
+    }
+
+    return (
+        <Section label="Updates">
+            <SettingRow label="PRSH updates" hint={hint}>
+                {status?.release_url && ['available', 'ready', 'downloading'].includes(state) && (
+                    <Button size="xs" variant="ghost" asChild>
+                        <a href={status.release_url} target="_blank" rel="noopener noreferrer">What’s new</a>
+                    </Button>
+                )}
+                {action}
+            </SettingRow>
+            <SettingRow
+                htmlFor={ids.auto}
+                label="Check for updates on launch"
+                hint="Shows a notice when a new version is out. Nothing downloads until you ask."
+            >
+                <Switch
+                    id={ids.auto}
+                    checked={autoCheck}
+                    onCheckedChange={(v) => setSetting('announcements.check_for_updates', !!v)}
+                />
+            </SettingRow>
+        </Section>
+    );
 }
 
 /**
@@ -198,6 +316,8 @@ export default function SettingsModal({ opened, onClose }) {
                             </Text>
                         </div>
                     </div>
+
+                    <UpdateSection opened={opened} />
 
                     <Section label="General">
                         <SettingRow

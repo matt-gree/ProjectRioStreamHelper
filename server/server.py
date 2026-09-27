@@ -24,6 +24,7 @@ from server.startgg.provider import StartGGProvider
 from server.controller_overlay import ControllerOverlay
 from server.postgame.watch import StatFileWatcher
 from server.announcements import Announcements
+from server.updater import Updater
 from server.automations import Automations
 from server.league_logos import LeagueLogos
 from server.participants import Participants
@@ -146,6 +147,9 @@ async def lifespan(app: FastAPI):
     # resolved HUD path) and before the match projections, which is where a
     # capture's match hop would land anyway.
     await StatFileWatcher.Start()
+    # The previous run's downloads — after an update, the installer this build
+    # came from.
+    Updater.cleanup()
     await Announcements.Start()
     # Fold the pre-queues `schedule.queue`/`schedule.title` keys into
     # `schedule.queues`, and project the flat union every schedule reader uses.

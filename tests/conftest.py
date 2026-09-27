@@ -59,6 +59,7 @@ def isolate_user_data(tmp_path, monkeypatch):
 def reset_singletons():
     """Snapshot and restore class-level singleton state around every test."""
     from server.announcements import Announcements
+    from server.updater import Updater
     from server.automations import Automations
     from server.participants import Participants
     from server.state import State
@@ -157,6 +158,8 @@ def reset_singletons():
     GameEndWatcher._done = set()
     StatFileWatcher._done = set()
     Announcements._active = []
+    Updater.reset()
+    Updater._exit_hook = None
     Participants.participants = {}
     Participants.books = {}
     Participants._ensure_main()

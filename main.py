@@ -188,7 +188,7 @@ def _selftest() -> int:
 
     lazy = ['server.port_conflict']
     if sys.platform == 'darwin':
-        lazy.append('server.tray')
+        lazy += ['server.tray', 'PyObjCTools.AppHelper']
     elif sys.platform == 'win32':
         lazy.append('server.win_window')
     for name in lazy:
@@ -258,6 +258,12 @@ if __name__ == '__main__':
     if '--selftest' in sys.argv[1:]:
         sys.exit(_selftest())
 
+    # Relaunched by the in-app updater (server/updater.py). The producer's
+    # console tab is still open and reloads itself onto the new build, so a
+    # second tab would only be one more to close.
+    if '--after-update' in sys.argv[1:]:
+        os.environ['PRSH_NO_BROWSER'] = '1'
+
     frozen = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
     if frozen:
         # CWD is set by installer/runtime_hook_chdir.py before imports ran.
@@ -302,6 +308,8 @@ if __name__ == '__main__':
             try:
                 from server.tray import Tray
                 tray = Tray.create_tray()
+                from server.updater import Updater
+                Updater.set_exit_hook(Tray.request_exit)
                 tray.run()  # blocks main thread; user quits via "Exit" in the tray menu
             except Exception:
                 logger.exception("Tray failed to start; server will keep running until process is killed")
