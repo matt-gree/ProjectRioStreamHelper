@@ -9,7 +9,7 @@
   Thin shell: the look lives in the active DESIGN PACKAGE's theme SVG
   (/design/{package}/statsbar.svg), the binding/transitions in
   stats-card-mount.js, the data resolution in RioData.getStatsLine. Drop into
-  OBS as a 452x118 browser source — the canvas `body` declares below, and the
+  OBS as a 452x174 browser source — the canvas `body` declares below, and the
   one `theme_contracts.CONTRACTS['statsbar']` pins.
 -->
 <head>
@@ -17,11 +17,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Element knobs + the app-design knobs honored when the active package's
        theme opts into them (e.g. Classic). -->
-  <meta name="overlay-settings" content="transitionType, subLine, subLineText, subLineAlign, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow" />
+  <meta name="overlay-settings" content="transitionType, subLine, subLineText, subLineAlign, showRoster, showSuperstars, statValueColor, subtextColor, accentColor, cardBg, borderColor, borderWidth, displayFont, bodyFont, monoFont, cardShadow, textShadow" />
   <link rel="stylesheet" href="/layout/lib/rio-theme/tokens.css" />
   <style>
     html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-    body { width: 452px; height: 118px; }
+    body { width: 452px; height: 174px; }
     #host { position: fixed; inset: 0; }
   </style>
 </head>
@@ -39,7 +39,7 @@
     const TEAM = parseInt(params.get('team')) || 1;
 
     document.body.dataset.refW = 452;
-    document.body.dataset.refH = 118;
+    document.body.dataset.refH = 174;
 
     const host = document.getElementById('host');
     const card = mountStatsCard({ host, sb: SB, team: TEAM });

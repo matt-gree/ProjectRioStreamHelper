@@ -211,3 +211,26 @@ describe('a card is bound in the document', () => {
         dispose();
     });
 });
+
+/*
+ * THE PORTRAIT WELL LEADS WITH THE LEAGUE LOGO, as every other logo well does.
+ * The server attaches it per game (`with_league_logos`), because a pool mixes
+ * modes: an NNL game carries the player's NNL logo and a tournament game beside
+ * it carries none, so its well falls back to the captain.
+ */
+describe('the portrait well', () => {
+    beforeEach(() => { document.body.innerHTML = ''; });
+
+    it('draws the league logo, unpixelated, and the captain where there is none', async () => {
+        const { host, dispose } = await mountWith([game({ away_league_logo: '/branding/leagues/nnl/a.png' })]);
+        const away = host.querySelector('[data-part="away-cap"]');
+        const home = host.querySelector('[data-part="home-cap"]');
+
+        expect(away.getAttribute('href')).toBe('/branding/leagues/nnl/a.png');
+        expect(away.style.imageRendering).toBe('auto');
+        expect(home.getAttribute('href')).toBe('/icons/Yoshi.png');
+        // The captain keeps the theme's own rendering.
+        expect(home.style.imageRendering).not.toBe('auto');
+        dispose();
+    });
+});

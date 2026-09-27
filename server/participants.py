@@ -462,6 +462,11 @@ class Participants:
         from server.postgame.capture import PostGame
 
         await run_startup_projection("Participants→PostGame", PostGame.refresh_league_logos())
+        # The Results Ticker's cards carry each pool game's league logo, copied
+        # onto the board's mirrored pool when it was built.
+        from server.rio.rotation import PoolManager
+
+        await run_startup_projection("Participants→Ticker", PoolManager.refresh_league_logos())
         # A league logo is resolved per write by a State hook, which only fires
         # when a board's player or mode changes — a logo swapped or a person
         # added to a league book changes neither. Settle every board.

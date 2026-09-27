@@ -15,8 +15,12 @@ const VARIANT = {
   orange: "warning",
 };
 
-function show({ id, title, message, color, autoClose, loading } = {}) {
+function show({ id, title, message, color, autoClose, loading, action, cancel } = {}) {
   const opts = { id };
+  // Sonner's two buttons, passed straight through: `action` is the primary,
+  // `cancel` the secondary — each `{ label, onClick }`, and either dismisses.
+  if (action) opts.action = action;
+  if (cancel) opts.cancel = cancel;
   if (title && message) {
     opts.description = message;
   }

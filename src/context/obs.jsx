@@ -6,10 +6,11 @@ import { useSettingsStore } from './store';
 // setting that the string-typed REST route can deliver as "true".
 import { settingOn } from '../routes/design/designConstants';
 import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/sourcename';
+import { upgradeRetiredCanvas } from '../routes/production/sources/canvas-migrate';
 import { notifications } from '../lib/notify';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, reshapePatch, isCropped, stretchOf,
-    inputSize, sameInputSize, typeScaleOf,
+    inputSize, sameInputSize, typeScaleOf, growPatch,
 } from '../lib/obs-transform';
 
 /*
@@ -501,6 +502,32 @@ export const useObsStore = create((set) => ({
         return { sourceName, scenes: occurrences.length };
     },
 
+    /*
+     * Grow a browser source to a canvas its element has since outgrown, and
+     * keep it looking exactly as it did (`growPatch`): each scene keeps the
+     * item's scale, and a cropped item keeps cutting the same area — its bottom
+     * crop grows by the height the canvas added. The retired-canvas migration's
+     * Resize; checked before the write, so a source that cannot keep its crop
+     * is never half-changed.
+     */
+    growBrowserSource: async ({ sourceName, from, width, height }) => {
+        if (!obs) throw new Error('Not connected to OBS');
+        const to = { width, height };
+        const occurrences = await itemsOfSource(sourceName);
+        const patches = occurrences.map(o => growPatch(o.transform, from, to));   // throws first
+        await obs.call('SetInputSettings', {
+            inputName: sourceName,
+            inputSettings: { width, height },
+            overlay: true,
+        });
+        await Promise.all(occurrences.map((o, i) => (patches[i]
+            ? obs.call('SetSceneItemTransform', {
+                sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: patches[i],
+            }).catch(() => { /* one scene's correction failing must not strand the rest */ })
+            : null)).filter(Boolean));
+        return { sourceName, scenes: occurrences.length };
+    },
+
     // Pull a scene's items into the mirror and keep them live from then on.
     // Idempotent and safe to call from render effects — a scene already tracked
     // returns immediately rather than re-fetching, which is what makes "expand
@@ -696,7 +723,9 @@ export const useObsStore = create((set) => ({
             }
             await refreshAll(myGen);
             // Background: a rename pass must never hold up the console coming up.
-            upgradeRetiredNames(myGen);
+            // Names first, so the resize toast below counts sources under the
+            // names the producer is about to see.
+            upgradeRetiredNames(myGen).then(() => upgradeRetiredCanvases(myGen));
         } catch (e) {
             // A timed-out handshake leaves a socket still trying: drop it so it
             // can't land later behind the store's back. Events are already
@@ -1184,6 +1213,109 @@ async function upgradeRetiredNames(gen) {
                 + 'the side and board plainly — e.g. “Stat Bar — Side 1 (Board 2)”.',
         });
     }
+}
+
+/*
+ * THE RETIRED-CANVAS PROMPT — every PRSH browser source still at a canvas its
+ * element has since outgrown (`RETIRED_CANVASES`: the Stat Bar 452x118 and the
+ * Stat Card 380x240, before their roster band).
+ *
+ * At the old resolution the page fits its taller canvas into the old box and
+ * the whole card draws smaller. Whether to fix that is the PRODUCER's call — a
+ * finished scene is theirs — so this asks, once, in one toast:
+ *
+ *   Resize     grows each source (`growBrowserSource`): it stays where and as
+ *              big as it was on screen, a crop keeps showing the same area,
+ *              and the new height opens underneath.
+ *   Keep size  touches nothing, and is remembered in this browser (by source
+ *              name AND size) so the question is not asked on every connect.
+ *
+ * Only a resolution EXACTLY at a retired size is a candidate, so a size set by
+ * hand never is, and once resized there is nothing left to ask about.
+ */
+const KEPT_CANVASES = 'prsh.ui.production.keptCanvases';
+const keptKey = (name, s) => `${name}@${s.width}x${s.height}`;
+function readKept() {
+    try {
+        const v = JSON.parse(localStorage.getItem(KEPT_CANVASES) || '[]');
+        return new Set(Array.isArray(v) ? v : []);
+    } catch { return new Set(); }
+}
+function writeKept(set) {
+    try { localStorage.setItem(KEPT_CANVASES, JSON.stringify([...set])); } catch { /* private window */ }
+}
+
+async function upgradeRetiredCanvases(gen) {
+    if (!obs) return;
+    let inputs;
+    try {
+        ({ inputs } = await obs.call('GetInputList', { inputKind: 'browser_source' }));
+    } catch {
+        return;
+    }
+    const kept = readKept();
+    const stale = [];
+    for (const { inputName } of inputs || []) {
+        if (gen !== generation) return;
+        const settings = await inputSettingsFor(inputName, gen);
+        const url = settings?.url;
+        if (!url || !isPrshUrl(url, gcPort())) continue;
+        const next = upgradeRetiredCanvas(url, settings.width, settings.height);
+        if (!next) continue;
+        const from = { width: Number(settings.width), height: Number(settings.height) };
+        if (kept.has(keptKey(inputName, from))) continue;
+        stale.push({ inputName, from, to: { width: next.width, height: next.height } });
+    }
+    if (!stale.length || gen !== generation) return;
+
+    const n = stale.length;
+    const plural = n === 1 ? '' : 's';
+    notifications.show({
+        id: 'retired-canvases',
+        color: 'yellow',
+        autoClose: false,
+        title: `Resize ${n} stat card source${plural} in OBS?`,
+        // Short: sonner sets the two buttons BESIDE the text, so every word
+        // here narrows the column the rest wraps into.
+        message: 'They grew a roster row. Resize keeps each looking the same on screen.',
+        action: {
+            label: 'Resize',
+            onClick: async () => {
+                const failed = [];
+                let done = 0;
+                for (const s of stale) {
+                    try {
+                        await useObsStore.getState().growBrowserSource({
+                            sourceName: s.inputName, from: s.from, width: s.to.width, height: s.to.height,
+                        });
+                        done++;
+                    } catch {
+                        failed.push(s.inputName);
+                    }
+                }
+                if (done) {
+                    notifications.show({
+                        color: 'green',
+                        message: `Resized ${done} source${done === 1 ? '' : 's'} — each draws where and as big as it did.`,
+                    });
+                }
+                if (failed.length) {
+                    notifications.show({
+                        color: 'red',
+                        message: `Couldn’t resize ${failed.join(', ')} — set its size in OBS Properties instead.`,
+                    });
+                }
+            },
+        },
+        cancel: {
+            label: 'Keep size',
+            onClick: () => {
+                const set = readKept();
+                for (const s of stale) set.add(keptKey(s.inputName, s.from));
+                writeKept(set);
+            },
+        },
+    });
 }
 
 function scheduleReconnect() {

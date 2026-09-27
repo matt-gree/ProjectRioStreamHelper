@@ -9,7 +9,8 @@
 //   <g data-slot="card-template" data-w="252" opacity="0">   the prototype
 //
 // Inside the template, parts are marked data-part (all optional):
-//   card-bg(rect)  away-cap/home-cap(image)  away-name/home-name(text,data-maxw)
+//   card-bg(rect)  away-cap/home-cap(image — the league logo, else the captain)
+//   away-name/home-name(text,data-maxw)
 //   away-row/home-row(g)   that side's whole cluster, dimmed for the loser
 //   away-win/home-win(any) the winner's marker, shown on the winning side only
 //   score-group(g) score-away/score-home(text)  vs(text|g)
@@ -144,6 +145,20 @@ export function metaLine(game) {
   return out.join(' \u00b7 ');
 }
 
+/**
+ * What a card's portrait well draws for one side: the player's LEAGUE LOGO when
+ * this game is in a league and they have one there (attached per game by the
+ * server — `with_league_logos`, server/rio/rotation.py), else their captain.
+ * The same lead every other logo well in the app takes, so an NNL game on the
+ * ticker reads as one next to a tournament game beside it.
+ */
+export function wellImage(game, role) {
+  const logo = game?.[`${role}_league_logo`] || '';
+  if (logo) return { url: `${OverlayBase.BASE_URL}${logo}`, logo: true };
+  const cap = game?.[`${role}_captain`] || game?.[`${role}_captain_name`] || '';
+  return { url: cap && window.RioData ? RioData.charIconUrl(cap) : '', logo: false };
+}
+
 export function mountTicker({ host, sb }) {
   injectCss();
   host.classList.add('tk-host');
@@ -205,8 +220,16 @@ export function mountTicker({ host, sb }) {
 
     setPartText(clone, 'away-name', away);
     setPartText(clone, 'home-name', home);
-    setPartImage(clone, 'away-cap', showCap ? RioData.charIconUrl(game.away_captain || game.away_captain_name || '') : '');
-    setPartImage(clone, 'home-cap', showCap ? RioData.charIconUrl(game.home_captain || game.home_captain_name || '') : '');
+    for (const role of ['away', 'home']) {
+      const well = wellImage(game, role);
+      setPartImage(clone, `${role}-cap`, showCap ? well.url : '');
+      // Pixelated is right for the captain's sprite and wrong for a league
+      // logo, which is ordinary artwork and would come out blocky. Only ever
+      // overridden: every clone is fresh from the template, so a captain keeps
+      // whatever the theme authored.
+      const el = part(clone, `${role}-cap`);
+      if (el && well.logo) el.style.imageRendering = 'auto';
+    }
 
     // The plate itself is the theme's own chrome, drawn whether or not there is
     // a score to put in it — a live card with a hole where every other card has
@@ -343,7 +366,7 @@ export function mountTicker({ host, sb }) {
       theme,
       gap(settings),
       OverlayBase.settingOn(OverlayBase.readSetting(SETTINGS_TYPE, 'showCaptains', true), true),
-      games.map(gm => `${gm.game_id}:${gm.away_score}-${gm.home_score}:${gm.game_completed}:${gm.game_mode || ''}`).join('|'),
+      games.map(gm => `${gm.game_id}:${gm.away_score}-${gm.home_score}:${gm.game_completed}:${gm.game_mode || ''}:${gm.away_league_logo || ''}:${gm.home_league_logo || ''}`).join('|'),
     ].join('§');
     if (sig !== builtSig) {
       builtSig = sig;

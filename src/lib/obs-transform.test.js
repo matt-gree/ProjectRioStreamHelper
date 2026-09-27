@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     BOUNDS_NONE, renderedSize, sizeMatchTransform,
     renderFactor, redrawPlan, rescaleForSource, isCropped, stretchOf, SCALE_TOLERANCE,
-    inputSize, sameInputSize, typeScaleOf, reshapePatch,
+    inputSize, sameInputSize, typeScaleOf, reshapePatch, growPatch,
 } from './obs-transform';
 import {
     requestedScale, fitToHeight, heightForNameSize,
@@ -380,5 +380,37 @@ describe('reshapePatch — a source that changes shape', () => {
         // keeps 1, not the box's 2x height.
         const bounded = item({ boundsType: 'OBS_BOUNDS_SCALE_INNER', boundsWidth: 452, boundsHeight: 280 });
         expect(reshapePatch(bounded, 68, 628)).toEqual({ boundsWidth: 68, boundsHeight: 628 });
+    });
+});
+
+/*
+ * growPatch — a canvas that grew at the BOTTOM (the stat cards' roster band).
+ * The item must look exactly as it did: its scale carries over, and a crop
+ * keeps cutting the same area because only the bottom edge moved.
+ */
+describe('growPatch — a canvas that grew underneath', () => {
+    const FROM = { width: 452, height: 118 };
+    const TO = { width: 452, height: 174 };
+    const bar = (over) => item({ sourceWidth: 452, sourceHeight: 118, ...over });
+
+    it('needs nothing for an unbounded, uncropped item', () => {
+        expect(growPatch(bar({ scaleX: 0.5, scaleY: 0.5 }), FROM, TO)).toBeNull();
+    });
+
+    it('keeps a bounded item at the scale it was drawing at', () => {
+        const bounded = bar({ boundsType: 'OBS_BOUNDS_SCALE_INNER', boundsWidth: 226, boundsHeight: 59 });
+        expect(growPatch(bounded, FROM, TO)).toEqual({ boundsWidth: 226, boundsHeight: 87 });
+    });
+
+    it('grows a crop\'s bottom edge by the added height, and leaves the rest', () => {
+        const cropped = bar({ cropTop: 4, cropLeft: 10, cropBottom: 20 });
+        expect(growPatch(cropped, FROM, TO)).toEqual({ cropBottom: 76 });
+        // Bounded too: the cropped size is unchanged, so the box needs nothing.
+        const boundedCrop = bar({ cropBottom: 20, boundsType: 'OBS_BOUNDS_SCALE_INNER', boundsWidth: 226, boundsHeight: 49 });
+        expect(growPatch(boundedCrop, FROM, TO)).toEqual({ cropBottom: 76 });
+    });
+
+    it('refuses a width change on a cropped item rather than re-anchoring its side crops', () => {
+        expect(() => growPatch(bar({ cropLeft: 5 }), FROM, { width: 500, height: 174 })).toThrow();
     });
 });

@@ -31,7 +31,7 @@ still applies verbatim when authoring by hand.
 ├── scoreboard-s.svg     # horizontal scoreboard, 388×156
 ├── scoreboard-l.svg     # horizontal scoreboard, 800×460
 ├── ticker.svg           # the Results Ticker marquee bar, 1920×80
-├── statsbar.svg         # the per-team batter/pitcher stat bar, 452×118
+├── statsbar.svg         # the per-team batter/pitcher stat bar, 452×174
 ├── statscard.svg        # the container-scoped stat card, 380×294
 └── sources/             # (optional) raw design exports, ignored by the app
 ```
@@ -591,13 +591,17 @@ render, not by copying a number.
 
 ### `statsbar.svg`
 
-The per-team stat BAR (`public/layout/lib/stats-card-mount.js`), 452×118 — the
+The per-team stat BAR (`public/layout/lib/stats-card-mount.js`), 452×174 — the
 wide, four-across half of the pair `statscard.svg` completes:
 `char-icon`, `stat-{0..5}-value` / `stat-{0..5}-label` (four filled today),
 and a `line-group` bottom row (`line-label` + `line-text`) that hides when
 empty — declare `data-h-full` / `data-h-compact` on `card-bg` so the card
 shrinks with it. Wrap everything bindable in `<g data-slot="content">` (the
-batter-change dissolve target).
+batter-change dissolve target). Optional, and shared with `statscard.svg`:
+`char-star` (the active portrait's superstar mark) and the roster band —
+`roster-group` (`data-dy-closed`), `roster-char-{0..8}`, `roster-star-{0..8}`,
+`roster-cap-ring` — which needs the four card edges plus `data-roster-open` /
+`data-roster-closed` on `card-bg` to show.
 
 ### `statscard.svg`
 

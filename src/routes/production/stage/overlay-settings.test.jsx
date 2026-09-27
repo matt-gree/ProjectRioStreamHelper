@@ -198,14 +198,16 @@ describe('groupDefs', () => {
 describe('ElementStyleSettings — a detail follows its master', () => {
     const card = () => render(<ElementStyleSettings type="statscard" label="Stat Card" />);
 
-    /* The roster band is drawn only by `statscard.svg`; the wide bar has no
-     * band to put it in, so it is never offered there. */
-    it('offers the roster band on the Stat Card and not on the Stat Bar', () => {
-        card();
-        expect(screen.getByText('Roster')).toBeInTheDocument();
-        cleanup();
-        render(<ElementStyleSettings type="statsbar" label="Stat Bar" />);
-        expect(screen.queryByText('Roster')).not.toBeInTheDocument();
+    /* Both cards draw a roster band and a superstar badge, and the badge is
+     * offered with the band OFF — the active portrait carries one either way,
+     * which is why it is not a detail of the band. */
+    it('offers the roster band and the superstar badge on both stat cards', () => {
+        for (const [type, label] of [['statscard', 'Stat Card'], ['statsbar', 'Stat Bar']]) {
+            render(<ElementStyleSettings type={type} label={label} />);
+            expect(screen.getByText('Roster')).toBeInTheDocument();
+            expect(screen.getByText('Superstar Icons')).toBeInTheDocument();
+            cleanup();
+        }
     });
 
     it('hides the custom text while another mode owns the line', () => {

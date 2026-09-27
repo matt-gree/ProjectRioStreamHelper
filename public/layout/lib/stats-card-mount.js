@@ -1,6 +1,6 @@
 // stats-card-mount.js — the shared stat-line mount, worn two ways.
 //
-// ONE mount, two elements: the wide Stat Bar (`statsbar`, 452x118) and the 2x2
+// ONE mount, two elements: the wide Stat Bar (`statsbar`, 452x174) and the 2x2
 // Stat Card (`statscard`, 380x294). Each owns a dedicated ?team= source; the
 // card is ALSO a container member, and both of its paths pass the same pair, so
 // it is one element configured once wherever it is drawn. The caller picks
@@ -37,6 +37,9 @@
 //                      data-roster-closed are the card's bottom edge with the
 //                      band on under an open / closed footer.
 //   roster-char-{i}(image, i = 0..8) the side's nine
+//   roster-star-{i}(image, i = 0..8) that slot's superstar mark (optional),
+//                      bound only for a starred character with showSuperstars on
+//   char-star(image)   the active character's superstar mark (optional), same rule
 //   roster-cap-ring(shape) parked around the captain's slot (data-pad)
 //   line-text(text,maxw) the game line itself. A theme that LEFT-ALIGNS it beside
 //                      that label declares data-x-labelled / data-x-bare (its two
@@ -71,9 +74,11 @@ const ELEMENT = 'statsbar';
 const DEFAULT_PACKAGE = 'default';
 const MAX_STATS = 6;
 const ALIGNS = new Set(['left', 'center', 'right']);
+// The Roster element's superstar badge (roster-mount.js), from the MSB pack.
+const STAR_URL = () => `${OverlayBase.BASE_URL}/game_assets/msb/gameIcons/superstar.png`;
 
 const FALLBACK_SVG = `
-<svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 452 174" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
   <rect data-slot="card-bg" x="2" y="2" width="448" height="114" rx="10" data-h-full="114" data-h-compact="76" style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30)"/>
   <g data-slot="content">
     <image data-slot="char-icon" x="13" y="17" width="44" height="44" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
@@ -216,6 +221,23 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     const cap = g(state, `score.${SB}.player.${TEAM}.rio_captainIndex`, null);
     const capIdx = cap == null || cap === '' ? null : Number(cap);
     return { show: true, names, capIdx: Number.isFinite(capIdx) ? capIdx : null };
+  }
+
+  /*
+   * Which marks are starred: the active character's portrait (`char-star`) and
+   * each roster slot (`roster-star-{i}`). Same switch and default as the Roster
+   * element's badge. A slot with no character is never starred, so a stale flag
+   * on an empty slot cannot draw a mark in a hole.
+   */
+  function resolveStars(state, settings, info, roster) {
+    const on = OverlayBase.settingOn(sideSetting(settings, 'showSuperstars', true), true);
+    const starred = (i) => on && i != null && i >= 0 &&
+      !!g(state, `score.${SB}.player.${TEAM}.character.${i}.name`, '') &&
+      !!g(state, `score.${SB}.player.${TEAM}.character.${i}.is_starred`, false);
+    return {
+      char: starred(info?.charIndex),
+      roster: Array.from({ length: 9 }, (_, i) => roster.show && starred(i)),
+    };
   }
 
   // The theme's own x / text-anchor / data-maxw for a caption, read once per
@@ -477,6 +499,27 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     }
   }
 
+  // The superstar marks. The badge comes from the producer's MSB pack, which
+  // PRSH does not ship — so it is probed once and drawn only if it loads; an
+  // SVG <image> with a dead href paints a broken-image glyph, which is not
+  // something to put on a broadcast. (The Roster element hides its badge on
+  // error for the same reason.)
+  let starState = 'unknown'; // unknown | loading | ok | missing
+  let lastStars = null;
+  function bindStars(stars) {
+    lastStars = stars;
+    if (starState === 'unknown') {
+      starState = 'loading';
+      const img = new Image();
+      img.onload = () => { starState = 'ok'; if (!disposed && lastStars) bindStars(lastStars); };
+      img.onerror = () => { starState = 'missing'; };
+      img.src = STAR_URL();
+    }
+    const url = (on) => (starState === 'ok' && on ? STAR_URL() : '');
+    engine.setImage('char-star', url(stars.char));
+    for (let i = 0; i < 9; i++) engine.setImage(`roster-star-${i}`, url(stars.roster[i]));
+  }
+
   // The side's nine into the roster band, the captain ring parked around the
   // captain's slot — the Scoreboard L's bindRoster, for one side.
   function bindRoster(roster) {
@@ -498,8 +541,9 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     }
   }
 
-  function bind(info, { flashChanges, line, head, roster }) {
+  function bind(info, { flashChanges, line, head, roster, stars }) {
     engine.setImage('char-icon', info.charIconUrl || '');
+    bindStars(stars);
 
     for (let i = 0; i < MAX_STATS; i++) {
       const st = info.stats[i];
@@ -578,6 +622,7 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
     const line = resolveLine(info, settings);
     const head = resolveHead(info, settings);
     const roster = resolveRoster(state, settings);
+    const stars = resolveStars(state, settings, info, roster);
 
     const content = engine.slots['content'];
     if (charChanged && wasShowing && useFade(settings) && content) {
@@ -588,13 +633,13 @@ export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
       content.style.opacity = '0';
       fadeTimer = setTimeout(() => {
         if (disposed || content !== engine.slots['content']) return;
-        bind(info, { flashChanges: false, line, head, roster });
+        bind(info, { flashChanges: false, line, head, roster, stars });
         content.style.transition = 'opacity 0.25s ease';
         content.style.opacity = '1';
       }, 200);
     } else {
       if (content) { content.style.transition = ''; content.style.opacity = '1'; }
-      bind(info, { flashChanges: !charChanged && useFade(settings), line, head, roster });
+      bind(info, { flashChanges: !charChanged && useFade(settings), line, head, roster, stars });
     }
 
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {

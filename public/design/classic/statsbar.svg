@@ -1,6 +1,6 @@
-<svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
+<svg viewBox="0 0 452 174" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" data-design-vars="app">
   <!--
-    CLASSIC package - Stat BAR (452x118): the wide per-side batter/pitcher stat
+    CLASSIC package - Stat BAR (452x174): the wide per-side batter/pitcher stat
     card, painted with the user's Design-tab CSS variables
     (data-design-vars="app"). The statValueColor / subtextColor overrides reach
     it through - -stat-value-color / - -stat-subtext-color. card-bg swaps between
@@ -73,7 +73,8 @@
        slicing its own rounded corners square against the viewBox and sitting a
        unit high in its own source while it did it. 452-16 = 436 wide,
        118-16 = 102 tall. -->
-  <rect data-slot="card-bg" x="8" y="8" width="436" height="102" rx="12" data-h-full="102" data-h-compact="64"
+  <rect data-slot="card-bg" x="8" y="8" width="436" height="102" rx="12" data-top-open="8" data-top-closed="8" data-bot-open="110" data-bot-closed="72" data-roster-open="166" data-roster-closed="128"
+        data-h-full="102" data-h-compact="64"
         style="fill:var(--card-bg, rgba(20,20,30,0.92));stroke:var(--border-color, rgba(255,255,255,0.08));stroke-width:var(--border-width, 1px);filter:var(--card-shadow-filter, none)"/>
 
   <g data-slot="content">
@@ -87,6 +88,9 @@
          came in here for one revision; classic draws its cards as one
          surface. Centred in the stat band: 8..72, so 46 units of icon at 17. -->
     <image data-slot="char-icon" x="20" y="17" width="46" height="46" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <!-- The active character's superstar mark, over the portrait's bottom-right
+         corner (showSuperstars; bound only for a starred character). -->
+    <image data-slot="char-star" x="50" y="47" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
 
     <!-- Authored at the BATTING allocation; the mount re-divides the band per
          stat set (data-span-x / data-span-w). The band starts 8 past the
@@ -111,6 +115,31 @@
       <text data-slot="line-label" x="20" y="97" class="cst-sub" font-size="13" font-weight="600"></text>
       <text data-slot="line-text" data-maxw="364" data-x-labelled="68" data-x-bare="20" data-maxr="432"
             x="68" y="97" class="cst-cap" font-size="16" font-weight="600"></text>
+    </g>
+    <!-- Roster band (showRoster): rule on the footer's bottom edge, the side's
+         nine at 36 on a 47 pitch, the captain ringed, superstar marks
+         over each icon's corner. Lifts by data-dy-closed with the footer shut. -->
+    <g data-slot="roster-group" data-dy-closed="-38" opacity="0">
+      <rect x="20" y="109.25" width="412" height="1.5" style="fill:rgba(255,255,255,0.12)"/>
+      <rect data-slot="roster-cap-ring" data-pad="3" x="17" y="116" width="42" height="42" rx="8" fill="none" style="stroke:var(--accent, #f59e0b);stroke-width:1.5" opacity="0"/>
+      <image data-slot="roster-char-0" x="20" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-1" x="67" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-2" x="114" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-3" x="161" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-4" x="208" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-5" x="255" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-6" x="302" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-7" x="349" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-8" x="396" y="119" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-star-0" x="42" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-1" x="89" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-2" x="136" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-3" x="183" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-4" x="230" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-5" x="277" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-6" x="324" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-7" x="371" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-8" x="418" y="141" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
     </g>
   </g>
 </svg>

@@ -17,8 +17,14 @@
 // two cards are configured independently. BOTH now own a dedicated ?team=
 // source; the card is additionally a container member, and its two paths share
 // one namespace, so it is one element wherever it is drawn.
-// A caption's alignment, shared by the stat cards' two caption lines.
+// Left / Center / Right — the stat cards' two caption lines and the Matchup
+// History's card row.
 const ALIGN_OPTIONS = [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }];
+
+// Both stat cards: the superstar badge on the active character's portrait and,
+// with the roster band on, on each starred slot in it. Not gated on the band —
+// the portrait carries a mark either way. Same key and default as the Roster's.
+const SUPERSTAR_SETTING = { key: 'showSuperstars', type: 'switch', label: 'Superstar Icons', description: 'The superstar badge on a starred character — the active portrait, and the roster band when it is on.', defaultValue: true };
 
 const STAT_CARD_SETTINGS = [
     { key: 'transitionType', type: 'select', label: 'Batter Transition', description: 'Animation when switching to a new batter', options: [{ value: 'fade', label: 'Fade' }, { value: 'none', label: 'None' }], defaultValue: 'fade' },
@@ -177,7 +183,12 @@ export const LAYOUT_SETTINGS = {
     // Stat Bar — the wide per-side stat card as its OWN source
     // (?scoreboard=N&team=T), drawing whoever that side has on the field. One
     // namespace for both sides, same as the roster's.
-    statsbar: [...STAT_CARD_SETTINGS],
+    statsbar: [
+        ...STAT_CARD_SETTINGS,
+        // The bar is 452x174 to hold it (was 118), as the card grew to 294.
+        { key: 'showRoster', type: 'switch', label: 'Roster', description: "The side's nine in a row under the bar, the captain boxed. Off drops the band (the bar shrinks).", defaultValue: false },
+        SUPERSTAR_SETTING,
+    ],
     // Stat Card — the compact 2x2 card, with its own ?team= source AND a place
     // on any container's roster. Same knobs as the Stat Bar under its own
     // namespace, so the two cards are configured independently; the Production
@@ -188,6 +199,7 @@ export const LAYOUT_SETTINGS = {
     statscard: [
         ...STAT_CARD_SETTINGS, ...TOP_LINE_SETTINGS,
         { key: 'showRoster', type: 'switch', label: 'Roster', description: "The side's nine in a row under the card, the captain boxed. Off drops the band (the card shrinks).", defaultValue: false },
+        SUPERSTAR_SETTING,
     ],
     /*
      * Player Name — one side's name as its own source.
@@ -310,6 +322,12 @@ export const LAYOUT_SETTINGS = {
         // Anything over the cap becomes the "+N more" line, which is why the
         // number is safe to turn down as well as up.
         { key: 'maxRows', type: 'number-override', label: 'Rows Shown', description: 'How many matches the board draws before it folds the rest into a "+N more" line', defaultValue: 6, min: 1, max: 10, step: 1 },
+    ],
+    // Matchup History. The theme lays its cards out for a full five; with fewer
+    // meetings the mount slides the ones it draws as one block (cardRowShift in
+    // matchup-mount.js), so two cards do not sit hard left of three empty slots.
+    matchup: [
+        { key: 'cardAlign', type: 'select', label: 'Card Alignment', description: 'Where the game cards sit when there are fewer than five meetings to show.', options: ALIGN_OPTIONS, defaultValue: 'center' },
     ],
     ticker: [
         { key: 'tickerSpeed', type: 'number-override', label: 'Scroll Speed', description: 'Horizontal scroll rate of the ticker (pixels per second)', defaultValue: 60, min: 10, max: 300, step: 10, suffix: 'px/s' },

@@ -115,6 +115,15 @@ def _statsbar_slots() -> dict[str, Slot]:
         core = i <= 3  # four stats filled today; 4-5 reserved
         s[f"stat-{i}-value"] = Slot("text", required=core)
         s[f"stat-{i}-label"] = Slot("text", required=core)
+    # Optional: the active character's superstar mark, and the roster band
+    # (showRoster) — the side's nine, a ring parked around the captain, and a
+    # superstar mark per slot. The mount skips whichever a theme leaves out.
+    s["char-star"] = Slot("image")
+    s["roster-group"] = Slot("group")
+    s["roster-cap-ring"] = Slot("any")
+    for i in range(9):
+        s[f"roster-char-{i}"] = Slot("image")
+        s[f"roster-star-{i}"] = Slot("image")
     return s
 
 
@@ -259,7 +268,7 @@ CONTRACTS: dict[str, Contract] = {
     # and a full-canvas theme is bottom-anchored and cropped by the mount.
     "matchup": Contract((1920, 480), "xMidYMax meet", slots=_matchup_slots(),
                         alt_canvases=((1920, 1080),)),
-    "statsbar": Contract((452, 118), "xMidYMid meet", slots=_statsbar_slots()),
+    "statsbar": Contract((452, 174), "xMidYMid meet", slots=_statsbar_slots()),
     # The running order as a board. Full canvas, because the card's HEIGHT is
     # the row count and the mount centres it there; its width and its X are the
     # theme's. `card-bg` declares data-compact-h (the card with zero rows) and

@@ -99,6 +99,33 @@ function injectCss() {
   _cssInjected = true;
 }
 
+/**
+ * How far to slide the cards that ARE shown so they sit in the row the theme
+ * authored for all five.
+ *
+ * The cards are laid out for a full history, left to right, and the mount
+ * hides the ones it has no game for — so two meetings drew two cards hard
+ * against the left edge and three empty slots of band beside them, which reads
+ * as a card row that failed to load rather than a short history. `boxes` is
+ * every card's authored extent in order (`{x, w}`, from the theme, never the
+ * live transform) and `shown` how many lead the row; the answer is one dx for
+ * all of them, so the pitch between cards never changes. Measured rather than
+ * assuming an even pitch, so a package that spaces its cards unevenly — or
+ * stacks them, where every card shares one x and the answer is 0 — still
+ * lands right.
+ */
+export function cardRowShift(boxes, shown, align = 'center') {
+  const all = (boxes || []).filter(b => b && Number.isFinite(b.x) && Number.isFinite(b.w));
+  if (!all.length || all.length !== (boxes || []).length) return 0;
+  const n = Math.max(0, Math.min(shown | 0, all.length));
+  if (!n || n === all.length || align === 'left') return 0;
+  const span = (list) => [Math.min(...list.map(b => b.x)), Math.max(...list.map(b => b.x + b.w))];
+  const [a0, a1] = span(all);
+  const [s0, s1] = span(all.slice(0, n));
+  if (align === 'right') return a1 - s1;
+  return (a0 + a1) / 2 - (s0 + s1) / 2;
+}
+
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 function fmtDate(iso) {
   if (!iso) return '';
@@ -213,6 +240,36 @@ export function mountMatchup({ host }) {
     engine.setText(`${p}-date-full`, fmtDateFull(game.date), { optional: true });
   }
 
+  // Slide the shown cards as one block (cardRowShift). Each card's authored
+  // extent and transform are read once per theme node and kept on the node, so
+  // the answer never depends on where the last render moved it; a theme's own
+  // transform on a card is preserved underneath the slide.
+  function alignCards(shown, align) {
+    const cards = [];
+    for (let i = 1; i <= MAX_CARDS; i++) {
+      const el = engine.slots[`game${i}`];
+      if (!el) return;
+      if (!el.hasAttribute('data-cardbox')) {
+        let box;
+        try { box = el.getBBox(); } catch { box = null; }
+        // A zero box is a node that could not be measured (detached, or a
+        // renderer without layout) — never cache that, try again next render.
+        if (!box || !box.width) return;
+        el.setAttribute('data-cardbox', `${box.x},${box.width}`);
+        el.setAttribute('data-cardtransform', el.getAttribute('transform') || '');
+      }
+      const [x, w] = el.getAttribute('data-cardbox').split(',').map(Number);
+      cards.push({ el, x, w });
+    }
+    const dx = cardRowShift(cards, shown, align);
+    for (const { el } of cards) {
+      const base = el.getAttribute('data-cardtransform') || '';
+      const t = dx ? `translate(${dx},0) ${base}`.trim() : base;
+      if (t) el.setAttribute('transform', t);
+      else el.removeAttribute('transform');
+    }
+  }
+
   function playReveal() {
     host.classList.remove('mu-reveal');
     void host.offsetWidth; // reflow so the animation restarts
@@ -310,6 +367,9 @@ export function mountMatchup({ host }) {
     const bandCompact = engine.slots['band-compact'];
     if (bandFull) bandFull.setAttribute('opacity', hasHistory ? '1' : '0');
     if (bandCompact) bandCompact.setAttribute('opacity', hasHistory ? '0' : '1');
+    // After the history group is back on screen — a card inside a display:none
+    // group measures as nothing.
+    if (hasHistory) alignCards(Math.min(games.length, MAX_CARDS), OverlayBase.readSetting(SETTINGS_TYPE, 'cardAlign', 'center'));
 
     // Fit, THEN pin: the auto-fit changes the very name width the portraits are
     // measured against, so pinning first pins to a size about to change.

@@ -327,3 +327,26 @@ export function reshapePatch(t, width, height) {
     const s = Math.min(box.width / old.width, box.height / old.height);
     return { boundsWidth: width * s, boundsHeight: height * s };
 }
+
+/*
+ * ── A CANVAS THAT GREW AT THE BOTTOM ────────────────────────────────────────
+ *
+ * The retired-canvas migration (`upgradeRetiredCanvases`, obs.jsx): an element
+ * whose canvas grew DOWNWARD — same width, same content at the same pixels,
+ * new height opening underneath (the stat cards' roster band). Unlike a
+ * reshape, a crop can be kept: every crop edge but the bottom is measured from
+ * an edge that did not move, so growing `cropBottom` by exactly the added
+ * height leaves the item cutting — and drawing — the very area it did. The
+ * cropped size is then unchanged, so a bounded item's box needs nothing.
+ *
+ * An uncropped item is a plain reshape (keep the scale). Null means no patch
+ * is needed; a WIDTH change on a cropped item is the one case that cannot be
+ * kept, and throws, because the left/right crops would then be re-anchored.
+ */
+export function growPatch(t, from, to) {
+    if (!t) return null;
+    if (!isCropped(t)) return reshapePatch(t, to.width, to.height);
+    if (to.width !== from.width) throw new Error('A cropped source cannot keep its crop through a width change.');
+    const dH = to.height - from.height;
+    return dH ? { cropBottom: num(t.cropBottom) + dH } : null;
+}

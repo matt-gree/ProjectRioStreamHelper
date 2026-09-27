@@ -240,6 +240,29 @@ async def test_a_head_to_head_card_carries_the_logo_of_its_own_games_league():
     assert (ranked["side1LeagueLogo"], ranked["side2LeagueLogo"]) == ("", "")
 
 
+async def test_a_ticker_card_carries_the_logo_of_its_own_games_league():
+    """The Results Ticker's pool mixes modes, so each mirrored game resolves
+    its own — and a book edit afterwards re-resolves the mirror."""
+    from server.rio.rotation import _mirror_to_state
+
+    book = await _league()
+    alice = await _player(book, "Alice")
+    games = [
+        {"game_id": 1, "away_user": "Alice", "home_user": "Bob", "game_mode": "NNL Season 7"},
+        {"game_id": 2, "away_player": "Bob", "home_player": "Alice", "game_mode_name": "Ranked"},
+    ]
+    await _mirror_to_state(1, game_ids=[1, 2], cached_games=games)
+    league, ranked = State.state["scoreboards"]["rotation"]["1"]["cached_games"]
+    assert (league["away_league_logo"], league["home_league_logo"]) == (Participants.logo_url(alice), "")
+    assert (ranked["away_league_logo"], ranked["home_league_logo"]) == ("", "")
+    # The pool's own dicts are untouched — the mirror is a copy.
+    assert "away_league_logo" not in games[0]
+
+    await Participants.SetLogo(alice["id"], b"\x89PNG-2", "image/png")
+    league = State.state["scoreboards"]["rotation"]["1"]["cached_games"][0]
+    assert league["away_league_logo"].endswith("?v=2")
+
+
 def test_resurface_uses_the_leagues_own_row_in_its_games():
     """Its tag AND its prefix — the prefix is how a league shows a team name."""
     from server.rio.apply import _apply_resurface

@@ -58,6 +58,7 @@ vi.mock('obs-websocket-js', () => ({
 }));
 
 import { useObsStore } from './obs';
+import { notifications } from '../lib/notify';
 
 const SETTINGS_INIT = useSettingsStore.getState();
 
@@ -862,5 +863,106 @@ describe('source order and groups', () => {
         expect(JSON.parse(fetchSpy.mock.calls[0][1].body).payload.url).toBe(LT_URL);
         expect(fake.callsOf('SetSceneItemEnabled').at(-1)[1])
             .toEqual({ sceneName: 'Graphics', sceneItemId: 1, sceneItemEnabled: false });
+    });
+});
+
+/*
+ * THE CANVAS PROMPT: a Stat Bar / Stat Card built before its canvas grew is
+ * offered a resize on connect — never resized unasked. Resize keeps each item
+ * looking as it did (a crop keeps its area); Keep size is remembered.
+ */
+describe('retired-canvas prompt on connect', () => {
+    const BAR = 'http://localhost:5260/layout/scoreboard1/statsbar.html?scoreboard=1&team=1';
+    const CARD = 'http://localhost:5260/layout/scoreboard1/statscard.html?scoreboard=1&team=2';
+    const sizeWrites = (fake) => fake.callsOf('SetInputSettings')
+        .map(([, p]) => p).filter(p => 'width' in p.inputSettings);
+    let shown;
+
+    beforeEach(() => {
+        shown = [];
+        vi.spyOn(notifications, 'show').mockImplementation((o) => { shown.push(o); });
+        // Node's own global localStorage shadows jsdom's in this runner and has
+        // no setItem, so "Keep size is remembered" needs a real one to test.
+        const mem = new Map();
+        vi.stubGlobal('localStorage', {
+            getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+            setItem: (k, v) => { mem.set(k, String(v)); },
+            removeItem: (k) => { mem.delete(k); },
+            clear: () => mem.clear(),
+        });
+    });
+    afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+    const prompt = () => shown.find(o => o.id === 'retired-canvases');
+
+    async function connectRig(sources, transform = {}) {
+        const connectPromise = useObsStore.getState().connect();
+        const fake = h.instances.at(-1);
+        sceneRpc(fake, sources);
+        fake.rpc.GetInputList = { inputs: Object.keys(sources).map(inputName => ({ inputName })) };
+        const list = fake.rpc.GetSceneItemList;
+        fake.rpc.GetSceneItemList = () => ({
+            sceneItems: list.sceneItems.map(it => ({ ...it, sceneItemTransform: transform })),
+        });
+        await connectPromise;
+        return fake;
+    }
+
+    it('asks, and writes nothing until the producer answers', async () => {
+        const fake = await connectRig({
+            'Stat Bar — Side 1': { url: BAR, width: 452, height: 118 },
+            'Stat Card — Side 2': { url: CARD, width: 380, height: 240 },
+        });
+        await vi.waitFor(() => expect(prompt()).toBeTruthy());
+        expect(prompt().title).toBe('Resize 2 stat card sources in OBS?');
+        expect(sizeWrites(fake)).toHaveLength(0);
+    });
+
+    it('Resize grows each source to its element\'s new size', async () => {
+        const fake = await connectRig({
+            'Stat Bar — Side 1': { url: BAR, width: 452, height: 118 },
+            'Stat Card — Side 2': { url: CARD, width: 380, height: 240 },
+        });
+        await vi.waitFor(() => expect(prompt()).toBeTruthy());
+        await prompt().action.onClick();
+        expect(sizeWrites(fake)).toEqual(expect.arrayContaining([
+            expect.objectContaining({ inputName: 'Stat Bar — Side 1', inputSettings: { width: 452, height: 174 } }),
+            expect.objectContaining({ inputName: 'Stat Card — Side 2', inputSettings: { width: 380, height: 294 } }),
+        ]));
+    });
+
+    it('Resize keeps a crop cutting the same area', async () => {
+        const fake = await connectRig(
+            { 'Bar': { url: BAR, width: 452, height: 118 } },
+            { cropBottom: 10, boundsType: 'OBS_BOUNDS_NONE' },
+        );
+        await vi.waitFor(() => expect(prompt()).toBeTruthy());
+        await prompt().action.onClick();
+        expect(sizeWrites(fake)).toHaveLength(1);
+        const patches = fake.callsOf('SetSceneItemTransform').map(([, p]) => p.sceneItemTransform);
+        expect(patches).toContainEqual({ cropBottom: 66 });
+    });
+
+    it('Keep size touches nothing and is not asked again', async () => {
+        const rig = { 'Bar': { url: BAR, width: 452, height: 118 } };
+        const fake = await connectRig(rig);
+        await vi.waitFor(() => expect(prompt()).toBeTruthy());
+        prompt().cancel.onClick();
+        expect(sizeWrites(fake)).toHaveLength(0);
+
+        shown = [];
+        useObsStore.getState().disconnect();
+        await connectRig(rig);
+        await new Promise(r => setTimeout(r, 20));
+        expect(prompt()).toBeUndefined();
+    });
+
+    it('never asks about a source already at the new size, or sized by hand', async () => {
+        await connectRig({
+            'Bar A': { url: BAR, width: 452, height: 174 },
+            'Bar B': { url: BAR, width: 904, height: 236 },
+        });
+        await new Promise(r => setTimeout(r, 20));
+        expect(prompt()).toBeUndefined();
     });
 });

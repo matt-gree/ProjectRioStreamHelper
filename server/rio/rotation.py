@@ -33,11 +33,42 @@ async def _mirror_to_state(sb_id: int, **fields):
     """
     if not fields:
         return
+    if "cached_games" in fields:
+        fields["cached_games"] = with_league_logos(fields["cached_games"])
     entries = [
         (f"scoreboards.rotation.{sb_id}.{k}", v) for k, v in fields.items()
     ]
     await State.SetBatch(entries)
     await State.Save()
+
+
+def with_league_logos(games: list | None) -> list:
+    """The pool's games, each carrying `away_league_logo`/`home_league_logo`
+    by THAT game's mode — what the Results Ticker draws in a card's portrait
+    well ahead of the captain, as every other logo well leads with a league
+    logo. Per game, not per board: a pool mixes modes, so one card may be a
+    league game and the next not. "" when the game is no league's or the
+    player has no logo in it. Copies, never the member dicts themselves: the
+    pool keeps those, and State diffs by value.
+    """
+    from server.participants import Participants
+
+    out = []
+    for game in games or []:
+        if not isinstance(game, dict):
+            out.append(game)
+            continue
+        card = dict(game)
+        mode = game.get("game_mode_name") or game.get("game_mode") or ""
+        away, home = _game_display_fields(game)
+        for role, name in (("away", away), ("home", home)):
+            try:
+                url = Participants.league_logo(mode, name)[1] if name and mode else ""
+            except Exception:
+                url = ""
+            card[f"{role}_league_logo"] = url
+        out.append(card)
+    return out
 
 
 def _chip_kwargs(chip: dict) -> dict:
@@ -359,6 +390,28 @@ class PoolManager:
         if state:
             await state.advance(-1)
             await cls._emit_status(sb_id)
+
+    @classmethod
+    async def refresh_league_logos(cls) -> None:
+        """Re-resolve the league logos on every board's mirrored pool. They are
+        a copy out of the Address Book (`with_league_logos`), so a logo added
+        or a person moved into a league book reaches the ticker only through
+        this — called from `Participants.reproject_dependents`, never a fetch.
+        """
+        from server.utils.deep_dict import deep_get
+
+        rotation = deep_get(State.state, "scoreboards.rotation", None) or {}
+        entries = []
+        for sb_key, mirror in rotation.items():
+            games = (mirror or {}).get("cached_games") if isinstance(mirror, dict) else None
+            if not games:
+                continue
+            fresh = with_league_logos(games)
+            if fresh != games:
+                entries.append((f"scoreboards.rotation.{sb_key}.cached_games", fresh))
+        if entries:
+            await State.SetBatch(entries)
+            await State.Save()
 
     @classmethod
     def get_status(cls, sb_id: int) -> dict:

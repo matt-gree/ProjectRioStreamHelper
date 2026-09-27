@@ -550,7 +550,7 @@ const PREVIEW_COLUMNS = [
         { label: 'Scoreboard · Small', path: '/layout/scoreboard1/scoreboard.html?scoreboard=1&size=s', w: 388, h: 156 },
     ],
     [
-        { label: 'Stat Bar', path: '/layout/scoreboard1/statsbar.html?scoreboard=1&team=1', w: 452, h: 118 },
+        { label: 'Stat Bar', path: '/layout/scoreboard1/statsbar.html?scoreboard=1&team=1', w: 452, h: 174 },
         { label: 'Stat Card', path: '/layout/scoreboard1/statscard.html?scoreboard=1&team=1', w: 380, h: 294 },
         // The palette's one reader under every package, so it is the tile that
         // answers "did my accent / shadow / border do anything" on a full-art theme.

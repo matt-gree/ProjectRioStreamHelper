@@ -202,7 +202,7 @@ export const ELEMENTS = [
         // Stat Card are the same data — whoever this side has on the field —
         // so "Stats" and "Stat Card" left the producer nothing to tell them
         // apart by, and one name was a prefix of the other. The art really is
-        // a wide bar (452x118) and a 2x2 card (380x240). The id stays `stats`:
+        // a wide bar (452x174) and a 2x2 card (380x294). The id stays `stats`:
         // it is a settings namespace and a URL, and renaming those is a
         // migration for no gain.
         name: 'Stat Bar',
@@ -233,8 +233,10 @@ export const ELEMENTS = [
          */
         flavor: 'direct',
         url: '/layout/scoreboard1/statsbar.html',
+        // 452x174 since the bar grew the Stat Card's roster band (was 118);
+        // with the band off the bar sits at the top of that canvas.
         width: 452,
-        height: 118,
+        height: 174,
         // Anchored to the full path, like the roster's. The pre-2.0 matcher here
         // was a bare /stats/i, which answers to any URL with "stats" in it —
         // including `container.html?container=roster-stats-2`, i.e. a CONTAINER

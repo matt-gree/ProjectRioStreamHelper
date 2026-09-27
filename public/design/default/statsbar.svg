@@ -1,6 +1,6 @@
-<svg viewBox="0 0 452 118" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 452 174" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
   <!--
-    DEFAULT package - Stats bar (452x118): the per-team batter/pitcher stat
+    DEFAULT package - Stats bar (452x174): the per-team batter/pitcher stat
     card (stats-card-mount.js). Character well on the left, four value/label
     cells across the rest, and an optional bottom line. card-bg swaps between
     data-h-full and data-h-compact when that line row is hidden. Fixed Rio
@@ -59,12 +59,16 @@
     .st-cap  { fill: var(--ink, #f5f5f8); font-family: var(--font-body, 'Inter', system-ui, sans-serif); }
   </style>
 
-  <rect data-slot="card-bg" x="2" y="2" width="448" height="114" rx="12" data-h-full="114" data-h-compact="76" style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30);stroke-width:1.5"/>
+  <rect data-slot="card-bg" x="2" y="2" width="448" height="114" rx="12" data-top-open="2" data-top-closed="2" data-bot-open="116" data-bot-closed="78" data-roster-open="172" data-roster-closed="134"
+        data-h-full="114" data-h-compact="76" style="fill:var(--band,#0b0b12);stroke:var(--border,#1f1f30);stroke-width:1.5"/>
 
   <g data-slot="content">
     <rect x="10" y="14" width="50" height="50" rx="10" fill="rgba(255,255,255,0.045)"/>
     <rect x="10" y="14" width="3" height="50" rx="1.5" style="fill:var(--accent,#e60012)"/>
     <image data-slot="char-icon" x="13" y="17" width="44" height="44" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+    <!-- The active character's superstar mark, over the portrait's bottom-right
+         corner (showSuperstars; bound only for a starred character). -->
+    <image data-slot="char-star" x="41" y="45" width="18" height="18" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
 
     <!-- Authored at the BATTING allocation; the mount re-divides the band per
          stat set (data-span-x/data-span-w below). -->
@@ -86,6 +90,31 @@
       <text data-slot="line-label" x="12" y="103" class="st-lab" font-size="14" font-weight="600"></text>
       <text data-slot="line-text" data-maxw="386" data-x-labelled="56" data-x-bare="12" data-maxr="442"
             x="56" y="103" class="st-cap" font-size="18" font-weight="700"></text>
+    </g>
+    <!-- Roster band (showRoster): rule on the footer's bottom edge, the side's
+         nine at 36 on a 48 pitch, the captain ringed, superstar marks
+         over each icon's corner. Lifts by data-dy-closed with the footer shut. -->
+    <g data-slot="roster-group" data-dy-closed="-38" opacity="0">
+      <rect x="10" y="115.25" width="432" height="1.5" style="fill:var(--border,#1f1f30)"/>
+      <rect data-slot="roster-cap-ring" data-pad="3" x="13" y="123" width="42" height="42" rx="9" fill="none" style="stroke:var(--accent,#e60012);stroke-width:2" opacity="0"/>
+      <image data-slot="roster-char-0" x="16" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-1" x="64" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-2" x="112" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-3" x="160" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-4" x="208" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-5" x="256" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-6" x="304" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-7" x="352" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-char-8" x="400" y="126" width="36" height="36" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated" opacity="0"/>
+      <image data-slot="roster-star-0" x="38" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-1" x="86" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-2" x="134" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-3" x="182" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-4" x="230" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-5" x="278" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-6" x="326" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-7" x="374" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
+      <image data-slot="roster-star-8" x="422" y="148" width="17" height="17" preserveAspectRatio="xMidYMid meet" style="filter:drop-shadow(0 0 1.5px rgba(245,159,0,0.9))" opacity="0"/>
     </g>
   </g>
 </svg>

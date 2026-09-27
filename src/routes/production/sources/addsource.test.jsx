@@ -240,7 +240,7 @@ describe('offeredOn — the Results Ticker only under a rotating board', () => {
 const statsbar = (team) => layout({
     group: 'scoreboard1', name: 'statsbar', type: 'statsbar',
     url: `http://host:5260/layout/scoreboard1/statsbar.html?team=${team}`,
-    width: 452, height: 118, sizeLabel: undefined, parentName: 'Stat Bar', team,
+    width: 452, height: 174, sizeLabel: undefined, parentName: 'Stat Bar', team,
 });
 
 describe('pairRows — a side 1 / side 2 pair is one row', () => {
