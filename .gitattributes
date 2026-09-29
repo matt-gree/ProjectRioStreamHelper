@@ -19,3 +19,10 @@
 # three.js — vendored rather than bundled because layouts under public/layout/
 # are static files served straight to OBS with no build step. ~56k lines.
 public/layout/lib/three/** linguist-vendored -diff
+
+# Line endings: the repository stores LF, whoever's machine wrote the file.
+# Ten files came over from TournamentStreamHelper as CRLF, and any tool that
+# round-tripped one in text mode flipped it wholesale — a 6-line PRSH.spec
+# change showed as 808. Git now normalizes on commit, so that can't recur.
+# Nothing here needs CRLF: PowerShell and Inno Setup both read LF.
+* text=auto eol=lf
