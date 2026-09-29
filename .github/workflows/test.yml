@@ -6,7 +6,9 @@ name: Test
 on:
   pull_request:
   push:
-    branches: [main, '2.0.0']
+    # Release branches are named for their version (2.0.1, 2.1.0), so a
+    # pattern covers each one without editing this file per release.
+    branches: [main, '[0-9]+.[0-9]+.[0-9]+']
 
 # Cancel an in-progress run when new commits are pushed to the same ref.
 concurrency:
