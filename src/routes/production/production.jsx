@@ -19,6 +19,8 @@ import {
     togglePin as togglePinIn, useConsolePlacements, useConsoleScenes,
 } from './sources/placements';
 import { AddSourceDialog } from './sources/addsource';
+// Side effect: the rack's stored layout follows OBS renames (see the module).
+import './sources/renames';
 import { SampleModeSwitch } from './sample';
 import { Stage } from './stage';
 import { Rail } from './rail';

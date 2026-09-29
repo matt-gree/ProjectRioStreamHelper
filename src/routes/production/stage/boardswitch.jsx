@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
-import { useObsStore } from '../../../context/obs';
-import { stageOrRun, usePending } from '../../../context/staging';
+import { liveName, useObsStore } from '../../../context/obs';
+import { obsStageKey, stageOrRun, usePending } from '../../../context/staging';
 import { notifications } from '../../../lib/notify';
 import { SelectRow } from '../kit';
 import { useActiveBoards, useBoardLabel } from '../board/boards';
@@ -49,7 +49,7 @@ export function urlForBoard(url, board) {
     }
 }
 
-const pendingKey = (placement) => `obs:board:${placement.item.sourceName}`;
+const pendingKey = (placement) => obsStageKey('board', [placement.item.sourceName]);
 
 const BoardSwitchRow = memo(function BoardSwitchRow({ placement, placements, onSelect }) {
     const boards = useActiveBoards();
@@ -78,14 +78,16 @@ const BoardSwitchRow = memo(function BoardSwitchRow({ placement, placements, onS
                 // carries the board, so the old selection would fall back to
                 // some other copy of the element in this scene.
                 onSelect?.(placementId(
-                    instanceId(placement.element, to, nextUrl), placement.scene,
+                    instanceId(placement.element, to, nextUrl), liveName(placement.scene),
                 ));
+                // Under its name NOW: the switch may have just renamed it.
+                const name = liveName(sourceName);
                 const scenes = (useObsStore.getState().scenes || []).filter(sc =>
                     (useObsStore.getState().sceneItems?.[sc] || [])
-                        .some(it => it.sourceName === sourceName)).length;
+                        .some(it => it.sourceName === name)).length;
                 notifications.show({
                     color: 'green',
-                    message: `${sourceName} now reads ${boardLabel(to)}`
+                    message: `${name} now reads ${boardLabel(to)}`
                         + (scenes > 1 ? ` — in all ${scenes} scenes that use it.` : '.'),
                 });
             },

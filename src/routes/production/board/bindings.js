@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ownerScene, useObsStore } from '../../../context/obs';
-import { stageOrRun, usePending } from '../../../context/staging';
+import { obsStageKey, stageOrRun, usePending } from '../../../context/staging';
 import { sizeOptionFor } from '../elements';
 import { variantParams } from '../sources/instances';
 import { ROSTER_LAYOUTS, rosterLayout } from '../../../../public/layout/lib/roster-layouts.js';
@@ -83,7 +83,7 @@ export function absoluteOverlayUrl(url) {
  * group, its id is only unique there, and toggling it is one act wherever that
  * group appears.
  */
-const visibilityKey = (sceneName, item) => `obs:${ownerScene(sceneName, item)}:${item.id}`;
+const visibilityKey = (sceneName, item) => obsStageKey('vis', [ownerScene(sceneName, item)], item.id);
 
 // Toggle an OBS source's visibility through the confirm-to-live buffer. The
 // pending key is the (scene, item) pair, so flipping the same switch twice
@@ -111,7 +111,7 @@ export function setSourceVisibility(sceneName, item, enabled) {
  * removal and a staged visibility flip on the same item can't both sit in the
  * queue describing different futures — the later one replaces the earlier.
  */
-const removalKey = (sceneName, item) => `obs:remove:${ownerScene(sceneName, item)}:${item.id}`;
+const removalKey = (sceneName, item) => obsStageKey('remove', [ownerScene(sceneName, item)], item.id);
 
 export function removeSourceFromScene(sceneName, item) {
     stageOrRun({

@@ -49,6 +49,33 @@ export const useStagingStore = create((set, get) => ({
         set({ pending: {}, order: [] });
     },
 
+    /*
+     * An OBS source or scene was renamed: move every staged entry whose key
+     * names it (see obsStageKey). The row that staged it builds its key from
+     * the CURRENT name, so an entry left under the old one would drop off its
+     * row — no amber, nothing to discard it by — while still sitting in the
+     * buffer. The entry's `run` reaches the renamed thing through obs.jsx's
+     * alias table, so only the key has to move. Order is kept.
+     */
+    renameObs(from, to) {
+        set((s) => {
+            let moved = false;
+            const rekey = (k) => {
+                const next = renameInObsKey(k, from, to);
+                if (next !== k) moved = true;
+                return next;
+            };
+            const order = s.order.map(rekey);
+            if (!moved) return {};
+            const pending = {};
+            for (const [k, e] of Object.entries(s.pending)) {
+                const nk = renameInObsKey(k, from, to);
+                pending[nk] = nk === k ? e : { ...e, key: nk };
+            }
+            return { pending, order };
+        });
+    },
+
     // Execute every pending entry in stage order. Entries are cleared up
     // front (a failed action shouldn't stay staged and silently re-fire on the
     // next commit); failures are reported, not retried.
@@ -68,6 +95,48 @@ export const useStagingStore = create((set, get) => ({
         return { ran: entries.length - errors.length, errors };
     },
 }));
+
+/*
+ * THE KEY FOR A STAGED OBS ACTION — `obs:{kind}:{name}…[:#{item id}]`.
+ *
+ * Every OBS control stages under the names of what it acts on (a source, or the
+ * scene that owns an item), and those names are the producer's to change in
+ * OBS at any moment. Building them here, encoded, is what lets a rename find
+ * them again (`renameObs`): a name can hold ':' or look like a number, so a key
+ * spliced together by hand could not be taken apart safely. The item id is
+ * marked `#` — never a name, since encodeURIComponent escapes a leading '#'.
+ */
+export function obsStageKey(kind, names = [], id) {
+    const parts = ['obs', kind, ...names.map(n => encodeURIComponent(String(n ?? '')))];
+    if (id != null) parts.push(`#${id}`);
+    return parts.join(':');
+}
+
+// The OBS names an obsStageKey carries, or null for any other key.
+export function obsKeyNames(key) {
+    if (typeof key !== 'string' || !key.startsWith('obs:')) return null;
+    const names = [];
+    for (const part of key.split(':').slice(2)) {
+        if (part.startsWith('#')) continue;
+        try { names.push(decodeURIComponent(part)); } catch { /* not ours */ }
+    }
+    return names;
+}
+
+export function renameInObsKey(key, from, to) {
+    if (typeof key !== 'string' || !key.startsWith('obs:')) return key;
+    const parts = key.split(':');
+    let changed = false;
+    for (let i = 2; i < parts.length; i++) {
+        if (parts[i].startsWith('#')) continue;
+        let name;
+        try { name = decodeURIComponent(parts[i]); } catch { continue; }
+        if (name !== from) continue;
+        parts[i] = encodeURIComponent(to);
+        changed = true;
+    }
+    return changed ? parts.join(':') : key;
+}
 
 export function confirmModeEnabled() {
     return !!useSettingsStore.getState()?.production?.confirm?.enabled;

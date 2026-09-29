@@ -8,6 +8,7 @@ import { settingOn } from '../routes/design/designConstants';
 import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/sourcename';
 import { upgradeRetiredCanvas } from '../routes/production/sources/canvas-migrate';
 import { notifications } from '../lib/notify';
+import { obsKeyNames, useStagingStore } from './staging';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, reshapePatch, isCropped, stretchOf,
     inputSize, sameInputSize, typeScaleOf, growPatch,
@@ -65,6 +66,41 @@ let tracked = new Set();
  */
 let inputCache = new Map();
 
+/*
+ * NAMES ARE THE PRODUCER'S, AND OBS ADDRESSES EVERYTHING BY NAME.
+ *
+ * obs-websocket 5 on OBS 28/29 has no stable id for an input or a scene — every
+ * request names one — and a producer can rename either in OBS at any moment
+ * (PRSH renames its own sources too: followUrlWithName). So anything holding a
+ * name across time is holding something that can go stale under it: a staged
+ * confirm-mode action whose `run` captured "Stat Bar — Side 1 (Board 1)", a
+ * Go Live that runs a board switch and then, a beat later, a redraw of the
+ * same source the switch has just renamed.
+ *
+ * `aliases` is old name -> current name, for every rename seen on this
+ * connection, kept flat (a chain A -> B -> C stores A -> C and B -> C). Every
+ * store action passes the names it was handed through `liveName` at the moment
+ * it calls OBS, so a request made under a name that has since moved still
+ * reaches the thing it meant. A name reused by a NEW input or scene drops its
+ * alias (InputCreated / SceneCreated): from then on it means the new thing.
+ */
+let aliases = new Map();
+
+export function liveName(name) {
+    return (name != null && aliases.get(name)) || name;
+}
+
+/*
+ * Who else keeps names — the console's browser-local layout (selection, rail
+ * pins, open/hidden scenes, folded folders; ../routes/production/sources/
+ * renames.js). Told after the mirror has moved, once per rename.
+ */
+const renameListeners = new Set();
+export function onObsRename(fn) {
+    renameListeners.add(fn);
+    return () => renameListeners.delete(fn);
+}
+
 const gcPort = () =>
     Number(useSettingsStore.getState()?.controller_overlay?.port) || null;
 
@@ -72,6 +108,7 @@ function resetMirror() {
     tracked = new Set();
     inputCache = new Map();
     groupParents = new Map();
+    aliases = new Map();
 }
 
 /*
@@ -96,6 +133,8 @@ function track(sceneName, gen) {
 const mapItem = (it) => ({
     id: it.sceneItemId,
     sourceName: it.sourceName,
+    // OBS 30+ only (obs-websocket 5.3); null on 28/29. See the name book.
+    uuid: it.sourceUuid ?? null,
     enabled: it.sceneItemEnabled,
     inputKind: it.inputKind || null,
     isGroup: !!it.isGroup,
@@ -269,6 +308,7 @@ export const useObsStore = create((set) => ({
         // transparent frame in that texture; the later re-enable then reveals
         // cleanly from nothing. (gc-overlay has no /layout/ path and no
         // overlay-base, so the cue correctly skips it.)
+        sceneName = liveName(sceneName);
         if (!enabled) {
             // By OWNER, across every mirrored scene: `sceneName` is the group
             // for an item inside one, and a group has no list of its own here.
@@ -306,7 +346,7 @@ export const useObsStore = create((set) => ({
      */
     removeSceneItem: async (sceneName, sceneItemId) => {
         if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('RemoveSceneItem', { sceneName, sceneItemId });
+        await obs.call('RemoveSceneItem', { sceneName: liveName(sceneName), sceneItemId });
     },
 
     /*
@@ -345,6 +385,9 @@ export const useObsStore = create((set) => ({
         scene, itemId, modelScene, modelItemId, sourceName, matchRender = false,
     }) => {
         if (!obs) throw new Error('Not connected to OBS');
+        scene = liveName(scene);
+        modelScene = liveName(modelScene);
+        sourceName = liveName(sourceName);
         const [model, target] = await Promise.all([
             obs.call('GetSceneItemTransform', {
                 sceneName: modelScene, sceneItemId: modelItemId,
@@ -425,6 +468,8 @@ export const useObsStore = create((set) => ({
      */
     redrawSourceAtSize: async ({ scene, itemId, sourceName, rewriteUrl = null }) => {
         if (!obs) throw new Error('Not connected to OBS');
+        scene = liveName(scene);
+        sourceName = liveName(sourceName);
         const { sceneItemTransform } = await obs.call('GetSceneItemTransform', {
             sceneName: scene, sceneItemId: itemId,
         });
@@ -482,6 +527,7 @@ export const useObsStore = create((set) => ({
      */
     reshapeBrowserSource: async ({ sourceName, url, width, height }) => {
         if (!obs) throw new Error('Not connected to OBS');
+        sourceName = liveName(sourceName);
         const occurrences = await itemsOfSource(sourceName);
         if (occurrences.some(o => isCropped(o.transform))) {
             throw new Error('This source is cropped in at least one scene — changing its '
@@ -512,6 +558,7 @@ export const useObsStore = create((set) => ({
      */
     growBrowserSource: async ({ sourceName, from, width, height }) => {
         if (!obs) throw new Error('Not connected to OBS');
+        sourceName = liveName(sourceName);
         const to = { width, height };
         const occurrences = await itemsOfSource(sourceName);
         const patches = occurrences.map(o => growPatch(o.transform, from, to));   // throws first
@@ -533,17 +580,18 @@ export const useObsStore = create((set) => ({
     // returns immediately rather than re-fetching, which is what makes "expand
     // a scene section" cheap on the second expand.
     mirrorScene: async (sceneName) => {
+        sceneName = liveName(sceneName);
         if (!obs || !sceneName || tracked.has(sceneName)) return;
         await track(sceneName, generation);
     },
 
     setProgramScene: async (sceneName) => {
         if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('SetCurrentProgramScene', { sceneName });
+        await obs.call('SetCurrentProgramScene', { sceneName: liveName(sceneName) });
     },
     setPreviewScene: async (sceneName) => {
         if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('SetCurrentPreviewScene', { sceneName });
+        await obs.call('SetCurrentPreviewScene', { sceneName: liveName(sceneName) });
     },
     triggerTransition: async () => {
         if (!obs) throw new Error('Not connected to OBS');
@@ -569,7 +617,7 @@ export const useObsStore = create((set) => ({
     // live caller states `enabled` rather than relying on it.
     addBrowserSource: async ({ inputName, url, width, height, sceneName, enabled = true }) => {
         if (!obs) throw new Error('Not connected to OBS');
-        const scene = sceneName || useObsStore.getState().programScene;
+        const scene = liveName(sceneName) || useObsStore.getState().programScene;
         if (!scene) throw new Error('No active program scene in OBS');
 
         const taken = new Set();
@@ -607,6 +655,7 @@ export const useObsStore = create((set) => ({
      */
     repointBrowserSource: async ({ sourceName, url }) => {
         if (!obs) throw new Error('Not connected to OBS');
+        sourceName = liveName(sourceName);
         await obs.call('SetInputSettings', {
             inputName: sourceName,
             inputSettings: { url },
@@ -710,6 +759,8 @@ export const useObsStore = create((set) => ({
             ));
             if (myGen !== generation) return; // superseded while connecting
             reconnectAttempts = 0;
+            await reconcileOnConnect(myGen);
+            if (myGen !== generation) return;
             set({ status: 'connected', error: null, obsVersion: obsWebSocketVersion });
             /*
              * One success is what turns a later failure into an ERROR rather
@@ -951,6 +1002,9 @@ async function refreshScene(sceneName, gen) {
         }));
         const enriched = lists.flat();
         if (gen !== generation || !tracked.has(sceneName)) return;
+        // A GROUP's uuid is reported here and nowhere else, so a folder renamed
+        // while PRSH was away is only recognised once a scene holding it loads.
+        replayRenames(enriched.map(it => ({ uuid: it.uuid, name: it.sourceName })));
         for (const [g, parents] of groupParents) {
             parents.delete(sceneName);
             if (!parents.size) groupParents.delete(g);
@@ -1118,20 +1172,43 @@ function wireEvents(client, gen) {
         }));
     });
 
-    // A rename — ours (the board switch) or the producer's in OBS — moves the
-    // cached settings and every mirrored item to the new name, or the rack keeps
-    // a row for a source OBS no longer has by that name.
+    /*
+     * A RENAME — of a source, a scene or an OBS group (obs-websocket reports a
+     * group as a scene). Ours (followUrlWithName) or the producer's in OBS.
+     * Everything this layer holds by name moves with it (`renameEverywhere`);
+     * without that the rack keeps a row for a name OBS no longer has, and every
+     * request made from it fails.
+     *
+     * OBS says nothing about the program or preview scene when one of those is
+     * renamed, and SceneListChanged may land either side of this event — so a
+     * scene that was mirrored is re-fetched under its new name if the list
+     * handler got there first and dropped it.
+     */
     client.on('InputNameChanged', ({ oldInputName, inputName }) => {
+        if (alive()) renameEverywhere(oldInputName, inputName);
+    });
+    client.on('SceneNameChanged', ({ oldSceneName, sceneName }) => {
         if (!alive()) return;
-        const hit = inputCache.get(oldInputName);
-        inputCache.delete(oldInputName);
-        if (hit) inputCache.set(inputName, hit);
-        useObsStore.setState(state => ({
-            sceneItems: Object.fromEntries(Object.entries(state.sceneItems).map(([scene, items]) => [
-                scene,
-                items.map(it => (it.sourceName === oldInputName ? { ...it, sourceName: inputName } : it)),
-            ])),
-        }));
+        const { programScene, previewScene } = useObsStore.getState();
+        const wasMirrored = tracked.has(oldSceneName)
+            || oldSceneName === programScene || oldSceneName === previewScene;
+        renameEverywhere(oldSceneName, sceneName);
+        if (wasMirrored && !useObsStore.getState().sceneItems[sceneName]) track(sceneName, gen);
+    });
+
+    // A name taken by something NEW means the new thing from now on — an alias
+    // left behind would send its requests to whatever used to be called that.
+    // And it goes in the name book now, or a rename made after the next
+    // disconnect would find no record of what it was called.
+    client.on('InputCreated', ({ inputName, inputUuid }) => {
+        if (!alive()) return;
+        aliases.delete(inputName);
+        replayRenames([{ uuid: inputUuid, name: inputName }]);
+    });
+    client.on('SceneCreated', ({ sceneName, sceneUuid }) => {
+        if (!alive()) return;
+        aliases.delete(sceneName);
+        replayRenames([{ uuid: sceneUuid, name: sceneName }]);
     });
 
     // A name freed by one input can be taken by another, so a stale cache entry
@@ -1139,6 +1216,222 @@ function wireEvents(client, gen) {
     client.on('InputRemoved', ({ inputName }) => {
         if (alive()) inputCache.delete(inputName);
     });
+}
+
+/*
+ * Move every name-keyed thing this layer holds from `from` to `to`.
+ *
+ * ONE function for sources, scenes and groups, because OBS keeps them in one
+ * namespace — no input may share a name with a scene — and because a group is
+ * both at once: the group's own scene item is listed by `sourceName`, and each
+ * item inside it carries the group as `owner` (the scene every request against
+ * it must name) and `group` (the folder the rack draws). Missing any of those
+ * leaves a folder whose children's events arrive under a name the mirror no
+ * longer matches, and whose eyes send the old one to OBS.
+ */
+function renameEverywhere(from, to) {
+    if (!from || !to || from === to) return;
+
+    const book = readBook();
+    let booked = false;
+    for (const [uuid, name] of Object.entries(book)) {
+        if (name === from) { book[uuid] = to; booked = true; }
+    }
+    if (booked) writeBook(book);
+
+    for (const [k, v] of aliases) if (v === from) aliases.set(k, to);
+    aliases.delete(to);
+    aliases.set(from, to);
+
+    const hit = inputCache.get(from);
+    inputCache.delete(from);
+    if (hit) inputCache.set(to, hit);
+
+    if (tracked.has(from)) {
+        tracked.delete(from);
+        tracked.add(to);
+    }
+    for (const parents of groupParents.values()) {
+        if (parents.delete(from)) parents.add(to);
+    }
+    if (groupParents.has(from)) {
+        groupParents.set(to, groupParents.get(from));
+        groupParents.delete(from);
+    }
+
+    const swap = n => (n === from ? to : n);
+    useObsStore.setState((state) => {
+        const sceneItems = {};
+        for (const [scene, items] of Object.entries(state.sceneItems)) {
+            sceneItems[swap(scene)] = items.map((it) => (
+                it.sourceName === from || it.owner === from || it.group === from
+                    ? { ...it, sourceName: swap(it.sourceName), owner: swap(it.owner), group: swap(it.group) }
+                    : it));
+        }
+        return {
+            sceneItems,
+            programScene: swap(state.programScene),
+            previewScene: swap(state.previewScene),
+            scenes: state.scenes.map(swap),
+            mirroredScenes: [...tracked],
+        };
+    });
+
+    renameRemembered(from, to);
+}
+
+// The half of a rename that outlives a connection: everything kept by NAME in
+// this browser (and the in-memory staging buffer, which outlives a dropped
+// socket). The mirror is not in it — a fresh connection reads that from OBS.
+function renameRemembered(from, to) {
+    renameKeptCanvases(from, to);
+    useStagingStore.getState().renameObs(from, to);
+    for (const fn of renameListeners) {
+        try { fn(from, to); } catch (e) { console.debug('OBS rename listener failed', e); }
+    }
+}
+
+/*
+ * THE NAME BOOK — OBS uuid -> the name it had when this browser last saw it.
+ *
+ * A rename made while PRSH was closed (or its socket down) is never announced:
+ * obs-websocket only reports what happens while a client is listening, and on
+ * the next connect the old name is simply absent, indistinguishable from a
+ * delete. OBS 30+ gives every input and scene a uuid that survives renames and
+ * restarts, so remembering uuid -> name turns that absence back into a rename:
+ * a uuid whose name moved is REPLAYED through the same path as a live rename
+ * (`replayRenames`). OBS 28/29 report no uuids, and there nothing is recorded
+ * and nothing changes.
+ *
+ * Kept up to date live by renameEverywhere (by name, so no uuid is needed on
+ * the event) and by every list that carries uuids: the connect pass, created
+ * events, and each mirrored scene's items — the only place a GROUP's uuid is
+ * reported at all.
+ */
+const NAME_BOOK = 'prsh.obs.nameBook';
+function readBook() {
+    try {
+        const v = JSON.parse(localStorage.getItem(NAME_BOOK) || '{}');
+        return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    } catch { return {}; }
+}
+function writeBook(book) {
+    try { localStorage.setItem(NAME_BOOK, JSON.stringify(book)); } catch { /* private window */ }
+}
+
+let placeholderSeq = 0;
+
+/*
+ * Record `pairs` ({uuid, name}) and replay every name that moved since this
+ * browser last saw it. Returns the moves, [from, to].
+ *
+ * `current` — every name OBS has right now — is what makes a replay safe to
+ * ALIAS: a request under an old name may be redirected only while nothing else
+ * answers to that name. Two sources that swapped names offline both still
+ * exist, so neither old name aliases (the staged-change pass below drops what
+ * would otherwise run against the wrong one). Without `current` (a single
+ * scene's items) nothing aliases.
+ *
+ * Through a PLACEHOLDER, both halves: replaying A->B then B->A one at a time
+ * would move everything stored under A onto B and then all of it back onto A,
+ * merging the two. A NUL cannot appear in a name OBS accepts.
+ */
+function replayRenames(pairs, current = null) {
+    const book = readBook();
+    const moves = [];
+    let dirty = false;
+    for (const { uuid, name } of pairs) {
+        if (!uuid || !name) continue;
+        const was = book[uuid];
+        if (was && was !== name) moves.push([was, name]);
+        if (was !== name) { book[uuid] = name; dirty = true; }
+    }
+    if (dirty) writeBook(book);
+    if (!moves.length) return moves;
+    const held = moves.map(([from, to]) => {
+        const hold = `\u0000prsh-rename-${++placeholderSeq}`;
+        renameRemembered(from, hold);
+        return [hold, to];
+    });
+    for (const [hold, to] of held) renameRemembered(hold, to);
+    if (current) {
+        for (const [from, to] of moves) {
+            if (!current.has(from)) aliases.set(from, to);
+        }
+    }
+    return moves;
+}
+
+/*
+ * THE CONNECT PASS — before the console reports connected, so the rack reads
+ * its stored layout under today's names from the first frame.
+ *
+ * 1. Replay renames made while no PRSH was listening (the name book).
+ * 2. Drop every staged change that still names something OBS does not have.
+ *    The buffer is in memory, so this only matters to a console that stayed
+ *    open across a dropped socket — but there, an entry naming a deleted scene
+ *    would otherwise sit in the pending bar until Go Live and then fail.
+ *    A name is fine if OBS has it and it did not move away, or if it moved
+ *    away and nothing took its place (then it is re-keyed and aliased). A name
+ *    that moved while something ELSE now answers to it is ambiguous — the
+ *    staged `run` captured it and would reach the newcomer — so it is dropped,
+ *    and said so, rather than guessed at.
+ *
+ * Any list failing skips the pass: dropping staged work on half an answer is
+ * worse than leaving it to fail loudly at Go Live.
+ */
+async function reconcileOnConnect(gen) {
+    let scenes;
+    let inputs;
+    let groups;
+    try {
+        [{ scenes }, { inputs }, { groups }] = await Promise.all([
+            obs.call('GetSceneList'),
+            obs.call('GetInputList'),
+            obs.call('GetGroupList'),
+        ]);
+    } catch {
+        return;
+    }
+    if (gen !== generation) return;
+    const current = new Set([
+        ...(scenes || []).map(sc => sc.sceneName),
+        ...(inputs || []).map(i => i.inputName),
+        ...(groups || []),
+    ]);
+    const pairs = [
+        ...(scenes || []).map(sc => ({ uuid: sc.sceneUuid, name: sc.sceneName })),
+        ...(inputs || []).map(i => ({ uuid: i.inputUuid, name: i.inputName })),
+    ];
+
+    // Which old names are about to move — decided BEFORE the replay re-keys the
+    // buffer, while each entry still carries the name its `run` captured.
+    const book = readBook();
+    const movedAway = new Set();
+    for (const { uuid, name } of pairs) {
+        if (uuid && book[uuid] && book[uuid] !== name) movedAway.add(book[uuid]);
+    }
+    const staging = useStagingStore.getState();
+    const dropped = [];
+    for (const key of staging.order) {
+        const names = obsKeyNames(key);
+        if (!names) continue;
+        const ok = names.every(n => (current.has(n) ? !movedAway.has(n) : movedAway.has(n)));
+        if (!ok) {
+            dropped.push(staging.pending[key]?.label || key);
+            staging.discard(key);
+        }
+    }
+
+    replayRenames(pairs, current);
+
+    if (dropped.length) {
+        notifications.show({
+            color: 'yellow',
+            message: `Dropped ${dropped.length} staged change${dropped.length === 1 ? '' : 's'} — `
+                + `OBS changed while PRSH was disconnected: ${dropped.join('; ')}`,
+        });
+    }
 }
 
 /*
@@ -1243,6 +1536,20 @@ function readKept() {
 }
 function writeKept(set) {
     try { localStorage.setItem(KEPT_CANVASES, JSON.stringify([...set])); } catch { /* private window */ }
+}
+// A Keep size is an answer about a SOURCE, so it follows the source's name — or
+// a rename would ask the question again on the next connect. Split on the LAST
+// '@': a source name may hold one, the size never does.
+function renameKeptCanvases(from, to) {
+    const kept = readKept();
+    let moved = false;
+    const next = new Set([...kept].map((k) => {
+        const at = k.lastIndexOf('@');
+        if (at < 0 || k.slice(0, at) !== from) return k;
+        moved = true;
+        return `${to}${k.slice(at)}`;
+    }));
+    if (moved) writeKept(next);
 }
 
 async function upgradeRetiredCanvases(gen) {

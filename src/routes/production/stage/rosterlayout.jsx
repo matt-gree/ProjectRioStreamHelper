@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo } from 'react';
 import { usePersistentState } from '../../../hooks/usePersistentState';
-import { useObsStore } from '../../../context/obs';
-import { stageOrRun, usePending } from '../../../context/staging';
+import { liveName, useObsStore } from '../../../context/obs';
+import { obsStageKey, stageOrRun, usePending } from '../../../context/staging';
 import { notifications } from '../../../lib/notify';
 import { SegmentedRow } from '../kit';
 import { boardOfUrl } from '../../../lib/obs-binding';
@@ -43,7 +43,7 @@ import {
  * source that is on air changes the broadcast.
  */
 
-const pendingKey = (placement) => `obs:layout:${placement.item.sourceName}`;
+const pendingKey = (placement) => obsStageKey('layout', [placement.item.sourceName]);
 
 const OPTIONS = Object.entries(ROSTER_LAYOUTS).map(([value, { label }]) => ({ value, label }));
 
@@ -112,7 +112,7 @@ const RosterLayoutRow = memo(function RosterLayoutRow({ placement, onSelect }) {
                     // on the source just reshaped (boardswitch.jsx does the same).
                     onSelect?.(placementId(
                         instanceId(placement.element, placement.board ?? boardOfUrl(nextUrl), nextUrl),
-                        placement.scene,
+                        liveName(placement.scene),
                     ));
                     notifications.show({
                         color: 'green',

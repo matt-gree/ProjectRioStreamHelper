@@ -235,7 +235,7 @@ describe('matching a pair’s size', () => {
         ui(<Stage selection="roster~t1@Game" />);
         fireEvent.click(screen.getByRole('button', { name: /Match Side 2/ }));
         expect(match).not.toHaveBeenCalled();
-        expect(useStagingStore.getState().order).toEqual(['obs:size:Game:1']);
+        expect(useStagingStore.getState().order).toEqual(['obs:size:Game:#1']);
         await commitPending();
         expect(match).toHaveBeenCalledTimes(1);
     });

@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { ownerScene, useObsStore } from '../../../context/obs';
-import { stageOrRun, usePending } from '../../../context/staging';
+import { obsStageKey, stageOrRun, usePending } from '../../../context/staging';
 import { notifications } from '../../../lib/notify';
 import { Button } from '../../../components/ui/button';
 import { Text } from '../../../components/ui/primitives';
@@ -65,7 +65,7 @@ import {
  * in the show is softer than it should be.
  */
 
-const pendingKey = (placement) => `obs:redraw:${ownerScene(placement.scene, placement.item)}:${placement.item.id}`;
+const pendingKey = (placement) => obsStageKey('redraw', [ownerScene(placement.scene, placement.item)], placement.item.id);
 
 /*
  * THE PLAYER NAME KEEPS THE SIZE IT WAS DRAWN AT. A producer who drags a name

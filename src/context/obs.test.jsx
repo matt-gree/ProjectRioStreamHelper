@@ -867,6 +867,256 @@ describe('source order and groups', () => {
 });
 
 /*
+ * RENAMES. OBS addresses everything by name and a producer can rename a source,
+ * a scene or a group at any moment — so every name this layer holds has to
+ * move with it, and a request made under the old name has to still land.
+ */
+describe('renames', () => {
+    const LT_URL = 'http://localhost:5260/layout/lowerthird/lowerthird.html';
+
+    it('a renamed source keeps its row, its url and its cache entry', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.calls.length = 0;
+        fake.fire('InputNameChanged', { oldInputName: 'SB', inputName: 'Scoreboard' });
+        const [item] = useObsStore.getState().sceneItems.Main;
+        expect(item).toMatchObject({ sourceName: 'Scoreboard', url: SB_URL, isPrsh: true });
+        // OBS now lists it under the new name; its settings are already cached.
+        fake.rpc.GetSceneItemList = () => ({ sceneItems: [browserItem(1, 'Scoreboard')] });
+        fake.fire('SceneItemCreated', { sceneName: 'Main' });
+        await vi.waitFor(() => expect(fake.callsOf('GetSceneItemList').length).toBe(1));
+        expect(fake.callsOf('GetInputSettings')).toEqual([]);
+    });
+
+    it('a request made under the old source name reaches the renamed source', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.fire('InputNameChanged', { oldInputName: 'SB', inputName: 'B' });
+        fake.fire('InputNameChanged', { oldInputName: 'B', inputName: 'C' });
+        await useObsStore.getState().repointBrowserSource({ sourceName: 'SB', url: SB_URL });
+        expect(fake.callsOf('SetInputSettings').at(-1)[1].inputName).toBe('C');
+    });
+
+    it('a name reused by a NEW input means the new input', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.fire('InputNameChanged', { oldInputName: 'SB', inputName: 'Old' });
+        fake.fire('InputCreated', { inputName: 'SB' });
+        await useObsStore.getState().repointBrowserSource({ sourceName: 'SB', url: SB_URL });
+        expect(fake.callsOf('SetInputSettings').at(-1)[1].inputName).toBe('SB');
+    });
+
+    it('renaming the program scene moves the mirror, and its events keep landing', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.fire('SceneNameChanged', { oldSceneName: 'Main', sceneName: 'Game' });
+        fake.fire('SceneListChanged', { scenes: [{ sceneName: 'Game' }] });
+        let s = useObsStore.getState();
+        expect(s.programScene).toBe('Game');
+        expect(s.scenes).toEqual(['Game']);
+        expect(s.mirroredScenes).toEqual(['Game']);
+        expect(s.sceneItems.Main).toBeUndefined();
+        expect(s.sceneItems.Game[0]).toMatchObject({ sourceName: 'SB', owner: 'Game' });
+
+        fake.fire('SceneItemEnableStateChanged',
+            { sceneName: 'Game', sceneItemId: 1, sceneItemEnabled: false });
+        s = useObsStore.getState();
+        expect(s.sceneItems.Game[0].enabled).toBe(false);
+
+        await useObsStore.getState().setSceneItemEnabled('Main', 1, true);
+        expect(fake.callsOf('SetSceneItemEnabled').at(-1)[1].sceneName).toBe('Game');
+    });
+
+    it('re-mirrors the program scene when the list change beat the rename', async () => {
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.rpc.GetSceneItemList = () => ({ sceneItems: [browserItem(1, 'SB')] });
+        fake.calls.length = 0;
+        fake.fire('SceneListChanged', { scenes: [{ sceneName: 'Game' }] });
+        fake.fire('SceneNameChanged', { oldSceneName: 'Main', sceneName: 'Game' });
+        await vi.waitFor(() =>
+            expect(useObsStore.getState().sceneItems.Game?.[0]?.sourceName).toBe('SB'));
+        expect(useObsStore.getState().programScene).toBe('Game');
+        expect(fake.callsOf('GetSceneItemList').map(([, p]) => p.sceneName)).toEqual(['Game']);
+    });
+
+    it('renaming a group moves its item, its children’s owner and its reload route', async () => {
+        const connectPromise = useObsStore.getState().connect();
+        const fake = h.instances.at(-1);
+        fake.rpc.GetStudioModeEnabled = { studioModeEnabled: false };
+        fake.rpc.GetSceneList = { currentProgramSceneName: 'Main', scenes: [{ sceneName: 'Main' }] };
+        fake.rpc.GetSceneItemList = {
+            sceneItems: [{ ...browserItem(2, 'Graphics'), inputKind: null, isGroup: true }],
+        };
+        fake.rpc.GetGroupSceneItemList = () => ({ sceneItems: [browserItem(1, 'LT')] });
+        fake.rpc.GetInputSettings = () => ({ inputSettings: { url: LT_URL } });
+        await connectPromise;
+
+        fake.fire('SceneNameChanged', { oldSceneName: 'Graphics', sceneName: 'Folder' });
+        const items = () => useObsStore.getState().sceneItems.Main;
+        expect(items().find(i => i.isGroup).sourceName).toBe('Folder');
+        expect(items().find(i => i.sourceName === 'LT')).toMatchObject({ owner: 'Folder', group: 'Folder' });
+
+        fake.fire('SceneItemEnableStateChanged',
+            { sceneName: 'Folder', sceneItemId: 1, sceneItemEnabled: false });
+        expect(items().find(i => i.sourceName === 'LT').enabled).toBe(false);
+
+        fake.calls.length = 0;
+        fake.fire('SceneItemListReindexed', { sceneName: 'Folder' });
+        await vi.waitFor(() =>
+            expect(fake.callsOf('GetSceneItemList').map(([, p]) => p.sceneName)).toEqual(['Main']));
+    });
+
+    it('moves a staged action’s key to the new name', async () => {
+        const { useStagingStore, obsStageKey } = await import('./staging');
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        useStagingStore.getState().stage({
+            key: obsStageKey('vis', ['Main'], 1), label: 'Hide SB', value: false, run: () => {},
+        });
+        useStagingStore.getState().stage({
+            key: obsStageKey('board', ['SB']), label: 'Point SB', value: 2, run: () => {},
+        });
+        fake.fire('SceneNameChanged', { oldSceneName: 'Main', sceneName: 'Game' });
+        fake.fire('InputNameChanged', { oldInputName: 'SB', inputName: 'Scoreboard' });
+        const { order, pending } = useStagingStore.getState();
+        expect(order).toEqual([obsStageKey('vis', ['Game'], 1), obsStageKey('board', ['Scoreboard'])]);
+        expect(pending[obsStageKey('vis', ['Game'], 1)].label).toBe('Hide SB');
+        useStagingStore.getState().discardAll();
+    });
+
+    it('a Keep size answer follows its source', async () => {
+        const mem = new Map([['prsh.ui.production.keptCanvases', JSON.stringify(['SB@452x118', 'X@1x1'])]]);
+        vi.stubGlobal('localStorage', {
+            getItem: k => (mem.has(k) ? mem.get(k) : null),
+            setItem: (k, v) => mem.set(k, String(v)),
+            removeItem: k => mem.delete(k),
+        });
+        const fake = await connectMulti({ Main: { SB: { url: SB_URL, shutdown: true } } });
+        fake.fire('InputNameChanged', { oldInputName: 'SB', inputName: 'A@B' });
+        expect(JSON.parse(localStorage.getItem('prsh.ui.production.keptCanvases')))
+            .toEqual(['A@B@452x118', 'X@1x1']);
+    });
+});
+
+/*
+ * RENAMES NOBODY WAS LISTENING FOR. OBS 30+ gives inputs and scenes a uuid that
+ * survives a rename, so the name this browser last saw it under is replayed as
+ * a rename on the next connect — and staged work naming something OBS no
+ * longer has is dropped before it can fail at Go Live.
+ */
+describe('renames while disconnected', () => {
+    let mem;
+    let shown;
+    beforeEach(() => {
+        mem = new Map();
+        vi.stubGlobal('localStorage', {
+            getItem: k => (mem.has(k) ? mem.get(k) : null),
+            setItem: (k, v) => mem.set(k, String(v)),
+            removeItem: k => mem.delete(k),
+        });
+        shown = [];
+        vi.spyOn(notifications, 'show').mockImplementation((o) => { shown.push(o); });
+    });
+    afterEach(async () => {
+        const { useStagingStore } = await import('./staging');
+        useStagingStore.getState().discardAll();
+        vi.restoreAllMocks();
+    });
+
+    const book = () => JSON.parse(mem.get('prsh.obs.nameBook') || '{}');
+
+    // One program scene; `scenes`/`inputs` are [name, uuid] pairs as OBS lists them now.
+    async function connectAs({ scenes, inputs = [], groups = [], items = [] }) {
+        const p = useObsStore.getState().connect();
+        const fake = h.instances.at(-1);
+        fake.rpc.GetStudioModeEnabled = { studioModeEnabled: false };
+        fake.rpc.GetSceneList = {
+            currentProgramSceneName: scenes[0][0],
+            scenes: scenes.map(([sceneName, sceneUuid]) => ({ sceneName, sceneUuid })),
+        };
+        fake.rpc.GetInputList = { inputs: inputs.map(([inputName, inputUuid]) => ({ inputName, inputUuid })) };
+        fake.rpc.GetGroupList = { groups };
+        fake.rpc.GetSceneItemList = { sceneItems: items };
+        fake.rpc.GetGroupSceneItemList = { sceneItems: [] };
+        fake.rpc.GetInputSettings = () => ({ inputSettings: { url: SB_URL, shutdown: true } });
+        await p;
+        return fake;
+    }
+
+    it('records what it sees, and replays an offline scene rename into the rack layout', async () => {
+        const { followRename } = await import('../routes/production/sources/renames');
+        expect(followRename).toBeTypeOf('function');   // registered on import
+        await connectAs({ scenes: [['Game', 's1'], ['Break', 's2']], inputs: [['SB', 'i1']] });
+        expect(book()).toEqual({ s1: 'Game', s2: 'Break', i1: 'SB' });
+        await useObsStore.getState().disconnect();
+
+        mem.set('prsh.ui.production.hiddenScenes', JSON.stringify(['Break']));
+        mem.set('prsh.ui.production.rail', JSON.stringify(['scoreboard:1@Break']));
+        await connectAs({ scenes: [['Game', 's1'], ['Intermission', 's2']], inputs: [['SB', 'i1']] });
+        expect(JSON.parse(mem.get('prsh.ui.production.hiddenScenes'))).toEqual(['Intermission']);
+        expect(JSON.parse(mem.get('prsh.ui.production.rail'))).toEqual(['scoreboard:1@Intermission']);
+        expect(book().s2).toBe('Intermission');
+    });
+
+    it('re-keys a staged change and still delivers it after an offline source rename', async () => {
+        const { useStagingStore, obsStageKey } = await import('./staging');
+        mem.set('prsh.obs.nameBook', JSON.stringify({ i1: 'SB' }));
+        useStagingStore.getState().stage({
+            key: obsStageKey('board', ['SB']), label: 'Point SB', value: 2,
+            run: () => useObsStore.getState().repointBrowserSource({ sourceName: 'SB', url: SB_URL }),
+        });
+        const fake = await connectAs({ scenes: [['Game', 's1']], inputs: [['Scoreboard', 'i1']] });
+        expect(useStagingStore.getState().order).toEqual([obsStageKey('board', ['Scoreboard'])]);
+        await useStagingStore.getState().commit();
+        expect(fake.callsOf('SetInputSettings').at(-1)[1].inputName).toBe('Scoreboard');
+        expect(shown).toEqual([]);
+    });
+
+    it('drops staged changes naming something gone, and says so', async () => {
+        const { useStagingStore, obsStageKey } = await import('./staging');
+        useStagingStore.getState().stage({
+            key: obsStageKey('vis', ['Deleted scene'], 3), label: 'Hide SB', value: false, run: () => {},
+        });
+        useStagingStore.getState().stage({
+            key: obsStageKey('vis', ['Game'], 1), label: 'Show SB', value: true, run: () => {},
+        });
+        await connectAs({ scenes: [['Game', 's1']] });
+        expect(useStagingStore.getState().order).toEqual([obsStageKey('vis', ['Game'], 1)]);
+        expect(shown).toHaveLength(1);
+        expect(shown[0].message).toContain('Hide SB');
+    });
+
+    it('a swap offline keeps each thing’s layout apart and redirects neither old name', async () => {
+        const { useStagingStore, obsStageKey } = await import('./staging');
+        mem.set('prsh.obs.nameBook', JSON.stringify({ u1: 'A', u2: 'B' }));
+        mem.set('prsh.ui.production.keptCanvases', JSON.stringify(['A@452x118']));
+        useStagingStore.getState().stage({
+            key: obsStageKey('board', ['A']), label: 'Point A', value: 2, run: () => {},
+        });
+        const fake = await connectAs({ scenes: [['Game', 's1']], inputs: [['B', 'u1'], ['A', 'u2']] });
+        expect(JSON.parse(mem.get('prsh.ui.production.keptCanvases'))).toEqual(['B@452x118']);
+        // Ambiguous: its run captured "A", which now names the other source.
+        expect(useStagingStore.getState().order).toEqual([]);
+        expect(shown[0].message).toContain('Point A');
+        await useObsStore.getState().repointBrowserSource({ sourceName: 'A', url: SB_URL });
+        expect(fake.callsOf('SetInputSettings').at(-1)[1].inputName).toBe('A');
+    });
+
+    it('a group’s uuid is learnt from the scene holding it', async () => {
+        const group = { ...browserItem(2, 'Graphics'), inputKind: null, isGroup: true, sourceUuid: 'g1' };
+        await connectAs({ scenes: [['Game', 's1']], items: [group] });
+        await vi.waitFor(() => expect(book().g1).toBe('Graphics'));
+        await useObsStore.getState().disconnect();
+
+        await import('../routes/production/sources/renames');
+        mem.set('prsh.ui.production.folders', JSON.stringify(['Game\nGraphics']));
+        await connectAs({ scenes: [['Game', 's1']], items: [{ ...group, sourceName: 'Folder' }] });
+        await vi.waitFor(() =>
+            expect(JSON.parse(mem.get('prsh.ui.production.folders'))).toEqual(['Game\nFolder']));
+    });
+
+    it('OBS 28/29 report no uuids, so nothing is recorded or replayed', async () => {
+        await connectAs({ scenes: [['Game', undefined]], inputs: [['SB', undefined]] });
+        expect(mem.has('prsh.obs.nameBook')).toBe(false);
+    });
+});
+
+/*
  * THE CANVAS PROMPT: a Stat Bar / Stat Card built before its canvas grew is
  * offered a resize on connect — never resized unasked. Resize keeps each item
  * looking as it did (a crop keeps its area); Keep size is remembered.

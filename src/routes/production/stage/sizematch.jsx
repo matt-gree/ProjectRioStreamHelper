@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { Scaling } from 'lucide-react';
 import { ownerScene, useObsStore } from '../../../context/obs';
-import { stageOrRun, usePending } from '../../../context/staging';
+import { obsStageKey, stageOrRun, usePending } from '../../../context/staging';
 import { notifications } from '../../../lib/notify';
 import { Button } from '../../../components/ui/button';
 import { FieldRow } from '../kit';
@@ -46,7 +46,7 @@ import { useBoardTag } from '../board/boards';
  * source doesn't already know.
  */
 
-const pendingKey = (placement) => `obs:size:${ownerScene(placement.scene, placement.item)}:${placement.item.id}`;
+const pendingKey = (placement) => obsStageKey('size', [ownerScene(placement.scene, placement.item)], placement.item.id);
 
 export function matchSize(placement, sibling, label) {
     const mine = placement.item.sourceName;

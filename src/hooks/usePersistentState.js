@@ -71,3 +71,29 @@ export function usePersistentState(key, defaultValue, isValid) {
 
     return [value, set];
 }
+
+/*
+ * Rewrite a persisted value from OUTSIDE a component — for a fact that arrives
+ * as an event rather than a click (an OBS rename moving the rack's stored scene
+ * names). Every mounted hook on the key is told, exactly as a hook's own write
+ * would tell it. `update(current)` returns the new value, or `undefined` to
+ * leave it alone; nothing stored means nothing to rewrite.
+ */
+export function updatePersistent(key, update) {
+    let current;
+    try {
+        const raw = localStorage.getItem(key);
+        if (raw == null) return;
+        current = JSON.parse(raw);
+    } catch {
+        return;
+    }
+    const next = update(current);
+    if (next === undefined) return;
+    try {
+        localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+        // Best-effort, like every write here.
+    }
+    broadcast(key, next, null);
+}

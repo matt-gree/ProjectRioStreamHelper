@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useSettingsStore } from '../../../context/store';
 import { useObsStore } from '../../../context/obs';
-import { stageOrRun, usePending } from '../../../context/staging';
+import { obsStageKey, stageOrRun, usePending } from '../../../context/staging';
 import { notifications } from '../../../lib/notify';
 import { Button } from '../../../components/ui/button';
 import { Text } from '../../../components/ui/primitives';
@@ -103,7 +103,7 @@ function useOwnSizes(placement) {
  */
 export const OwnSizeRow = memo(function OwnSizeRow({ placement }) {
     const own = useOwnSizes(placement);
-    const key = `obs:pnsize:${placement?.item?.sourceName}`;
+    const key = obsStageKey('pnsize', [placement?.item?.sourceName]);
     const staged = !!usePending(key);
     if (own.nameSize == null && own.prefixSize == null) return null;
     const name = placement.item.sourceName;
