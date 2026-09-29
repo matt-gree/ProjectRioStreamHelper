@@ -202,6 +202,37 @@ class PostGame:
             (f"{base}.linescore", payload.get("linescore", {})),
         ]
 
+    @staticmethod
+    def _settle_board_entries(sb: int, board_game_id, stat: StatObj, payload: dict) -> list[tuple]:
+        """Put the box score's FINAL on the board, when the board holds this game.
+
+        A HUD frame's scores are PRE-play, and Project Rio writes no frame after
+        the last one — so a game that ends on a scoring play (a mercy, a walk-off)
+        stood on the board one play short of its result forever: a 10-run mercy
+        read 0–9, with no FINAL, on every overlay drawing the board. The stat file
+        is the end of the game (auto-capture already treats it so), and it is the
+        only source that has the last run in it.
+
+        Only the board's OWN game: a file picked by hand may be another game
+        entirely, and its score does not belong on whatever the board is showing.
+        `half_inning = "Final"` is what every overlay reads as final (the same
+        value the completed-game applier writes); the next game's first frame
+        overwrites all of it.
+        """
+        if not board_game_id or payload.get("gameId") != norm_game_id(board_game_id):
+            return []
+        t1, t2 = payload["teamNums"]["1"], payload["teamNums"]["2"]
+        lines = payload.get("linescore") or {}
+        base = f"score.{sb}"
+        return [
+            (f"{base}.score_left", stat.score(t1)),
+            (f"{base}.score_right", stat.score(t2)),
+            (f"{base}.away_linescore", lines.get("1") or []),
+            (f"{base}.home_linescore", lines.get("2") or []),
+            (f"{base}.game_over", True),
+            (f"{base}.half_inning", "Final"),
+        ]
+
     # ----- public API ------------------------------------------------------
 
     @classmethod
@@ -247,7 +278,8 @@ class PostGame:
             cls._captured[sb] = payload
             cls._stat_objs[sb] = stat
             cls._contacts.pop(sb, None)  # rebuilt lazily for the new capture
-            await State.SetBatch(cls._project_entries(sb, payload))
+            await State.SetBatch(cls._project_entries(sb, payload)
+                                 + cls._settle_board_entries(sb, game_id, stat, payload))
             await State.Save()
             await cls._promote_match(sb)
 
