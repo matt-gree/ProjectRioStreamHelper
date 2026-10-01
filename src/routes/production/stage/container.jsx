@@ -13,7 +13,8 @@ import {
     CONTAINER_MEMBERS, containerOfSource, growContainerSources, isSharedMember, sizeForMembers,
     useContainerActions, useContainerDefs,
 } from '../containers/containers';
-import { subjectKind, useContainerAutomations } from '../containers/automations';
+import { subjectKind, useContainerAutomations, useFeedReason } from '../containers/automations';
+import { useContainerPush } from '../containers/feeds';
 import { useActiveBoards, useBoardLabel } from '../board/boards';
 import { useSideLabels } from '../sides';
 import { BindingNote } from './generic';
@@ -100,6 +101,44 @@ const ANCHORS = [
     { value: 'bottom-right', label: 'Bottom right' },
 ];
 
+/*
+ * THE MANUAL PICK — one button per roster row.
+ *
+ * `Show` puts this member on the container NOW, as a producer's push: the
+ * rules pause until it is handed back, exactly as a Push from the member's own
+ * rack row does (it is the same `useContainerPush`, landing in THIS container).
+ * Two jobs, one control: lining a member up (it has to be on the container for
+ * the preview below to draw it where its position puts it) and overriding the
+ * rules on air. While the producer holds it, the button reads `Hand back` —
+ * clearing is what returns a container to its rules; there is no Resume verb.
+ *
+ * A member a RULE is showing reads `Hold`: pressing it pins that member by
+ * hand. Offering `Hand back` there would clear a feed the engine immediately
+ * puts back, a press that visibly does nothing.
+ */
+const ShowButton = memo(function ShowButton({ element, def }) {
+    const { feed, mine, staged, canPush, toggle, setFeed } = useContainerPush(element, def.scoreboard, def.id);
+    const reason = useFeedReason(def.id);
+    const held = mine && reason === 'manual';
+    // A rule's member is HELD by writing what is already up as the producer's:
+    // any feed write the engine did not make is a push.
+    const onClick = held ? toggle : mine ? () => setFeed(feed, `Hold ${element.name} on ${def.name}`) : toggle;
+    return (
+        <Button
+            size="xs" variant={held ? 'secondary' : 'ghost'}
+            disabled={!canPush}
+            title={!canPush ? `Pick what ${element.name} shows on its own row first`
+                : held ? 'Give the container back to its rules'
+                    : mine ? 'A rule put this up — hold it here by hand'
+                        : `Put ${element.name} on the container now; the rules pause until you hand back`}
+            onClick={onClick}
+            className={cn('h-6 shrink-0', staged && 'text-amber-400')}
+        >
+            {held ? 'Hand back' : mine ? 'Hold' : 'Show'}
+        </Button>
+    );
+});
+
 const MemberRow = memo(function MemberRow({ element, def, carrying, setMember, setOffset }) {
     const smaller = element.width < def.width || element.height < def.height;
     const cur = def.offsets?.[element.id] || { anchor: 'center', x: 0, y: 0 };
@@ -125,9 +164,12 @@ const MemberRow = memo(function MemberRow({ element, def, carrying, setMember, s
             ) : (
                 <Text size="xs" span dimmed>fills it</Text>
             )}
-            <span className="ml-auto opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+            <span className="ml-auto flex items-center gap-2">
+                <ShowButton element={element} def={def} />
+                <span className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
                 <IconToggle icon={X} tone="danger" label={`Take ${element.name} off this container`}
                     onClick={() => setMember(def.id, element.id, false)} />
+                </span>
             </span>
         </div>
     );

@@ -105,3 +105,31 @@ describe('scope', () => {
         expect(screen.queryByText('Scope')).not.toBeInTheDocument();
     });
 });
+
+describe('the manual pick', () => {
+    it('Show puts a member on the container, and Hand back clears it', () => {
+        ui();
+        const row = screen.getAllByText('Stat Card').find(n => n.closest('.group'))?.closest('.group');
+        fireEvent.click(within(row).getByRole('button', { name: 'Show' }));
+        expect(useStateStore.getState().production.feed.container[C])
+            .toMatchObject({ element: 'statscard', scoreboard: 1, team: 1 });
+
+        cleanup();
+        useStateStore.setState({ production: {
+            feed: { container: { [C]: { element: 'statscard', scoreboard: 1, team: 1 } }, reason: { [C]: 'manual' } },
+        } });
+        ui();
+        const held = screen.getAllByText('Stat Card').find(n => n.closest('.group'))?.closest('.group');
+        fireEvent.click(within(held).getByRole('button', { name: 'Hand back' }));
+        expect(useStateStore.getState().production.feed.container?.[C]).toBeUndefined();
+    });
+
+    it('offers Hold, not Hand back, on a member a rule put up', () => {
+        useStateStore.setState({ production: {
+            feed: { container: { [C]: { element: 'statscard', scoreboard: 1, team: 1 } }, reason: { [C]: 'rule' } },
+        } });
+        ui();
+        expect(screen.getByRole('button', { name: 'Hold' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Hand back' })).not.toBeInTheDocument();
+    });
+});

@@ -16,12 +16,14 @@ Adding one: write the failure you actually saw into the docstring. A check whose
 name and message do not say what went wrong on air is a check nobody will trust
 enough to act on at 2am mid-tournament.
 """
+from server.automations import MANUAL, RESTING, RULE, STATE
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
 
-# Which tiers may appear in production.feed.reason (server/automations.py).
-_FEED_REASONS = {"manual", "rule", "resting"}
+# Which tiers may appear in production.feed.reason — read off the engine that
+# writes them, so a new tier (WHILE rules' `state`) cannot be missing here.
+_FEED_REASONS = {MANUAL, RULE, STATE, RESTING}
 # Which layers the side cascade may name (RioGameDataProvider._decide).
 _SIDE_REASONS = {"manual", "match", "pin", "back_to_back", ""}
 
