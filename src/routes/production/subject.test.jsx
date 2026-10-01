@@ -133,7 +133,7 @@ describe('Subject', () => {
             carrying: 'statscard',
         }} />);
         expect(screen.getByText('Carrying Stat Card')).toBeInTheDocument();
-        expect(screen.getByText('automation')).toBeInTheDocument();
+        expect(screen.getByText('when rule')).toBeInTheDocument();
     });
 
     it('renders nothing for an element with no live content of its own', () => {

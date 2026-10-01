@@ -2,130 +2,155 @@ import { useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { ELEMENTS } from '../elements';
+import VOCAB from '../../../../public/layout/lib/automation-vocab.json';
 
 /*
  * Container automations — the console half.
  *
- * A rule makes a container feed itself: when a state key changes, show one of
- * its members for a few seconds, then return to the container's RESTING
- * occupant. The engine is server-side and lives in the state-write path
- * (server/automations.py), so a rule's feed write rides the same batch as the
- * HUD change that triggered it. This module holds only what the producer edits:
- * the rules themselves (plain settings, like container definitions) and the
- * QUICK-ADD LIBRARY they are created from.
+ * A rule makes a container feed itself, and it is a SENTENCE:
  *
- * WHY A LIBRARY AND NOT AN EDITOR. A rule has a trigger key in it, and a
- * free-text state key is a way to write an automation that silently never fires.
- * The canned entries are known-good and name the four knobs worth changing
- * (trigger, guard, member, dwell); custom authoring waits until these have been
- * through a real broadcast.
+ *   when <event> by <side> [if …] → show <member> of <subject> for <duration> · <how often>
+ *   while <state> → show <member> of <subject>
+ *   otherwise show <the resting member>
  *
- * PRECEDENCE is manual > rule > resting, mirrored by the engine to
- * `production.feed.reason.{container}` — the same shape as the player-side
- * cascade's `side_reason`, so a surface can say WHY something is up. A producer
- * Push suspends the rules; CLEARING the container is what hands it back, which
- * is why there is no separate Resume verb here.
+ * Every word in it is an id from `automation-vocab.json`, which the engine
+ * (server/automations.py) implements id by id — so the menus a producer picks
+ * from are exactly what the engine can do, and a rule that silently never fires
+ * cannot be written. That file used to be a canned library of whole rules; a
+ * vocabulary is what lets "when a home run is hit" arrive later as one entry
+ * instead of a new kind of rule.
+ *
+ * PRECEDENCE is manual > when > while > otherwise, mirrored by the engine to
+ * `production.feed.reason.{container}` as manual / rule / state / resting. A
+ * producer Push suspends the rules; CLEARING the container is what hands it
+ * back, which is why there is no separate Resume verb here.
  */
+
+export { VOCAB };
 
 export const AUTOMATIONS_KEY = 'production.automations';
 
 // The deciding tier, as the engine mirrors it.
 export const REASONS = {
-    manual: { label: 'Manual', hint: 'A producer pushed this — rules are suspended until it is cleared.' },
-    rule: { label: 'Automated', hint: 'An automation put this up; it returns to resting when the dwell ends.' },
-    resting: { label: 'Resting', hint: 'The container’s steady state — what it shows when nothing else is up.' },
+    manual: { label: 'Pushed', hint: 'You pushed this — the rules are paused until you clear it.' },
+    rule: { label: 'When rule', hint: 'A moment put this up; it hands back when its time is up.' },
+    state: { label: 'While rule', hint: 'A state that holds right now is showing this.' },
+    resting: { label: 'Otherwise', hint: 'Nothing else applies, so this is the container at rest.' },
 };
 
+const byId = list => Object.fromEntries(list.map(e => [e.id, e]));
+export const EVENTS = byId(VOCAB.events);
+export const STATES = byId(VOCAB.states);
+const UNTIL = byId(VOCAB.until);
+const ONCE = byId(VOCAB.once);
+const BY = byId(VOCAB.by);
+const CONDITIONS = byId(VOCAB.conditions);
+
 /*
- * The quick-add library.
+ * Whose content a member is handed — and whether the question applies at all.
  *
- * `{sb}` in a trigger resolves from the CONTAINER's scope server-side, so one
- * entry reads the same on every board instead of naming one.
- *
- * `members` is what the rule can show, in PREFERENCE ORDER, and a template only
- * offers itself for a container whose roster already holds one of them — a rule
- * that feeds a non-member is inert by design and would just look broken. It
- * stays a LIST with one entry in it: "flash the stat card" is one decision the
- * producer makes, and which card their container holds is a look they already
- * chose when they built the roster. It held two while the fed Stats bar was
- * also hostable; that element is now the dedicated per-side Stats source and no
- * longer a member, so `statscard` is the only card a roster can carry. The rule
- * always stores the resolved member, so the engine still reads exactly one.
+ * Only a CONTAINER-SCOPED member (Roster, Stat Card, Controller) draws "whoever"
+ * from a frame of reference, so only those get an "of". A Stat Card is about a
+ * PLAYER (the batter, the pitcher); a Roster or a Controller is about a SIDE.
+ * Same four subjects underneath — they all pick a side — read in the word that
+ * member's content is.
  */
-export const AUTOMATION_LIBRARY = [
-    {
-        id: 'batter-card',
-        name: 'Batter change → stat card',
-        members: ['statscard'],
-        trigger: 'score.{sb}.batter',
-        triggerLabel: 'the batter changes',
-        guard: 'content',
-        guardLabel: 'a stat line resolves for this side',
-        dwell: 7,
-        /*
-         * The case study this engine was built from, and the element it
-         * replaced: the old Roster + Stats source did exactly this inside one
-         * mount — on every new batter, cross-fade from the roster to a stat card
-         * and back — with the trigger, the dwell and the pair of layers all
-         * welded shut. Because the card resolves per SIDE, the same
-         * trigger shows the batter on the side at bat and the pitcher on the
-         * side in the field — so a mirrored pair is two scoped containers
-         * running this one rule, not two rules.
-         */
-        blurb: 'Flashes the stat card for whoever this side has on the field — '
-            + 'the batter when it is batting, the pitcher when it is not.',
-    },
+const PLAYER_MEMBERS = new Set(['statscard']);
+export function subjectKind(memberId) {
+    if (PLAYER_MEMBERS.has(memberId)) return 'player';
+    return ELEMENTS.find(el => el.id === memberId)?.containerScoped ? 'side' : null;
+}
+
+export function subjectOptions(rule) {
+    const kind = subjectKind(rule?.member);
+    if (!kind) return [];
+    const sided = rule.kind === 'when' && !!EVENTS[rule.event]?.sided;
+    return VOCAB.subjects
+        .filter(s => !s.needsSidedEvent || sided)
+        .map(s => ({ value: s.id, label: s[kind] }));
+}
+
+export const eventOptions = () => VOCAB.events.map(e => ({ value: e.id, label: e.label }));
+export const stateOptions = () => VOCAB.states.map(e => ({ value: e.id, label: e.label }));
+export const byOptions = () => VOCAB.by.map(e => ({ value: e.id, label: e.label }));
+export const onceOptions = () => VOCAB.once.map(e => ({ value: e.id, label: e.label }));
+export const conditionFields = () => VOCAB.conditions.map(e => ({ value: e.id, label: e.label }));
+export const OPS = VOCAB.ops;
+export const SECOND_PRESETS = VOCAB.seconds;
+export const untilOptions = () => [
+    ...VOCAB.seconds.map(s => ({ value: s, label: `${s} s` })),
+    ...VOCAB.until.map(u => ({ value: u.id, label: u.label })),
 ];
 
-export const libraryEntry = (id) => AUTOMATION_LIBRARY.find(t => t.id === id) || null;
-
-/*
- * Which of a template's members this container would actually show: the first
- * one its roster holds. Null when the roster holds none, which is exactly what
- * makes the template unofferable.
- */
-export const memberFor = (template, def) => (template?.members || []).find(
-    m => (def?.members || []).includes(m),
-) || null;
-
-// What a template needs on the roster before it can be offered.
-export const templatesFor = (def) => AUTOMATION_LIBRARY.filter(t => !!memberFor(t, def));
+// The words a rule's tokens read as.
+export const untilLabel = u => (typeof u === 'number' ? `${u} s` : UNTIL[u]?.label ?? String(u));
+export const label = {
+    event: id => EVENTS[id]?.label ?? id,
+    state: id => STATES[id]?.label ?? id,
+    by: id => BY[id]?.label ?? id,
+    once: id => ONCE[id]?.label ?? id,
+    field: id => CONDITIONS[id]?.label ?? id,
+};
+export const conditionLabel = c => `${label.field(c.field)} ${c.op === '>=' ? '≥' : c.op === '<=' ? '≤' : '='} ${c.value}`;
 
 const EMPTY = Object.freeze({});
 
 function normalizeRule(id, raw) {
     if (!raw || typeof raw !== 'object' || !raw.container || !raw.member) return null;
-    const template = libraryEntry(raw.template || id);
+    const kind = raw.kind === 'while' ? 'while' : raw.kind === 'when' ? 'when' : null;
+    if (!kind) return null;
+    const until = typeof raw.until === 'number' ? raw.until : (raw.until ?? 8);
     return {
         id,
-        name: raw.name || template?.name || id,
+        kind,
         container: raw.container,
         member: raw.member,
-        trigger: raw.trigger || '',
-        guard: raw.guard || 'content',
-        dwell: Number(raw.dwell) || 0,
+        event: raw.event ?? null,
+        state: raw.state ?? null,
+        by: String(raw.by ?? 'any'),
+        subject: raw.subject ?? 'scope',
+        until,
+        once: raw.once ?? 'always',
+        conditions: Array.isArray(raw.conditions) ? raw.conditions.filter(c => c && typeof c === 'object') : [],
         enabled: raw.enabled !== false,
-        template: template || null,
+        order: Number(raw.order) || 0,
     };
 }
+
+const ruleSort = (a, b) => (a.kind === b.kind ? (a.order - b.order) || a.id.localeCompare(b.id)
+    : a.kind === 'when' ? -1 : 1);
 
 // Every rule, normalized. Settings are hand-editable JSON, so a malformed entry
 // degrades to absent rather than throwing inside a selector.
 export function useAutomations() {
     const raw = useSettingsStore(useShallow(s => s?.production?.automations ?? EMPTY));
     return useMemo(
-        () => Object.entries(raw).map(([id, r]) => normalizeRule(id, r)).filter(Boolean),
+        () => Object.entries(raw).map(([id, r]) => normalizeRule(id, r)).filter(Boolean).sort(ruleSort),
         [raw],
     );
 }
 
-// The rules driving one container.
+// The rules driving one container: When rules first, then While, each in the
+// producer's order — the order the engine reads them in.
 export function useContainerAutomations(container) {
     const all = useAutomations();
     return useMemo(
         () => (container ? all.filter(r => r.container === container) : []),
         [all, container],
     );
+}
+
+/*
+ * Why a rule cannot do anything, in the producer's words — or null when it can.
+ * Shown on the rule rather than hidden: the engine treats every one of these as
+ * inert, and a rule that reads as working and never fires is the bug the
+ * vocabulary exists to prevent.
+ */
+export function ruleProblem(rule, def) {
+    if (!(def?.members || []).includes(rule.member)) return 'Its member is no longer on this container.';
+    if (rule.kind === 'when' && !EVENTS[rule.event]) return 'This build doesn’t know that event.';
+    if (rule.kind === 'while' && !STATES[rule.state]) return 'This build doesn’t know that state.';
+    return null;
 }
 
 /*
@@ -145,47 +170,45 @@ function writeRules(next) {
     useSettingsStore.getState().setItem(AUTOMATIONS_KEY, next);
 }
 
+let seq = 0;
+const newId = container => `${container}:${Date.now().toString(36)}${(seq++).toString(36)}`;
+
 /*
- * A rule's id: the template it came from, scoped to its container.
- *
- * Two containers can run the same canned rule (that is exactly how a mirrored
- * pair is built), so the container has to be part of the id; adding the same
- * template to one container twice is a no-op rather than a duplicate, because
- * two identical rules on one container would fire twice into a feed key that
- * holds one occupant.
+ * What a new rule starts as — a sentence that already makes sense, so adding one
+ * is the same gesture as editing one. The member is the first container-scoped
+ * one on the roster when there is one (those are the members a rule most often
+ * flashes), else the first member.
  */
-export const ruleIdFor = (templateId, container) => `${container}:${templateId}`;
+export function defaultRule(kind, def) {
+    const members = def?.members || [];
+    const member = members.find(m => subjectKind(m)) ?? members[0] ?? null;
+    return kind === 'while'
+        ? { kind, state: VOCAB.states[0].id, member, subject: 'scope' }
+        : {
+            kind, event: VOCAB.events[0].id, by: 'any', member, subject: 'scope',
+            until: 8, once: 'always', conditions: [],
+        };
+}
 
 export function useAutomationActions() {
-    const add = useCallback((templateId, container) => {
-        const template = libraryEntry(templateId);
-        if (!template || !container) return null;
-        // The member is resolved against the roster HERE, once, and stored — the
-        // engine reads a rule, not a preference list, and a roster edit that
-        // takes the member away leaves an inert rule rather than one that
-        // silently re-points at a different card mid-broadcast.
+    // Rules are config, so every write is immediate and never staged — the
+    // broadcast-visible half is the feed the engine writes, not the rule.
+    const add = useCallback((kind, container) => {
         const def = useSettingsStore.getState()?.production?.container_defs?.[container];
-        const member = memberFor(template, def);
-        if (!member) return null;
-        const id = ruleIdFor(templateId, container);
+        const base = defaultRule(kind, def);
+        if (!container || !base.member) return null;
+        const rules = rawRules();
+        const orders = Object.values(rules)
+            .filter(r => r?.container === container && r?.kind === kind)
+            .map(r => Number(r.order) || 0);
+        const id = newId(container);
         writeRules({
-            ...rawRules(),
-            [id]: {
-                enabled: true,
-                template: templateId,
-                name: template.name,
-                container,
-                member,
-                trigger: template.trigger,
-                guard: template.guard,
-                dwell: template.dwell,
-            },
+            ...rules,
+            [id]: { ...base, container, enabled: true, order: orders.length ? Math.max(...orders) + 1 : 0 },
         });
         return id;
     }, []);
 
-    // One knob. Rules are config, so this is immediate and never staged — the
-    // broadcast-visible half is the feed the engine writes, not the rule.
     const update = useCallback((id, patch) => {
         const rules = rawRules();
         if (!rules[id]) return;
@@ -200,7 +223,31 @@ export function useAutomationActions() {
         writeRules(next);
     }, []);
 
-    return { add, update, remove };
+    /*
+     * Swap a rule with its neighbour of the same kind on the same container —
+     * order only means something within a kind (moments are tried top-down,
+     * states are checked top-down), so a When rule never moves below a While.
+     * Re-numbers the whole group, so a hand-edited file with duplicate orders
+     * comes out of one move with a clean sequence.
+     */
+    const move = useCallback((id, dir) => {
+        const rules = rawRules();
+        const rule = normalizeRule(id, rules[id]);
+        if (!rule) return;
+        const group = Object.entries(rules)
+            .map(([rid, r]) => normalizeRule(rid, r))
+            .filter(r => r && r.container === rule.container && r.kind === rule.kind)
+            .sort(ruleSort);
+        const at = group.findIndex(r => r.id === id);
+        const to = at + dir;
+        if (at < 0 || to < 0 || to >= group.length) return;
+        [group[at], group[to]] = [group[to], group[at]];
+        const next = { ...rules };
+        group.forEach((r, i) => { next[r.id] = { ...rules[r.id], order: i }; });
+        writeRules(next);
+    }, []);
+
+    return { add, update, remove, move };
 }
 
 /*

@@ -5,7 +5,7 @@ import { useStagingStore } from '../../../context/staging';
 import { containerId } from '../elements';
 import { parseInstanceId } from '../sources/instances';
 import {
-    CONTAINER_MEMBERS, containerIdFor, containerOfSource, containerSizeClasses,
+    CONTAINER_MEMBERS, containerIdFor, containerOfSource, sizeForMembers,
     containerUrl, fedTargets, fitsContainer, hostOf, useContainerActions,
 } from './containers';
 import { MEMBERS, memberWatches } from '../../../../public/layout/lib/container-members.js';
@@ -72,20 +72,20 @@ describe('a member has to fit', () => {
     });
 
     /*
-     * The sizes offered when building a container are the CENSUS of what can go
-     * in one, not a table of invented presets — so a new member with a new
-     * native size makes its size offerable without anyone editing a list.
+     * A container is as big as its largest member, axis by axis — there is no
+     * size to pick, because with no scaling system the size's only job is to
+     * hold what is on it.
      */
-    it('derives its size classes from the members themselves', () => {
-        const classes = containerSizeClasses();
-        const sizes = new Set(CONTAINER_MEMBERS.map(m => `${m.width}x${m.height}`));
-        expect(new Set(classes.map(c => c.id))).toEqual(sizes);
-        // Largest first, and each class carries what fits it.
-        expect(classes[0].width * classes[0].height)
-            .toBeGreaterThanOrEqual(classes[classes.length - 1].width * classes[classes.length - 1].height);
-        for (const c of classes) {
-            expect(c.members.every(m => fitsContainer(m, c.width, c.height))).toBe(true);
-        }
+    it('takes its size from its members, each axis on its own', () => {
+        const el = id => CONTAINER_MEMBERS.find(m => m.id === id);
+        const card = el('statscard');
+        const roster = el('roster');
+        expect(sizeForMembers(['statscard'])).toEqual({ width: card.width, height: card.height });
+        expect(sizeForMembers(['statscard', 'roster'])).toEqual({
+            width: Math.max(card.width, roster.width), height: Math.max(card.height, roster.height),
+        });
+        expect(sizeForMembers([])).toEqual({ width: 0, height: 0 });
+        expect(sizeForMembers(['not-an-element'])).toEqual({ width: 0, height: 0 });
     });
 });
 
@@ -329,13 +329,33 @@ describe('roster mutations', () => {
         expect(defsOf().right.members).toEqual(['roster']);
     });
 
-    it('creates a container and claims its members off whatever held them', () => {
-        const id = act.create('Lower Bar', 452, 118, ['stats']);
-        expect(id).toBe('lower-bar');
-        expect(defsOf()['lower-bar']).toMatchObject({
-            name: 'Lower Bar', width: 452, height: 118, members: ['stats'],
+    it('creates a container sized to its members and claims them off whatever held them', () => {
+        useSettingsStore.setState({
+            production: { container_defs: { a: { id: 'a', name: 'A', width: 1920, height: 1080, members: ['statscard'] } } },
         });
-        expect(defsOf().a.members).toEqual([]);
+        const id = act.create('Lower Bar', ['statscard']);
+        expect(id).toBe('lower-bar');
+        const card = CONTAINER_MEMBERS.find(m => m.id === 'statscard');
+        expect(defsOf()['lower-bar']).toMatchObject({
+            name: 'Lower Bar', width: card.width, height: card.height, members: ['statscard'],
+        });
+        // The stat card is SHARED (container-scoped), so it is added, not moved.
+        expect(defsOf().a.members).toEqual(['statscard']);
+    });
+
+    it('grows when a bigger member joins, and never shrinks when one leaves', () => {
+        const callout = CONTAINER_MEMBERS.find(m => m.width === 1920 && m.height === 1080);
+        useSettingsStore.setState({
+            production: { container_defs: { s: { id: 's', name: 'S', width: 452, height: 140, members: ['roster'] } } },
+        });
+        const grew = act.setMember('s', callout.id, true);
+        expect(grew).toEqual({ from: { width: 452, height: 140 }, to: { width: 1920, height: 1080 } });
+        expect(defsOf().s).toMatchObject({ width: 1920, height: 1080 });
+
+        expect(act.setMember('s', callout.id, false)).toBeNull();
+        expect(defsOf().s).toMatchObject({ width: 1920, height: 1080 });
+        // A member that fits reports no growth.
+        expect(act.setMember('s', callout.id, true)).toBeNull();
     });
 
     it('renames without changing the id the URL and the feed key are built on', () => {

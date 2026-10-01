@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { stageOrRun } from '../../../context/staging';
+import { useObsStore } from '../../../context/obs';
 import { containerId, ELEMENTS } from '../elements';
 import { dropRules } from './automations';
 import { MEMBERS } from '../../../../public/layout/lib/container-members.js';
@@ -93,22 +94,59 @@ export const fitsContainer = (el, width, height) =>
     !!el && el.width <= width && el.height <= height;
 
 /*
- * The sizes a new container can be, from the census of what can go in one —
- * derived, never a table of invented presets. Each distinct member size is a
- * class, and it carries the members that fit it so the creation flow can say
- * what the choice buys ("1920 × 1080 — Character Spotlight, Game Summary").
- * Largest first: the full canvas is the common case.
+ * A container's size is the size of the largest thing on it — never a separate
+ * decision. PRSH has no scaling system (OBS does placement), so the only job a
+ * container's size has is to hold its members; a size picked apart from them
+ * could only ever be too small for one, or bigger than any of them for nothing.
+ * Each axis is taken on its own, so a 1920×80 ticker and a 380×294 card make a
+ * 1920×294 container. No members (yet) is 0×0, which nothing can be created at.
  */
-export function containerSizeClasses(members = CONTAINER_MEMBERS) {
-    const seen = new Map();
-    for (const el of members) {
-        if (!el.width || !el.height) continue;
-        const key = `${el.width}x${el.height}`;
-        if (!seen.has(key)) seen.set(key, { id: key, width: el.width, height: el.height });
+export function sizeForMembers(memberIds, elements = CONTAINER_MEMBERS) {
+    let width = 0;
+    let height = 0;
+    for (const id of memberIds || []) {
+        const el = elements.find(e => e.id === id);
+        if (!el) continue;
+        width = Math.max(width, el.width || 0);
+        height = Math.max(height, el.height || 0);
     }
-    return [...seen.values()]
-        .map(c => ({ ...c, members: members.filter(el => fitsContainer(el, c.width, c.height)) }))
-        .sort((a, b) => (b.width * b.height) - (a.width * a.height));
+    return { width, height };
+}
+
+/*
+ * Resize every OBS source of this container to its new canvas, keeping each
+ * scene's SCALE (`reshapeBrowserSource`), so the members that were already on
+ * it draw as big as they did. Only sources in scenes the console has mirrored
+ * are found — an OBS input is global, so that is every source that has ever
+ * been on a scene the rack has opened. With OBS closed there is nothing to
+ * resize and the new size simply applies the next time a source is created.
+ *
+ * Returns how many sources were resized; throws (after trying them all) if any
+ * refused — a crop, which is in source pixels and would cut somewhere else.
+ */
+export async function growContainerSources(id, width, height) {
+    const obs = useObsStore.getState();
+    if (obs.status !== 'connected') return 0;
+    const seen = new Map();
+    for (const items of Object.values(obs.sceneItems || {})) {
+        for (const it of items || []) {
+            if (it?.url && !seen.has(it.sourceName) && containerOfSource(it.url) === id) {
+                seen.set(it.sourceName, it.url);
+            }
+        }
+    }
+    let done = 0;
+    let failure = null;
+    for (const [sourceName, url] of seen) {
+        try {
+            await obs.reshapeBrowserSource({ sourceName, url, width, height });
+            done += 1;
+        } catch (e) {
+            failure = failure || e;
+        }
+    }
+    if (failure) throw failure;
+    return done;
 }
 
 // Normalise one stored definition. Settings are user-editable JSON, so a
@@ -352,9 +390,14 @@ function detach(def, elementId, containerId) {
 // The container mutations, as one hook so every surface edits rosters the same
 // way — and so exclusivity is enforced in exactly one place.
 export function useContainerActions() {
-    const create = useCallback((name, width, height, members = []) => {
+    /*
+     * A new container, sized to hold its members (`sizeForMembers`) — the
+     * creation form asks for a name and a roster, never a size.
+     */
+    const create = useCallback((name, members = []) => {
         const defs = rawDefs();
         const id = containerIdFor(name, defs);
+        const { width, height } = sizeForMembers(members);
         const next = { ...defs };
         // A new container claiming a member takes it off whatever held it —
         // unless the member is shared, which several containers may hold at once.
@@ -373,7 +416,10 @@ export function useContainerActions() {
     const rename = useCallback((id, name) => {
         const defs = rawDefs();
         if (!defs[id]) return;
-        writeDefs({ ...defs, [id]: { ...defs[id], name: name || id } });
+        // Stored as typed, blank included: the panel title is the field, and a
+        // field that refilled itself with the id on every cleared keystroke
+        // could never be retyped. A blank name READS as the id (normalizeDef).
+        writeDefs({ ...defs, [id]: { ...defs[id], name: name ?? '' } });
     }, []);
 
     const remove = useCallback((id) => {
@@ -416,8 +462,9 @@ export function useContainerActions() {
      */
     const setMember = useCallback((id, elementId, on) => {
         const defs = rawDefs();
-        if (!defs[id]) return;
+        if (!defs[id]) return null;
         const next = { ...defs };
+        let grew = null;
         if (on) {
             for (const [otherId, other] of Object.entries(next)) {
                 if (otherId === id || isSharedMemberId(elementId)) continue;
@@ -426,12 +473,24 @@ export function useContainerActions() {
             }
             const members = defs[id].members || [];
             if (!members.includes(elementId)) {
-                next[id] = { ...defs[id], members: [...members, elementId] };
+                /*
+                 * A member bigger than the container GROWS it — the size only
+                 * ever follows the roster up. It never shrinks when one leaves:
+                 * that would move what the other members draw on air without
+                 * anyone asking. The caller resizes the OBS sources
+                 * (`growContainerSources`), behind the confirm that says so.
+                 */
+                const from = { width: Number(defs[id].width) || 0, height: Number(defs[id].height) || 0 };
+                const need = sizeForMembers([elementId]);
+                const to = { width: Math.max(from.width, need.width), height: Math.max(from.height, need.height) };
+                if (to.width !== from.width || to.height !== from.height) grew = { from, to };
+                next[id] = { ...defs[id], ...to, members: [...members, elementId] };
             }
         } else {
             next[id] = detach(defs[id], elementId, id);
         }
         writeDefs(next);
+        return grew;
     }, []);
 
     /*

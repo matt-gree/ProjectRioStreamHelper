@@ -342,6 +342,25 @@ describe('AddSourceDialog', () => {
         }));
     });
 
+    /*
+     * The containers' shelf heading is where + New lives, and the shelf was
+     * built only from rows — so with no containers (every install since the
+     * seeded ones were retired) there was no heading and no way to build the
+     * first one.
+     */
+    it('offers + New with no containers yet, and builds one sized to its members', async () => {
+        ui('Break');
+        await screen.findByText('Lower Third');
+        expect(screen.getByText(/No containers yet/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+        fireEvent.change(screen.getByLabelText('Container name'), { target: { value: 'Card' } });
+        fireEvent.click(screen.getByRole('checkbox', { name: /Stat Card/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+        const def = useSettingsStore.getState().production.container_defs.card;
+        expect(def).toMatchObject({ name: 'Card', members: ['statscard'] });
+        expect(def.width).toBeGreaterThan(0);
+    });
+
     it('cannot add until something is picked', async () => {
         ui('Break');
         await screen.findByText('Lower Third');

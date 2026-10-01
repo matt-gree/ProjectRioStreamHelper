@@ -2,50 +2,32 @@ import { memo, useMemo, useState } from 'react';
 import { Group, Text } from '../../../components/ui/primitives';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { cn } from '../../../lib/utils';
-import { CONTAINER_MEMBERS, containerSizeClasses, fitsContainer } from '../containers/containers';
+import { CONTAINER_MEMBERS, hostOf, isSharedMember, sizeForMembers, useContainerDefs } from '../containers/containers';
 
-// The Add picker's + New form: define a shared container (name, native size,
-// members) and add its source to the scene.
+// The Add picker's + New form: name a container, pick what goes on it, and add
+// its source to the scene.
 
 /*
  * Building a container, in the picker that adds it.
  *
  * A container is producer-built config, not a file, so there has to be a place
  * to make one — and the honest place is the transaction that puts it in a
- * scene. The producer names it, picks a SIZE, and ticks the members that fit;
- * the new definition is written and immediately selected, so Add drops the
- * source into the scene they opened this from.
+ * scene. The producer names it and ticks its members; the new definition is
+ * written and immediately selected, so Add drops the source into the scene they
+ * opened this from.
  *
- * SIZE FIRST, because it is the constraint everything else answers to. The
- * sizes are the census of what can go in a container (containerSizeClasses),
- * not invented presets, and the member list is filtered to what fits — a member
- * larger than its container is unrepresentable rather than handled, since there
- * is no scaling system. Smaller members center.
+ * THERE IS NO SIZE STEP. A container's size is its largest member's
+ * (`sizeForMembers`) — PRSH has no scaling, so the size's only job is to hold
+ * what is on it — and the form shows the size that roster comes to rather than
+ * asking for one. It used to be the first question, with the member list
+ * filtered to what fit, which made the decision that matters (what goes on it)
+ * answer to the one that follows from it.
  */
 export const NewContainerForm = memo(function NewContainerForm({ onCreate, onCancel }) {
-    const classes = useMemo(() => containerSizeClasses(), []);
     const [name, setName] = useState('');
-    const [sizeId, setSizeId] = useState(classes[0]?.id ?? null);
     const [members, setMembers] = useState([]);
-
-    const size = classes.find(c => c.id === sizeId) ?? classes[0];
-    const candidates = size
-        ? CONTAINER_MEMBERS.filter(el => fitsContainer(el, size.width, size.height))
-        : [];
-
-    // Members that no longer fit after a size change are dropped rather than
-    // carried invisibly — the roster the producer confirms is the one they see.
-    const pickSize = (id) => {
-        const next = classes.find(c => c.id === id);
-        setSizeId(id);
-        if (next) {
-            setMembers(prev => prev.filter(m => {
-                const el = CONTAINER_MEMBERS.find(e => e.id === m);
-                return fitsContainer(el, next.width, next.height);
-            }));
-        }
-    };
+    const defs = useContainerDefs();
+    const size = useMemo(() => sizeForMembers(members), [members]);
 
     const toggle = (id) => setMembers(prev => (
         prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
@@ -61,67 +43,58 @@ export const NewContainerForm = memo(function NewContainerForm({ onCreate, onCan
                 autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Name it — “Lower Bar”, “Replay Stage”"
+                placeholder="Lower Bar"
+                aria-label="Container name"
                 className="h-8"
             />
 
             <div className="flex flex-col gap-0.5">
                 <Text size="xs" dimmed className="px-1">
-                    Size — members this size fill it; smaller ones center, never scale.
+                    Members — one on screen at a time
                 </Text>
-                {classes.map(c => (
-                    <button
-                        key={c.id} type="button" onClick={() => pickSize(c.id)}
-                        className={cn(
-                            'flex items-center gap-2 rounded-md px-2 py-1 text-left',
-                            c.id === sizeId ? 'bg-accent text-foreground' : 'hover:bg-accent/50',
-                        )}
-                    >
-                        <span className={cn(
-                            'size-2 shrink-0 rounded-full',
-                            c.id === sizeId ? 'bg-rio-400' : 'bg-muted-foreground/30',
-                        )} />
-                        <Text size="xs" span className="tabular-nums">{c.width} × {c.height}</Text>
-                        <Text size="xs" span truncate dimmed className="min-w-0 flex-1">
-                            {c.members.map(m => m.name).join(', ')}
-                        </Text>
-                    </button>
-                ))}
+                {CONTAINER_MEMBERS.map(el => {
+                    // Ticking a member another container holds MOVES it here on
+                    // Create (unless it is shared), so say so before the tick.
+                    const held = isSharedMember(el) ? null : hostOf(defs, el.id);
+                    return (
+                        <label
+                            key={el.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/50"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={members.includes(el.id)}
+                                onChange={() => toggle(el.id)}
+                                className="size-3 shrink-0 accent-current"
+                            />
+                            <Text size="xs" span truncate className="min-w-0 flex-1">{el.name}</Text>
+                            {held && (
+                                <Text size="xs" span dimmed className="truncate">
+                                    moves from {defs[held]?.name ?? held}
+                                </Text>
+                            )}
+                            <Text size="xs" span dimmed className="tabular-nums">
+                                {el.width} × {el.height}
+                            </Text>
+                        </label>
+                    );
+                })}
             </div>
 
-            <div className="flex flex-col gap-0.5">
-                <Text size="xs" dimmed className="px-1">
-                    Members — one at a time on screen. Anything sharing a container
-                    can never be up together, which is what sharing one means.
-                </Text>
-                {candidates.map(el => (
-                    <label
-                        key={el.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/50"
-                    >
-                        <input
-                            type="checkbox"
-                            checked={members.includes(el.id)}
-                            onChange={() => toggle(el.id)}
-                            className="size-3 shrink-0 accent-current"
-                        />
-                        <Text size="xs" span truncate className="min-w-0 flex-1">{el.name}</Text>
-                        <Text size="xs" span dimmed className="tabular-nums">
-                            {el.width} × {el.height}
-                        </Text>
-                    </label>
-                ))}
-            </div>
-
-            <Group gap="xs" className="px-1 pt-1">
+            {/* Pinned to the pane's foot: the member list is every hostable element
+                and runs past the pane, and Create sat below the fold. */}
+            <Group gap="xs" className="sticky bottom-0 items-center border-t border-border/60 bg-background px-1 py-2">
                 <Button
                     size="sm"
-                    disabled={!name.trim() || !size}
-                    onClick={() => onCreate(name.trim(), size, members)}
+                    disabled={!name.trim() || members.length === 0}
+                    onClick={() => onCreate(name.trim(), members)}
                 >
                     Create
                 </Button>
                 <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
+                <Text size="xs" span dimmed className="ml-auto tabular-nums">
+                    {members.length ? `${size.width} × ${size.height}` : 'Pick at least one member'}
+                </Text>
             </Group>
         </div>
     );

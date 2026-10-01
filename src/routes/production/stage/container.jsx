@@ -1,47 +1,65 @@
-import { memo, useMemo, useState } from 'react';
-import { Check, Plus, Trash2 } from 'lucide-react';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { Plus, Trash2, X } from 'lucide-react';
 import { Group, Stack, Text } from '../../../components/ui/primitives';
 import { Button } from '../../../components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '../../../components/ui/popover';
-import { IconToggle, ListRow, NumberRow, SelectRow, TextRow } from '../kit';
+import { useSettingsStore } from '../../../context/store';
+import { useObsStore } from '../../../context/obs';
+import { notifications } from '../../../lib/notify';
+import { cn } from '../../../lib/utils';
+import { IconToggle, KIT_INPUT, KIT_SECTION, NumberField } from '../kit';
 import {
-    CONTAINER_MEMBERS, fitsContainer, isSharedMember, useContainerActions,
-    useContainerDefs,
+    CONTAINER_MEMBERS, containerOfSource, growContainerSources, isSharedMember, sizeForMembers,
+    useContainerActions, useContainerDefs,
 } from '../containers/containers';
+import { subjectKind, useContainerAutomations } from '../containers/automations';
+import { useActiveBoards, useBoardLabel } from '../board/boards';
+import { useSideLabels } from '../sides';
 import { BindingNote } from './generic';
 import AutomationSection from './automation';
 
 /*
  * A container's stage panel — where a container is BUILT.
  *
- * The container is one OBS source that hosts whichever of its members the
- * producer feeds it, so this panel owns the two things that make it what it is:
- * its name, and its member roster. Membership used to be a "Feed into" select
- * on each fed element, i.e. one relationship stored in as many places as it had
- * ends. It is a roster here, and the elements read it.
+ * Top to bottom: what it is (its size, and the scenes its source is in), what
+ * goes on it (the ROSTER), whose game it is about (SCOPE, only when something
+ * on it needs one), and how it feeds itself (the RULES). The name is the panel
+ * title (`useContainerRename`), and what it is showing right now — and why —
+ * is the panel's subject line.
  *
  * MEMBERS ARE MUTUALLY EXCLUSIVE, and that is the definition rather than
  * advice: `production.feed.container.{id}` holds exactly one occupant, so
- * sharing a container is what "these two never appear at once" means. Checking
- * an element that another container already holds MOVES it, and the roster says
- * so before the click rather than after — except for a container-SCOPED member
- * (a roster, a stat card), which has no content of its own to be in two places
- * at once and is added rather than moved. That exception is what makes a
- * mirrored pair buildable here instead of only by hand: two containers, the
- * same two members, opposite sides.
+ * sharing a container is what "these two never appear at once" means. Adding an
+ * element that another container already holds MOVES it, and the picker says
+ * so before the click — except for a container-SCOPED member (a roster, a stat
+ * card), which has no content of its own to be in two places at once and is
+ * added rather than moved. That exception is what makes a mirrored pair
+ * buildable here.
  *
- * The size is fixed at creation and not editable here. It is the size of the
- * largest member (smaller ones center and are never scaled — PRSH has no
- * scaling system, OBS does placement), and changing it after the OBS source
- * exists would leave the source at its old dimensions with nothing to say so.
- * Making a second container and re-pointing is the honest path.
+ * THE SIZE FOLLOWS THE ROSTER, UP. A container is as big as its largest member
+ * (`sizeForMembers`), so there is no size control: adding a bigger member grows
+ * it, and resizes its OBS sources at their current scale, behind a confirm that
+ * says so — members anchored to the centre or the bottom move when the canvas
+ * grows. Taking a member off never shrinks it, for the same reason.
  */
 
 /*
- * Which OTHER containers hold each member, so a row can say what checking it
- * would take the element away from — or, for a shared member, who else is
- * already drawing it.
+ * The panel title IS the name field. Returns null for anything that is not a
+ * container, so the stage shell can ask every element.
  */
+export function useContainerRename(element) {
+    const id = element?.container ?? null;
+    const stored = useSettingsStore(s => (id ? s?.production?.container_defs?.[id]?.name : undefined));
+    const exists = useSettingsStore(s => !!(id && s?.production?.container_defs?.[id]));
+    const { rename } = useContainerActions();
+    const onChange = useCallback(v => rename(id, v), [rename, id]);
+    if (!id || !exists) return null;
+    return { value: stored ?? '', placeholder: id, onChange };
+}
+
+// Which other containers hold each element, so the picker can say what adding
+// it would take it away from.
 function useHolders(defs) {
     return useMemo(() => {
         const out = {};
@@ -52,15 +70,23 @@ function useHolders(defs) {
     }, [defs]);
 }
 
+// The scenes this container's source is in, off the scene mirror.
+function useContainerScenes(id) {
+    return useObsStore(useShallow((s) => {
+        const out = [];
+        for (const [scene, items] of Object.entries(s.sceneItems || {})) {
+            if ((items || []).some(it => it?.url && containerOfSource(it.url) === id)) out.push(scene);
+        }
+        return out;
+    }));
+}
+
 /*
- * Where a member sits in its container.
- *
- * Only reachable for a member SMALLER than the container, because one that fills
- * it has nowhere to go. The anchor carries the intent — "on the floor" stays on
- * the floor if either size changes — and the nudge is pixels on top of it.
- *
- * This is what lets a container hold a band. A 1920×80 ticker centered in a
- * full-canvas container floats 500px above where a ticker belongs.
+ * Where a smaller member sits in the container, inline under its roster row.
+ * The anchor carries the intent — "on the floor" stays on the floor whatever
+ * the container grows to — and the nudge is pixels on top of it. This is what
+ * lets a container hold a band: a 1920×80 ticker centered in a full-canvas
+ * container floats 500px above where a ticker belongs.
  */
 const ANCHORS = [
     { value: 'top-left', label: 'Top left' },
@@ -74,81 +100,173 @@ const ANCHORS = [
     { value: 'bottom-right', label: 'Bottom right' },
 ];
 
-const OffsetEditor = memo(function OffsetEditor({ element, def, setOffset }) {
+const MemberRow = memo(function MemberRow({ element, def, carrying, setMember, setOffset }) {
+    const smaller = element.width < def.width || element.height < def.height;
     const cur = def.offsets?.[element.id] || { anchor: 'center', x: 0, y: 0 };
-    const write = (patch) => setOffset(def.id, element.id, { ...cur, ...patch });
+    const write = patch => setOffset(def.id, element.id, { ...cur, ...patch });
     return (
-        <div className="ml-4 flex flex-col gap-0.5 border-l border-border/50 pl-2">
-            <SelectRow
-                label="Position" value={cur.anchor} options={ANCHORS}
-                onChange={(v) => write({ anchor: v })}
-            />
-            <NumberRow
-                label="Nudge X" value={cur.x} suffix="px" step={1}
-                onChange={(v) => write({ x: v || 0 })}
-            />
-            <NumberRow
-                label="Nudge Y" value={cur.y} suffix="px" step={1}
-                onChange={(v) => write({ y: v || 0 })}
-            />
+        <div className="group flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-1.5 hover:bg-accent/40">
+            <span className={cn('size-1.5 shrink-0 rounded-full', carrying ? 'bg-emerald-400' : 'bg-foreground/25')}
+                title={carrying ? 'On the container now' : undefined} />
+            <Text size="xs" span truncate className="min-w-0 basis-36 text-foreground">{element.name}</Text>
+            <Text size="xs" span dimmed className="w-20 shrink-0 tabular-nums">{element.width} × {element.height}</Text>
+            {smaller ? (
+                <div className="flex items-center gap-1">
+                    <select
+                        aria-label={`Where ${element.name} sits`} value={cur.anchor}
+                        onChange={e => write({ anchor: e.target.value })}
+                        className={cn(KIT_INPUT, 'w-28')}
+                    >
+                        {ANCHORS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+                    </select>
+                    <NumberField value={cur.x} onChange={v => write({ x: v || 0 })} ariaLabel="Nudge X" suffix="x" />
+                    <NumberField value={cur.y} onChange={v => write({ y: v || 0 })} ariaLabel="Nudge Y" suffix="y" />
+                </div>
+            ) : (
+                <Text size="xs" span dimmed>fills it</Text>
+            )}
+            <span className="ml-auto opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+                <IconToggle icon={X} tone="danger" label={`Take ${element.name} off this container`}
+                    onClick={() => setMember(def.id, element.id, false)} />
+            </span>
         </div>
     );
 });
 
-const MemberRow = memo(function MemberRow({ element, def, holders, carrying, setMember, setOffset }) {
-    const on = (holders || []).some(h => h.id === def.id);
-    const others = (holders || []).filter(h => h.id !== def.id);
-    // A shared member is ADDED, not moved: several containers legitimately draw
-    // it, because it has no content of its own to be in two places at once.
-    const shared = isSharedMember(element);
-    const elsewhere = others.length > 0;
-    const otherNames = others.map(h => h.name).join(', ');
-    const smaller = element.width < def.width || element.height < def.height;
+/*
+ * "+ Add member": every hostable element not already on, with what adding it
+ * does — move it from another container, or grow this one. A grow asks first,
+ * because it resizes the OBS source on air.
+ */
+const AddMember = memo(function AddMember({ def, holders, onAdd }) {
+    const [open, setOpen] = useState(false);
+    const [growing, setGrowing] = useState(null);
+    const candidates = CONTAINER_MEMBERS.filter(el => !(def.members || []).includes(el.id));
+    if (!candidates.length) return null;
+    const pick = (el) => {
+        const size = sizeForMembers([...def.members, el.id]);
+        if (size.width > def.width || size.height > def.height) setGrowing({ el, size });
+        else { onAdd(el); setOpen(false); }
+    };
     return (
-        <>
-        <ListRow
-            dot={carrying ? 'bg-emerald-400' : on ? 'bg-foreground/30' : 'bg-transparent'}
-            name={element.name}
-            meta={[
-                carrying ? 'on the container' : null,
-                // Say where it would come FROM, since checking is a move —
-                // unless it is shared, where nothing moves and the other
-                // containers are context rather than a warning.
-                elsewhere ? `${shared ? 'also on' : 'held by'} ${otherNames}` : null,
-                // Centering is the one size relaxation, so name it where the
-                // producer decides — not as a surprise on air.
-                on && smaller
-                    ? `${element.width} × ${element.height} · ${
-                        ANCHORS.find(a => a.value === (def.offsets?.[element.id]?.anchor || 'center'))?.label
-                        ?? 'Center'}`.toLowerCase()
-                    : null,
-            ].filter(Boolean).join(' · ') || null}
-            controls={(
-                <IconToggle
-                    icon={Check} offIcon={Plus} on={on}
-                    label={on
-                        ? `Remove ${element.name} from this container`
-                        : elsewhere && !shared
-                            ? `Move ${element.name} here from ${otherNames}`
-                            : `Add ${element.name} to this container`}
-                    onClick={() => setMember(def.id, element.id, !on)}
-                />
-            )}
-        />
-        {on && smaller && (
-            <OffsetEditor element={element} def={def} setOffset={setOffset} />
-        )}
-        </>
+        <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setGrowing(null); }}>
+            <PopoverTrigger asChild>
+                <Button size="xs" variant="ghost" className="w-fit"><Plus /> Add member</Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80 p-1">
+                {growing ? (
+                    <Stack gap="xs" className="p-2">
+                        <Text size="sm" className="text-foreground">
+                            Grow to {growing.size.width} × {growing.size.height}?
+                        </Text>
+                        <Text size="xs" className="text-muted-foreground">
+                            {growing.el.name} is bigger than this container. Its OBS source is resized
+                            at the scale it draws at, so members anchored to the center or bottom
+                            move on screen.
+                        </Text>
+                        <Group gap="xs" className="justify-end">
+                            <Button size="xs" variant="ghost" onClick={() => setGrowing(null)}>Back</Button>
+                            <Button size="xs" onClick={() => { onAdd(growing.el); setOpen(false); setGrowing(null); }}>
+                                Grow and add
+                            </Button>
+                        </Group>
+                    </Stack>
+                ) : candidates.map((el) => {
+                    const others = (holders[el.id] || []).filter(h => h.id !== def.id);
+                    const grows = el.width > def.width || el.height > def.height;
+                    const note = [
+                        others.length ? `${isSharedMember(el) ? 'also on' : 'moves from'} ${others.map(h => h.name).join(', ')}` : null,
+                        grows ? 'grows it' : null,
+                    ].filter(Boolean).join(' · ');
+                    return (
+                        <button
+                            key={el.id} type="button" onClick={() => pick(el)}
+                            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-accent"
+                        >
+                            <span className="min-w-0 flex-1 truncate text-foreground">{el.name}</span>
+                            {note && <span className={cn('truncate', grows ? 'text-amber-400' : 'text-muted-foreground')}>{note}</span>}
+                            <span className="shrink-0 tabular-nums text-muted-foreground">{el.width} × {el.height}</span>
+                        </button>
+                    );
+                })}
+            </PopoverContent>
+        </Popover>
     );
 });
+
+/*
+ * SCOPE — whose game this container is about. Only drawn when something on it
+ * reads one: a container-scoped member (whose content is "whoever this side has
+ * on the field"), or a rule that names this container's side. A full-canvas
+ * callout stage has no side, and a Board/Side pair on it would be two controls
+ * that do nothing.
+ */
+const ScopeRow = memo(function ScopeRow({ def }) {
+    const { setScope } = useContainerActions();
+    const boards = useActiveBoards();
+    const boardLabel = useBoardLabel();
+    const sides = useSideLabels();
+    return (
+        <div className={KIT_SECTION}>
+            <div className="flex flex-wrap items-center gap-2">
+                <Text size="xs" span className="label-display w-14 tracking-wider text-muted-foreground">Scope</Text>
+                <select
+                    aria-label="Board" value={String(def.scoreboard)}
+                    onChange={e => setScope(def.id, e.target.value, def.team)}
+                    className={cn(KIT_INPUT, 'w-40')}
+                >
+                    {boards.map(b => <option key={b} value={String(b)}>{boardLabel(b)}</option>)}
+                </select>
+                <div role="radiogroup" aria-label="Side" className="flex overflow-hidden rounded-md border border-border">
+                    {[1, 2].map(t => (
+                        <button
+                            key={t} type="button" role="radio" aria-checked={def.team === t}
+                            onClick={() => setScope(def.id, def.scoreboard, t)}
+                            className={cn('h-7 px-3 text-xs',
+                                def.team === t ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                        >
+                            {sides.label(t)}
+                        </button>
+                    ))}
+                </div>
+                <Text size="xs" span dimmed>whose batter, pitcher and roster this container shows</Text>
+            </div>
+        </div>
+    );
+});
+
+const SIDE_RULE = r => r.by === 'scope' || r.subject === 'scope' || r.state === 'side_batting' || r.state === 'side_pitching';
 
 export default function ContainerStage({ element, placement }) {
     const id = element.container ?? placement?.container;
     const defs = useContainerDefs();
     const def = id ? defs[id] : null;
     const holders = useHolders(defs);
-    const { rename, remove, setMember, setOffset } = useContainerActions();
+    const scenes = useContainerScenes(id);
+    const rules = useContainerAutomations(id);
+    const { remove, setMember, setOffset } = useContainerActions();
     const [confirmDel, setConfirmDel] = useState(false);
+
+    /*
+     * Adding is where the size can move: the definition grows first (config,
+     * immediate), then the OBS sources follow. A source that refuses (a crop)
+     * leaves the container's size right and that one source at its old canvas,
+     * which the toast names.
+     */
+    const add = useCallback(async (el) => {
+        const grew = setMember(id, el.id, true);
+        if (!grew) return;
+        try {
+            const n = await growContainerSources(id, grew.to.width, grew.to.height);
+            notifications.show({
+                color: 'green',
+                message: `Grew to ${grew.to.width} × ${grew.to.height}`
+                    + (n ? ` and resized ${n === 1 ? 'its OBS source' : `${n} OBS sources`}` : ''),
+            });
+        } catch (e) {
+            notifications.show({ color: 'red', message: `Grew the container, but OBS refused: ${e.message}` });
+        }
+    }, [id, setMember]);
 
     /*
      * A source pointing at a container with no definition — a pre-2.0 named
@@ -170,66 +288,61 @@ export default function ContainerStage({ element, placement }) {
         );
     }
 
-    const candidates = CONTAINER_MEMBERS.filter(el => fitsContainer(el, def.width, def.height));
+    const members = (def.members || [])
+        .map(m => CONTAINER_MEMBERS.find(el => el.id === m))
+        .filter(Boolean);
+    const needsScope = def.members.some(m => subjectKind(m)) || rules.some(SIDE_RULE);
 
     return (
         <>
             <BindingNote binding={placement} what="This container" />
-            <TextRow
-                label="Name" value={def.name} placeholder={def.id}
-                onChange={(v) => rename(def.id, v)}
-            />
-            <Text size="xs" className="text-muted-foreground">
-                {def.width} × {def.height} — fixed at creation, since the OBS source
-                is already that size. Members this size fill it; smaller ones center.
-            </Text>
 
-            <div className="mt-1 flex flex-col gap-1 border-t border-border/60 pt-2">
-                <Text size="xs" className="text-muted-foreground">
-                    Members — one at a time on screen, so anything sharing this
-                    container can never be up together.
-                </Text>
-                {candidates.length === 0 ? (
-                    <Text size="xs" className="text-muted-foreground">
-                        Nothing fits {def.width} × {def.height}. A member must be the
-                        container’s size or smaller — there is no scaling.
+            <div className={KIT_SECTION}>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Text size="xs" span className="label-display tracking-wider text-muted-foreground">Roster</Text>
+                    <span className="rounded border border-border px-1.5 text-[11px] tabular-nums text-muted-foreground"
+                        title="A container is as big as its largest member">
+                        {def.width} × {def.height}
+                    </span>
+                    <Text size="xs" span dimmed className="min-w-0 flex-1 truncate">
+                        one on screen at a time
+                        {scenes.length ? ` · in ${scenes.join(', ')}` : ''}
                     </Text>
-                ) : candidates.map(el => (
+                </div>
+                {members.length === 0 && (
+                    <Text size="xs" dimmed className="px-1.5">Nothing on it yet.</Text>
+                )}
+                {members.map(el => (
                     <MemberRow
-                        key={el.id}
-                        element={el} def={def}
-                        holders={holders[el.id]}
+                        key={el.id} element={el} def={def}
                         carrying={placement?.carrying === el.id}
-                        setMember={setMember}
-                        setOffset={setOffset}
+                        setMember={setMember} setOffset={setOffset}
                     />
                 ))}
+                <AddMember def={def} holders={holders} onAdd={add} />
             </div>
+
+            {needsScope && <ScopeRow def={def} />}
 
             <AutomationSection def={def} />
 
             {/* Two-step, the same Popover confirm the Match desk uses on its own
                 delete — and this one has the LARGER blast radius: removing a
-                definition takes its feed, its resting occupant and every
-                automation rule that drove one of its members (`detach`/`dropRules`
-                in ../containers/containers). A producer who has wired a container up cannot
-                rebuild that from the undo they don't have. */}
-            <div className="mt-1 flex min-h-7 items-center border-t border-border/60 pt-2">
+                definition takes its feed, its resting member and every rule on
+                it (`detach`/`dropRules` in ../containers/containers). */}
+            <div className={cn(KIT_SECTION, 'flex-row items-center')}>
+                <Text size="xs" span dimmed className="flex-1">Deleting keeps the OBS source — remove that in OBS.</Text>
                 <Popover open={confirmDel} onOpenChange={setConfirmDel}>
                     <PopoverTrigger asChild>
-                        <Button size="xs" variant="destructive" className="h-7 min-w-0 flex-1">
-                            <Trash2 />
-                            <span className="truncate">Delete container</span>
+                        <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive">
+                            <Trash2 /> Delete container
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-60">
                         <Stack gap="xs">
                             <Text size="sm" className="text-foreground">Delete “{def.name || def.id}”?</Text>
-                            {/* Deleting the definition does NOT delete the OBS
-                                source — the console never removes a source the
-                                producer watched appear. */}
                             <Text size="xs" className="text-muted-foreground">
-                                Clears its feed and drops its members’ automation rules.
+                                Clears what it is showing and deletes its rules.
                                 The OBS source stays — delete that in OBS.
                             </Text>
                             <Group gap="xs" className="justify-end">

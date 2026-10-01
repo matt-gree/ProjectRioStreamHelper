@@ -277,7 +277,7 @@ const FedSubject = memo(function FedSubject({ element, board = 1, fed = true, pi
  * watching a card appear cannot tell their own Push from a rule firing, which
  * is the difference between "wait for it to clear" and "clear it yourself".
  */
-const REASON_WORD = { manual: 'you pushed it', rule: 'automation', resting: 'resting' };
+const REASON_WORD = { manual: 'you pushed it', rule: 'when rule', state: 'while rule', resting: 'otherwise' };
 
 const ContainerSubject = memo(function ContainerSubject({ container, carrying }) {
     const reason = useFeedReason(container);

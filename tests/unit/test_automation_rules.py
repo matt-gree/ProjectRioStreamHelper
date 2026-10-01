@@ -262,6 +262,25 @@ async def test_no_state_holding_falls_through_to_otherwise(card, set_setting):
     assert feed()["element"] == "roster"
 
 
+async def test_a_rule_added_while_its_state_holds_applies_at_once(card, set_setting):
+    """No frame is coming on a finished game, so the RULE change has to
+    re-decide the container — not the next HUD write."""
+    rules(set_setting)
+    await Automations.Start()
+    await hud(game_over=True)
+    assert feed()["element"] == "roster"
+
+    rules(set_setting, while_("final"))
+    await Automations.on_settings(["production.automations"])
+    assert feed()["element"] == "postgamevs"
+    assert reason() == STATE
+
+    rules(set_setting)
+    await Automations.on_settings(["production.automations"])
+    assert feed()["element"] == "roster"
+    assert reason() == RESTING
+
+
 async def test_a_push_beats_a_state(card, set_setting):
     rules(set_setting, while_("final"))
     await Automations.Start()

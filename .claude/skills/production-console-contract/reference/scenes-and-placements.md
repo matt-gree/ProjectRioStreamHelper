@@ -196,7 +196,7 @@ any of them.
   draws whoever the **container's** scope has on the field, so the container is
   the subject and two rosters holding it is not a contradiction. It is the
   mirrored pair the automation engine was designed around: two scoped
-  containers, the same members, one canned rule, one showing the batter and the
+  containers, the same members, the same rules, one showing the batter and the
   other the pitcher. Without the exception that pair was only buildable by
   hand-editing settings. `isSharedMember` in `containers.js`.
 - **A MEMBER'S FRAME OF REFERENCE IS ITS CONTAINER'S, and there is one hook that
@@ -231,11 +231,14 @@ any of them.
   unrepresentable rather than handled, and a smaller one **centers, never
   scales**. Centering is safe for the reason scaling was not: no aspect math,
   no resampling, no blur.
-- **The sizes offered when building one are the CENSUS** of what can go in a
-  container (`containerSizeClasses`, derived from `CONTAINER_MEMBERS`), not
-  invented presets. Size is fixed at creation: the OBS source already exists at
-  those dimensions, and changing it later would leave the source at the old size
-  with nothing to say so. Two sizes means two containers.
+- **A container's size is its largest member's** (`sizeForMembers`, each axis
+  on its own), never a separate choice — with no scaling, the size's only job
+  is to hold what is on it. The creation form asks for a name and members and
+  shows the size they come to. Adding a bigger member GROWS the definition and
+  resizes its OBS sources at their current scale (`growContainerSources`, over
+  `reshapeBrowserSource`), behind a confirm that says anchored members will
+  move; a crop refuses, as for any reshape. Removing a member never shrinks it —
+  that would move what the others draw on air unasked.
 - **`CONTAINER_MEMBERS` is not the same question as `flavor`.** Every `fed`
   element, plus anything with a `container-members.js` entry — which is now
   every element that has a mount, the hit visualizer and
@@ -254,8 +257,11 @@ any of them.
 - **The catalog reports containers from the definitions** (`_container_layouts`
   in `server/api/v1/layouts.py`), which is also the only place a container's
   name and native size live. The `shared/` folder is skipped entirely.
-- **The container's stage panel owns name + roster** (`stage/container.jsx`,
-  dispatched on `element.container`, not by id). Deleting a definition clears
+- **The container's stage panel owns name + roster + scope + rules**
+  (`stage/container.jsx`, dispatched on `element.container`, not by id). The
+  name is the PANEL TITLE (`useContainerRename`, the board desk's idiom); the
+  roster rows carry each smaller member's anchor and nudge inline; Scope draws
+  only when a container-scoped member or a side-reading rule needs it. Deleting a definition clears
   its feed but **never deletes the OBS source** — the console does not remove a
   source the producer watched appear.
 - **A member leaving a roster takes its dependents with it** (`detach` in
@@ -269,42 +275,43 @@ any of them.
 
 ### Container automations
 
-`src/routes/production/containers/automations.js` + `stage/automation.jsx`. A container can
-feed **itself**: a rule watches a state key and shows one of its members for a
-dwell, then returns to the container's resting occupant. The engine is
+`public/layout/lib/automation-vocab.json` + `src/routes/production/containers/automations.js`
++ `stage/automation.jsx`. A container can feed **itself**. The engine is
 **server-side, inside the state-write path** (`server/automations.py` on
 `State.hooks`), so a rule's feed write rides the same `SetBatch` as the HUD change
 that triggered it — the console only edits and reports.
 
-- **Two fields on the container definition**, both absent until set:
-  `resting` (the member it returns to; absent = empty/transparent, and that is
-  the right answer for a container that only ever holds pushed content) and
-  `scope` = `{scoreboard, team}` (its frame of reference).
-- **Scope is the mirror mechanism.** It resolves `{sb}` in a rule's trigger and
-  picks the side of the content the engine feeds, so a mirrored pair is **two
-  scoped containers running one canned rule** — the same batter change shows the
-  batter on the side at bat and the pitcher on the side in the field. Do not add
-  a per-rule side.
-- **Rules come from the QUICK-ADD LIBRARY only** (`AUTOMATION_LIBRARY`). A
-  free-text trigger key is a way to write an automation that silently never
-  fires; the canned entries are known-good and carry the producer-facing words
-  (`triggerLabel`, `guardLabel`). Editable per rule: the switch and the dwell.
-  Custom authoring waits until these have been through a real broadcast.
-- **A template is offered only when its member is on the roster** (`templatesFor`)
-  — a rule feeding a non-member is inert in the engine, so offering it would be
-  offering something that quietly does nothing.
-- **A rule id is `{container}:{template}`** (`ruleIdFor`), because two containers
-  legitimately run the same canned rule; adding one twice to one container is a
-  no-op, since two identical rules would fire twice into a key that holds one
-  occupant.
-- **Precedence is manual > rule > resting**, mirrored by the engine to
-  `production.feed.reason.{container}` and read by `useFeedReason` — same instinct
-  as `side_reason`: say WHY something is up. A producer Push suspends the rules,
-  and **clearing the container is what hands it back**; there is deliberately no
-  Resume verb, because resting *is* what a container shows when nothing else is
-  up.
+- **A rule is a sentence**: `When <event> by <side> [if …] → show <member> of
+  <subject> for <until> · <once>`, or `While <state> → show <member> of
+  <subject>`, closed by `Otherwise show <resting>`. Drawn as ONE LINE per rule
+  whose underlined words are menus (`Token`); the row never expands to edit —
+  a word opens its own popover (the duration's carries a seconds field, a
+  condition chip a three-part editor).
+- **Every word is an id in the vocabulary file**, which the engine implements
+  id by id. A word the feed has no data for is not in the list — that is what
+  keeps "a rule that silently never fires" unwritable now that there is no
+  canned library. New events (a home run) are one entry in the JSON plus one in
+  the engine's tables, pinned by `tests/unit/test_automation_rules.py`.
+- **"Of" follows the member** (`subjectKind`): a Stat Card is about a PLAYER
+  (the batter, the pitcher), a Roster or Controller about a SIDE, and a member
+  with content of its own has no "of" at all. "The player in the event" is only
+  offered for a moment that has a side.
+- **Precedence is manual > when > while > otherwise**, mirrored to
+  `production.feed.reason.{container}` as manual / rule / state / resting. When
+  rules are listed above While rules because that is the order the engine reads
+  them; order WITHIN a kind is the producer's (`order`, `move`), and a move
+  never crosses kinds. A moment hands back to whatever the states say NOW.
+- **Scope** (`{scoreboard, team}`) is the container's frame of reference: the
+  board its rules watch and what "this container's side" means. A mirrored pair
+  is two scoped containers running the same rules. Do not add a per-rule board.
+- **Otherwise is the definition's `resting`** — absent = empty/transparent, the
+  right answer for a container that only ever holds pushed content.
+- A producer Push suspends the rules, and **clearing the container is what
+  hands it back**; there is deliberately no Resume verb.
 - Rules are **config, so writes are immediate and never staged** — the
-  broadcast-visible half is the feed the engine writes, not the rule.
+  broadcast-visible half is the feed the engine writes, not the rule. The
+  engine re-settles every container on a rule or roster edit
+  (`Automations.on_settings`).
 
 ### The Add picker
 

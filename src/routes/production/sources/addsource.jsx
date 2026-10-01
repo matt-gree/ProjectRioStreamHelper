@@ -14,7 +14,7 @@ import { cn } from '../../../lib/utils';
 import { notifications } from '../../../lib/notify';
 import { sideLabel, useSideLabels } from '../sides';
 import { useActiveBoards, useBoardLabel, useBoardTag, useRotatingBoards } from '../board/boards';
-import { containerUrl, useContainerActions, useSharedContainers } from '../containers/containers';
+import { containerUrl, sizeForMembers, useContainerActions, useSharedContainers } from '../containers/containers';
 import { EMPTY_SET, GROUP_LABELS, MOD, addName, boardsNote, groupRank, isBoardScoped, nativeH, nativeW, offeredOn, overlayUrl, pairKeyOf, pairRows, pickKey, pickerPreviewUrl, picksBoard, rowLabel, rowRank, sceneBoard, useLayoutCatalog } from './addcatalog';
 import { NewContainerForm } from './newcontainer';
 import { useCopyableUrl } from '../../../lib/obs-reach';
@@ -540,8 +540,9 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         container: d.id,
     })), [defs]);
 
-    const createContainer = useCallback((name, size, members) => {
-        const id = create(name, size.width, size.height, members);
+    const createContainer = useCallback((name, members) => {
+        const id = create(name, members);
+        const size = sizeForMembers(members);
         setBuilding(false);
         // Select and preview it, so Create → Add is one continuous act.
         const row = {
@@ -573,7 +574,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         const q = query.toLowerCase().trim();
         // A pair matches if EITHER side's label does, so "side 2" still finds
         // every pair and the chip for that side is right there on it.
-        const shelve = (layoutsIn) => {
+        const shelve = (layoutsIn, withShared = false) => {
             const out = new Map();
             for (const row of pairRows(layoutsIn)) {
                 const key = GROUP_LABELS[row.lead.group] ?? row.lead.group;
@@ -582,6 +583,17 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                     && !key.toLowerCase().includes(q)) continue;
                 if (!out.has(key)) out.set(key, []);
                 out.get(key).push(row);
+            }
+            /*
+             * The containers' shelf is drawn EVEN EMPTY, because its heading is
+             * where + New lives — and a fresh install has no containers, so a
+             * shelf built only from rows never drew the one button that makes
+             * the first. Every install since the seeded containers were retired
+             * could not build a container at all.
+             */
+            if (withShared && !out.has(GROUP_LABELS.shared)
+                && (!q || GROUP_LABELS.shared.toLowerCase().includes(q) || 'new container'.includes(q))) {
+                out.set(GROUP_LABELS.shared, []);
             }
             return [...out.entries()]
                 .sort(([a], [b]) => groupRank(a) - groupRank(b))
@@ -593,11 +605,12 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         const rows = [...layouts.filter(l => l.group !== 'shared'), ...containerRows];
         const offered = rows.filter(l => offeredOn(l, activeBoard, rotating));
         // One list on a single-board rig — there is no board to split around.
-        if (!multiBoard) return { boardGroups: shelve(offered), wideGroups: [] };
-        // The tab's list, then the Show-wide shelf beneath it.
+        if (!multiBoard) return { boardGroups: shelve(offered, true), wideGroups: [] };
+        // The tab's list, then the Show-wide shelf beneath it. A container reads
+        // no board, so its (possibly empty) shelf is a Show-wide one.
         return {
             boardGroups: shelve(offered.filter(picksBoard)),
-            wideGroups: shelve(offered.filter(l => !picksBoard(l))),
+            wideGroups: shelve(offered.filter(l => !picksBoard(l)), true),
         };
     }, [layouts, containerRows, query, sideMode, multiBoard, activeBoard, rotating]);
 
@@ -889,6 +902,12 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                     </button>
                 )}
             </div>
+            {label === GROUP_LABELS.shared && rows.length === 0 && (
+                <Text size="xs" dimmed className="px-1 py-1">
+                    No containers yet. A container is one source that shows one of
+                    its members at a time.
+                </Text>
+            )}
             {rows.map((row) => {
                 const board = boardFor(row.lead);
                 const pickedOf = (l) => pickedByUrl.get(l.url) ?? EMPTY_SET;

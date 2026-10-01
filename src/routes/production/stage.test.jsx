@@ -157,7 +157,7 @@ describe('Container delete', () => {
         fireEvent.click(screen.getByRole('button', { name: /Delete container/ }));
         // Still defined — the first click only opened the confirm.
         expect(useSettingsStore.getState().production.container_defs['callout-stage']).toBeTruthy();
-        expect(screen.getByText(/drops its members’ automation rules/)).toBeInTheDocument();
+        expect(screen.getByText(/deletes its rules/)).toBeInTheDocument();
     });
 
     it('deletes on the second click', () => {

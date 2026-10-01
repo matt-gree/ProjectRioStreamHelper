@@ -4,18 +4,19 @@ import { useSettingsStore, useStateStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
 import { useContainerActions } from './containers';
 import {
-    AUTOMATION_LIBRARY, dropRules, libraryEntry, ruleIdFor, templatesFor,
+    VOCAB, defaultRule, dropRules, ruleProblem, subjectKind, subjectOptions, untilLabel,
     useAutomationActions, useAutomations, useContainerAutomations,
 } from './automations';
 
 /*
- * Container automations — the console half.
+ * Container rules — the console half.
  *
  * The engine is server-side (server/automations.py, pinned by
- * tests/unit/test_automations.py). What these pin is the part a producer touches:
- * the quick-add library is gated on the roster, a rule's id is scoped to its
- * container so a mirrored pair can run the same canned rule, and a roster edit
- * takes its rules with it.
+ * tests/unit/test_automation_rules.py, which also pins the vocabulary file
+ * both halves read). What these pin is the part a producer touches: a new rule
+ * is a sentence that already makes sense, the "of" a rule offers follows what
+ * its member is, order lives within a kind, and a roster edit takes its rules
+ * with it.
  */
 
 const CONTAINER = 'stats-left';
@@ -49,162 +50,105 @@ function harness(hook) {
     return out;
 }
 
-describe('the quick-add library', () => {
-    it('ships the Roster + Stats case study as its first entry', () => {
-        const t = libraryEntry('batter-card');
-        expect(t).toBeTruthy();
-        // A LIST with one entry, not a bare id: which card a container holds
-        // is a look the producer chose when they built the roster, not a second
-        // rule to pick. It held two while the fed Stats bar was also hostable.
-        expect(t.members).toEqual(['statscard']);
-        // `{sb}` resolves from the CONTAINER's scope server-side, so one canned
-        // rule reads the same on every board instead of naming one.
-        expect(t.trigger).toBe('score.{sb}.batter');
-        expect(t.dwell).toBeGreaterThan(0);
+const stored = () => useSettingsStore.getState().production.automations;
+
+describe('a new rule is a sentence that already makes sense', () => {
+    it('starts a When rule on the first event, for every time, showing a scoped member', () => {
+        const r = defaultRule('when', { members: ['postgamevs', 'statscard'] });
+        expect(r).toMatchObject({
+            kind: 'when', event: VOCAB.events[0].id, by: 'any', member: 'statscard',
+            subject: 'scope', once: 'always', conditions: [],
+        });
+        expect(typeof r.until).toBe('number');
     });
 
-    it('names the four knobs worth reading on every entry', () => {
-        for (const t of AUTOMATION_LIBRARY) {
-            expect(t.triggerLabel, t.id).toBeTruthy();
-            expect(t.guardLabel, t.id).toBeTruthy();
-            expect(t.members?.length, t.id).toBeTruthy();
-            expect(t.dwell, t.id).toBeGreaterThan(0);
-        }
+    it('starts a While rule on the first state', () => {
+        expect(defaultRule('while', { members: ['postgamevs'] }))
+            .toEqual({ kind: 'while', state: VOCAB.states[0].id, member: 'postgamevs', subject: 'scope' });
+    });
+});
+
+describe('the "of" follows what the member is', () => {
+    it('reads a Stat Card as a player and a Roster as a side', () => {
+        expect(subjectKind('statscard')).toBe('player');
+        expect(subjectKind('roster')).toBe('side');
+        // A member with content of its own has no "of" at all.
+        expect(subjectKind('postgamevs')).toBeNull();
+        expect(subjectOptions({ kind: 'while', member: 'postgamevs' })).toEqual([]);
     });
 
-    /*
-     * A rule that feeds a non-member is inert (the engine drops it), so offering
-     * one would be offering something that quietly does nothing.
-     */
-    it('only offers a template whose member is on the roster', () => {
-        expect(templatesFor({ members: ['statscard'] }).map(t => t.id)).toEqual(['batter-card']);
-        expect(templatesFor({ members: ['roster', 'statscard'] }).map(t => t.id))
-            .toEqual(['batter-card']);
-        expect(templatesFor({ members: ['postgamevs'] })).toEqual([]);
-        expect(templatesFor({ members: ['roster'] })).toEqual([]);
-        expect(templatesFor({})).toEqual([]);
+    it('only offers "the player in the event" for a moment that has one', () => {
+        const sided = subjectOptions({ kind: 'when', event: 'batter_up', member: 'statscard' });
+        const unsided = subjectOptions({ kind: 'when', event: 'game_end', member: 'statscard' });
+        expect(sided.map(o => o.value)).toContain('event');
+        expect(unsided.map(o => o.value)).not.toContain('event');
+        expect(sided.find(o => o.value === 'fielding').label).toBe('the pitcher');
+        expect(subjectOptions({ kind: 'when', event: 'batter_up', member: 'roster' })
+            .find(o => o.value === 'fielding').label).toBe('the fielding side');
+    });
+
+    it('reads a duration as seconds or as the moment it ends on', () => {
+        expect(untilLabel(8)).toBe('8 s');
+        expect(untilLabel('next_batter')).toBe('the next batter');
     });
 });
 
 describe('rule mutations', () => {
-    it('writes a rule carrying its template, container and knobs', () => {
+    it('adds rules in order within their kind', () => {
         const { add } = harness(useAutomationActions);
-        const id = add('batter-card', CONTAINER);
-
-        expect(id).toBe(ruleIdFor('batter-card', CONTAINER));
-        const rule = useSettingsStore.getState().production.automations[id];
-        expect(rule).toMatchObject({
-            enabled: true, template: 'batter-card', container: CONTAINER,
-            member: 'statscard', trigger: 'score.{sb}.batter', dwell: 7,
-        });
+        const a = add('when', CONTAINER);
+        const b = add('when', CONTAINER);
+        const c = add('while', CONTAINER);
+        expect(stored()[a]).toMatchObject({ container: CONTAINER, kind: 'when', order: 0, enabled: true });
+        expect(stored()[b].order).toBe(1);
+        expect(stored()[c].order).toBe(0);
     });
 
-    /*
-     * A mirrored pair is two containers running ONE canned rule, so the id has to
-     * carry the container. Adding the same template twice to one container must
-     * not double it: the feed key holds one occupant, so two identical rules
-     * would fire twice into the same slot.
-     */
-    it('scopes a rule id to its container and never doubles one', () => {
-        useSettingsStore.setState({
-            production: {
-                container_defs: {
-                    ...defs(),
-                    'stats-right': { name: 'R', width: 452, height: 240, members: ['statscard'] },
-                },
-                automations: {},
-            },
-        });
+    it('refuses a rule for a container with nothing on it', () => {
+        useSettingsStore.setState({ production: { container_defs: defs({ members: [] }), automations: {} } });
         const { add } = harness(useAutomationActions);
-        add('batter-card', CONTAINER);
-        add('batter-card', 'stats-right');
-        add('batter-card', CONTAINER);
+        expect(add('when', CONTAINER)).toBeNull();
+        expect(stored()).toEqual({});
+    });
 
-        expect(Object.keys(useSettingsStore.getState().production.automations).sort())
-            .toEqual(['stats-left:batter-card', 'stats-right:batter-card']);
+    it('moves a rule within its kind and renumbers the group', () => {
+        const { add, move } = harness(useAutomationActions);
+        const a = add('when', CONTAINER);
+        const b = add('when', CONTAINER);
+        const w = add('while', CONTAINER);
+        move(b, -1);
+        expect(stored()[b].order).toBe(0);
+        expect(stored()[a].order).toBe(1);
+        // Past the top is a no-op, and a While rule never crosses into the Whens.
+        move(w, -1);
+        expect(stored()[w].order).toBe(0);
     });
 
     it('updates one knob and removes a rule', () => {
         const { add, update, remove } = harness(useAutomationActions);
-        const id = add('batter-card', CONTAINER);
-
-        update(id, { dwell: 3 });
-        expect(useSettingsStore.getState().production.automations[id].dwell).toBe(3);
-        update(id, { enabled: false });
-        expect(useSettingsStore.getState().production.automations[id]).toMatchObject({
-            enabled: false, dwell: 3,
-        });
-
+        const id = add('when', CONTAINER);
+        update(id, { until: 'next_batter' });
+        expect(stored()[id].until).toBe('next_batter');
         remove(id);
-        expect(useSettingsStore.getState().production.automations).toEqual({});
-    });
-
-    it('ignores an unknown template or a missing container', () => {
-        const { add } = harness(useAutomationActions);
-        expect(add('nope', CONTAINER)).toBeNull();
-        expect(add('batter-card', null)).toBeNull();
-        expect(useSettingsStore.getState().production.automations).toEqual({});
-    });
-
-    /*
-     * The template offers a preference list; the RULE stores one member,
-     * resolved against this container's roster at add time. Resolving once and
-     * storing it is what keeps the engine reading a rule rather than a
-     * preference — and stops a later roster edit silently re-pointing a live
-     * rule at a different card mid-broadcast.
-     */
-    it('resolves the member off the roster and stores it', () => {
-        useSettingsStore.setState({
-            production: {
-                container_defs: {
-                    pair: { name: 'Pair', width: 452, height: 240, members: ['roster', 'statscard'] },
-                    bare: { name: 'Bare', width: 452, height: 240, members: ['roster'] },
-                },
-                automations: {},
-            },
-        });
-        const { add } = harness(useAutomationActions);
-        const rules = () => useSettingsStore.getState().production.automations;
-        add('batter-card', 'pair');
-        expect(rules()['pair:batter-card'].member).toBe('statscard');
-        // Nothing on the roster the template can show: a rule fed a non-member
-        // is inert, so there is no rule to write rather than an inert one.
-        expect(add('batter-card', 'bare')).toBeNull();
-        expect(rules()['bare:batter-card']).toBeUndefined();
-    });
-
-    it('refuses a template no member on the roster can satisfy', () => {
-        useSettingsStore.setState({
-            production: {
-                container_defs: { bare: { name: 'Bare', width: 452, height: 240, members: ['roster'] } },
-                automations: {},
-            },
-        });
-        const { add } = harness(useAutomationActions);
-        expect(add('batter-card', 'bare')).toBeNull();
-        expect(useSettingsStore.getState().production.automations).toEqual({});
+        expect(stored()).toEqual({});
     });
 });
 
 describe('reading rules back', () => {
-    it('degrades a malformed entry to absent instead of throwing', () => {
+    it('degrades a malformed entry to absent, and lists When before While', () => {
         useSettingsStore.setState({
             production: {
                 container_defs: defs(),
                 automations: {
-                    ok: { container: CONTAINER, member: 'stats', template: 'batter-card', dwell: 5 },
-                    nocontainer: { member: 'stats' },
-                    nomember: { container: CONTAINER },
                     junk: 'not an object',
+                    nokind: { container: CONTAINER, member: 'statscard' },
+                    w: { kind: 'while', state: 'final', container: CONTAINER, member: 'statscard', order: 0 },
+                    m: { kind: 'when', event: 'batter_up', container: CONTAINER, member: 'statscard', order: 5 },
                 },
             },
         });
-        const rules = harness(() => ({ rules: useAutomations() })).rules;
-        expect(rules.map(r => r.id)).toEqual(['ok']);
-        // The template resolves off the stored id, so the row can read the
-        // canned rule's own words rather than a raw state key.
-        expect(rules[0].template.id).toBe('batter-card');
-        expect(rules[0].enabled).toBe(true);
+        const { rules } = harness(() => ({ rules: useAutomations() }));
+        expect(rules.map(r => r.id)).toEqual(['m', 'w']);
     });
 
     it('filters to one container', () => {
@@ -212,13 +156,20 @@ describe('reading rules back', () => {
             production: {
                 container_defs: defs(),
                 automations: {
-                    a: { container: CONTAINER, member: 'stats' },
-                    b: { container: 'elsewhere', member: 'stats' },
+                    a: { kind: 'when', event: 'batter_up', container: CONTAINER, member: 'statscard' },
+                    b: { kind: 'when', event: 'batter_up', container: 'other', member: 'statscard' },
                 },
             },
         });
-        const out = harness(() => ({ mine: useContainerAutomations(CONTAINER) }));
-        expect(out.mine.map(r => r.id)).toEqual(['a']);
+        const { rules } = harness(() => ({ rules: useContainerAutomations(CONTAINER) }));
+        expect(rules.map(r => r.id)).toEqual(['a']);
+    });
+
+    it('names why a rule cannot fire', () => {
+        const def = { members: ['statscard'] };
+        expect(ruleProblem({ kind: 'when', event: 'batter_up', member: 'statscard' }, def)).toBeNull();
+        expect(ruleProblem({ kind: 'when', event: 'batter_up', member: 'roster' }, def)).toMatch(/no longer on/);
+        expect(ruleProblem({ kind: 'while', state: 'nope', member: 'statscard' }, def)).toMatch(/state/);
     });
 });
 
@@ -292,7 +243,7 @@ describe('a roster edit takes its rules with it', () => {
             },
         });
         const { create } = harness(useContainerActions);
-        create('Stats Right', 800, 460, ['scoreboard']);
+        create('Stats Right', ['scoreboard']);
 
         const after = useSettingsStore.getState().production;
         expect(after.container_defs[CONTAINER].members).toEqual([]);

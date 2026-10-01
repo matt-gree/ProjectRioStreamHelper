@@ -33,7 +33,7 @@ import ScorecardStage from './scorecard';
 import EventHeaderStage from './eventheader';
 import BracketStage from './bracket';
 import ControllerStage from './controller';
-import ContainerStage from './container';
+import ContainerStage, { useContainerRename } from './container';
 
 /*
  * The stage — the console's center surface: ONE selected item's full controls,
@@ -136,6 +136,11 @@ const ElementStage = memo(function ElementStage({
         : styleSide.segment ? `${element.name} ${sides.label(styleSide.side)}` : element.name;
     const Body = stageBodyComponent(element, placement);
     const dims = useContainerDims(placement);
+    /* A container is RENAMED IN ITS TITLE, the board desk's idiom: its name is
+       the producer's, and a Name row in the body was a second home for the
+       value printed at the top of the same panel. Every other element's title
+       is derived, so only a container gets the field. */
+    const containerRename = useContainerRename(element);
     /* The source's ?size=, read once: it picks the theme file an override has
        to reach AND drops the element settings that size doesn't draw. */
     const size = sizeOptionFor(element, placement.variant)?.value;
@@ -145,7 +150,10 @@ const ElementStage = memo(function ElementStage({
     const layout = variantParams(placement.variant).find(([p]) => p === 'layout')?.[1];
     return (
         <PanelShell
-            state={chipFor(placement)} title={title}
+            state={chipFor(placement)}
+            title={containerRename ? containerRename.value : title}
+            titlePlaceholder={containerRename?.placeholder}
+            onRename={containerRename?.onChange}
             subject={<Subject placement={placement} />}
             meta={placement.item?.sourceName}
             primaryAction={<SourceStrip element={element} board={board} placement={placement} />}

@@ -467,6 +467,8 @@ class Automations:
             State.hooks.append(cls.on_write)
         if cls.on_unset not in State.unset_hooks:
             State.unset_hooks.append(cls.on_unset)
+        if cls.on_settings not in Settings.watchers:
+            Settings.watchers.append(cls.on_settings)
         cls._started = True
         try:
             await cls.settle_all()
@@ -484,6 +486,8 @@ class Automations:
             State.hooks.remove(cls.on_write)
         if cls.on_unset in State.unset_hooks:
             State.unset_hooks.remove(cls.on_unset)
+        if cls.on_settings in Settings.watchers:
+            Settings.watchers.remove(cls.on_settings)
         cls._started = False
 
     @classmethod
@@ -863,6 +867,44 @@ class Automations:
                 continue
             if _resting_of(def_) or live is not None or container in cls._stateful:
                 await cls.apply_baseline(container)
+
+    @classmethod
+    async def on_settings(cls, keys) -> None:
+        """A rule or a roster changed: re-settle every container it could move.
+
+        The write path only re-decides a container when the GAME moves, so
+        without this a While rule added while the game is already final would
+        sit there doing nothing until the next HUD frame — which on a finished
+        game never comes. Only containers whose steady state actually differs
+        are written, and one a producer or a moment holds is left alone.
+        """
+        if not any(k == "production" or k.startswith(("production.automations",
+                                                        "production.container_defs"))
+                   for k in keys):
+            return
+        await cls.resettle()
+
+    @classmethod
+    async def resettle(cls):
+        cls.rules()
+        defs = Settings.Get("production.container_defs", {}) or {}
+        if not isinstance(defs, dict):
+            return
+        for container, def_ in defs.items():
+            if not isinstance(def_, dict) or container in cls._manual or container in cls._active:
+                continue
+            payload, reason = cls.baseline(container)
+            live = deep_get(State.state, f"{FEED_KEY}.{container}")
+            if payload is None and live is None:
+                # Never touched and nothing to show — leave it unmirrored rather
+                # than stamping a reason on every container in the show.
+                continue
+            if live == payload and cls.reason(container) == reason:
+                continue
+            try:
+                await cls.apply_baseline(container)
+            except Exception:
+                logger.exception("[automations] re-settling {} failed", container)
 
     # ── manual ─────────────────────────────────────────────────────────────
 
