@@ -154,23 +154,20 @@ describe('the side columns are told how tall they may be', () => {
 
 
 /*
- * THE BAND'S ERROR LINE CARRIES WHAT THE PILL CANNOT — the address, or the
- * rejection — and nothing else. The pill an inch to its left already says the
- * connection failed, and the line used to say it again at length; before that
- * it said the bare word "Error", which is String() of the empty-reason 1006
- * that OBS-not-running raises. The way to the fix is the PILL, which is a link
- * in every state — the readout is the way to its own settings.
+ * THE TOP BAND DRAWS NO ERROR TEXT. The pill says the connection failed and is
+ * a link in every state; the address or rejection lives on the Connections
+ * tab's OBS card, which is where the fix is.
  */
-describe('the OBS error line', () => {
+describe('the OBS status band', () => {
     const errored = (error) => {
         useSettingsStore.setState({ obs: { ever_connected: true } });
         useObsStore.setState({ status: 'error', error });
     };
 
-    it('draws the address, with no second link beside it', () => {
+    it('draws no error text beside the pill — the Connections tab carries the detail', () => {
         errored('Nothing listening at 127.0.0.1:4455.');
         ui();
-        expect(screen.getByText('Nothing listening at 127.0.0.1:4455.')).toBeInTheDocument();
+        expect(screen.queryByText(/Nothing listening/)).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /Connections tab/ })).not.toBeInTheDocument();
     });
 

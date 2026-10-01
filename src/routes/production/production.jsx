@@ -75,8 +75,8 @@ const STATUS_META = {
 const NOT_SET_UP = { dot: 'bg-muted-foreground/50', label: 'OBS not set up' };
 
 const ConnectionPill = memo(function ConnectionPill() {
-    const { status, error, obsVersion } = useObsStore(useShallow(s => ({
-        status: s.status, error: s.error, obsVersion: s.obsVersion,
+    const { status, obsVersion } = useObsStore(useShallow(s => ({
+        status: s.status, obsVersion: s.obsVersion,
     })));
     const connect = useObsStore(s => s.connect);
     // settingOn, not `=== true`: the REST settings route is string-typed, so
@@ -121,11 +121,6 @@ const ConnectionPill = memo(function ConnectionPill() {
                         {status === 'error' ? 'Retry' : 'Connect'}
                     </Button>
                 )
-            )}
-            {/* What the pill can't say: which address, or which rejection
-                (see friendlyError in context/obs). */}
-            {status === 'error' && error && !unconfigured && (
-                <Text size="xs" className="text-destructive">{error}</Text>
             )}
         </Group>
     );
