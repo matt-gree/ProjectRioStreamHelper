@@ -1,4 +1,7 @@
-"""Container automations — the server-side engine (server/automations.py).
+"""Container automations — the engine's plumbing (server/automations.py).
+
+The rule SENTENCE (when / while, order, subjects, durations) is pinned in
+test_automation_rules.py; these use the simplest one to pin the machinery.
 
 What these pin, in the order the plan locked them:
 
@@ -47,10 +50,10 @@ def rule(container, set_setting):
             "enabled": True,
             "name": "Batter change → stat card",
             "container": CONTAINER,
-            "trigger": "score.{sb}.batter",
+            "kind": "when", "event": "batter_up",
             "member": "stats",
             "guard": "content",
-            "dwell": 7,
+            "until": 7,
         },
     })
 
@@ -138,8 +141,8 @@ async def test_the_mirrored_side_shows_the_pitcher(container, set_setting):
         },
     })
     set_setting("production.automations", {
-        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
-              "member": "stats", "dwell": 7},
+        "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
+              "member": "stats", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -167,8 +170,8 @@ async def test_the_themed_card_is_fed_a_scope_and_nothing_else(container, set_se
         },
     })
     set_setting("production.automations", {
-        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
-              "member": "statscard", "dwell": 7},
+        "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
+              "member": "statscard", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -194,8 +197,8 @@ async def test_the_themed_card_still_carries_a_guard(container, set_setting):
         },
     })
     set_setting("production.automations", {
-        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
-              "member": "statscard", "dwell": 7},
+        "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
+              "member": "statscard", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -251,7 +254,7 @@ async def test_an_unchanged_trigger_does_not_re_fire(rule):
 async def test_a_disabled_rule_never_fires(container, set_setting):
     set_setting("production.automations", {
         "r": {"enabled": False, "container": CONTAINER,
-              "trigger": "score.{sb}.batter", "member": "stats", "dwell": 7},
+              "kind": "when", "event": "batter_up", "member": "stats", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -267,8 +270,8 @@ async def test_a_rule_whose_member_left_the_roster_is_inert(container, set_setti
                     "members": ["roster"], "resting": "roster"},
     })
     set_setting("production.automations", {
-        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
-              "member": "stats", "dwell": 7},
+        "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
+              "member": "stats", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -282,8 +285,8 @@ async def test_a_rule_whose_member_left_the_roster_is_inert(container, set_setti
 
 async def test_dwell_returns_to_the_resting_occupant(container, set_setting):
     set_setting("production.automations", {
-        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
-              "member": "stats", "dwell": 0.01},
+        "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
+              "member": "stats", "until": 0.01},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -303,8 +306,8 @@ async def test_a_container_with_no_resting_member_empties(set_setting):
                     "members": ["stats"]},
     })
     set_setting("production.automations", {
-        "r": {"container": CONTAINER, "trigger": "score.{sb}.batter",
-              "member": "stats", "dwell": 0.01},
+        "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
+              "member": "stats", "until": 0.01},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))

@@ -1,0 +1,45 @@
+{
+  "_comment": "The words a container rule is built from. ONE list, read by both runtimes: the console builds its menus from the labels, server/automations.py implements each id. tests/unit/test_automation_vocab.py fails if an id here has no implementation there, or the other way round. A word that needs data the feed does not write yet is not listed — an option that can never fire costs more than a missing one.",
+  "events": [
+    { "id": "batter_up", "label": "a new batter steps up", "sided": true, "eventSubject": "the batter" },
+    { "id": "pitcher_change", "label": "the pitcher changes", "sided": true, "eventSubject": "the pitcher" },
+    { "id": "half_end", "label": "a half-inning ends", "sided": false },
+    { "id": "game_end", "label": "the game ends", "sided": false }
+  ],
+  "states": [
+    { "id": "final", "label": "the game is final" },
+    { "id": "no_game", "label": "no game is on the board" },
+    { "id": "side_batting", "label": "this side is batting" },
+    { "id": "side_pitching", "label": "this side is pitching" }
+  ],
+  "by": [
+    { "id": "any", "label": "either side" },
+    { "id": "scope", "label": "this container’s side" },
+    { "id": "1", "label": "side 1" },
+    { "id": "2", "label": "side 2" }
+  ],
+  "subjects": [
+    { "id": "scope", "player": "this container’s side", "side": "this container’s side" },
+    { "id": "batting", "player": "the batter", "side": "the batting side" },
+    { "id": "fielding", "player": "the pitcher", "side": "the fielding side" },
+    { "id": "event", "player": "the player in the event", "side": "the side in the event", "needsSidedEvent": true }
+  ],
+  "until": [
+    { "id": "next_batter", "label": "the next batter" },
+    { "id": "half_end", "label": "the half-inning ends" },
+    { "id": "manual", "label": "I clear it" }
+  ],
+  "seconds": [5, 8, 10, 15, 20],
+  "once": [
+    { "id": "always", "label": "every time" },
+    { "id": "half", "label": "once per half-inning" },
+    { "id": "inning", "label": "once per inning" },
+    { "id": "game", "label": "once per game" }
+  ],
+  "conditions": [
+    { "id": "inning", "label": "inning" },
+    { "id": "margin", "label": "score margin" },
+    { "id": "outs", "label": "outs" }
+  ],
+  "ops": [">=", "<=", "="]
+}

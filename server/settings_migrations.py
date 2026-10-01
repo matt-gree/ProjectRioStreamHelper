@@ -237,6 +237,56 @@ def _retire_seeded_containers(production: dict) -> bool:
     return True
 
 
+# The one trigger the canned-rule library ever offered, and what it means in
+# the When / While vocabulary that replaced it.
+_LEGACY_TRIGGERS = {"score.{sb}.batter": "batter_up"}
+
+
+def _upgrade_automation_rules(production: dict) -> bool:
+    """Rewrite canned-library rules into the When / While shape, in place.
+
+    A rule used to be a template copy — `trigger` (a state key), `guard`,
+    `dwell` — and the engine now reads a sentence: `kind`, `event`, `by`,
+    `subject`, `until`, `once`. The only template that ever shipped was "batter
+    change → stat card", which is exactly `when batter_up, by either side, show
+    <member> of this container's side for <dwell> s`, so the translation loses
+    nothing. A rule with a trigger this does not know is left as it is and the
+    engine treats it as inert — the same fate it would have had under the old
+    engine, which only ever fired on keys a template named.
+
+    Idempotent without a flag: it only touches entries that have no `kind`.
+    """
+    rules = production.get("automations")
+    if not isinstance(rules, dict):
+        return False
+    changed = False
+    for rid, rule in rules.items():
+        if not isinstance(rule, dict) or "kind" in rule:
+            continue
+        event = _LEGACY_TRIGGERS.get(rule.get("trigger"))
+        if not event:
+            continue
+        try:
+            dwell = float(rule.get("dwell") or 7)
+        except (TypeError, ValueError):
+            dwell = 7.0
+        rules[rid] = {
+            "kind": "when",
+            "event": event,
+            "by": "any",
+            "subject": "scope",
+            "member": rule.get("member"),
+            "container": rule.get("container"),
+            "until": int(dwell) if dwell == int(dwell) else dwell,
+            "once": "always",
+            "conditions": [],
+            "enabled": rule.get("enabled", True),
+            "order": 0,
+        }
+        changed = True
+    return changed
+
+
 # Settings no code reads any more. `_deep_merge` keeps whatever the file had,
 # so a key the app stopped using stays in every settings.json forever unless it
 # is named here. Dotted paths; an `overlays.{ns}.{key}` entry is also dropped
@@ -586,6 +636,12 @@ def _container_membership(settings: dict, loaded: dict | None) -> bool:
     return _retire_seeded_containers(production) or changed
 
 
+def _automation_rules(settings: dict, loaded: dict | None) -> bool:
+    """Container rules moved from canned-template copies to the When / While
+    sentence the console now builds them as."""
+    return _upgrade_automation_rules(settings.setdefault("production", {}))
+
+
 def _drop_rosterstats(settings: dict, loaded: dict | None) -> bool:
     """The combined Roster + Stats element is gone.
 
@@ -780,6 +836,7 @@ MIGRATIONS = (
     _overlay_schema_v4,
     _overlay_schema_v5,
     _container_membership,
+    _automation_rules,
     _drop_rosterstats,
     _eventheader_and_stroke,
     _binding_v1,
