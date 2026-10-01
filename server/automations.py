@@ -204,6 +204,10 @@ class _Event:
     `actor` is the side the moment belongs to, for an event that has one — the
     batter's side for a new batter. A rule's "by" filters on it and the "the
     player in the event" subject resolves to it.
+
+    `fires(prev, new, sb)` gets the board too, because a PLAY event watches one
+    value (the play's id) and judges what kind of play it was off the rest of
+    the key.
     """
 
     __slots__ = ("value", "fires", "actor")
@@ -226,23 +230,71 @@ def _half_fires(prev, new) -> bool:
             and prev[2] in ("Top", "Bottom") and new[2] in ("Top", "Bottom"))
 
 
+# ── plays ──
+#
+# `score.{N}.play` is the play the last RESOLVED HUD frame finished (written by
+# apply_parsed_game_to_state off HudWatcher._extract_play): {id, result, rbi,
+# star}. Its `id` changing IS the moment — once per play, never once per HUD
+# write — and `result` is Rio's own `Result of AB` word, mapped onto the
+# vocabulary here and nowhere else. An API game has no frames and no plays, so
+# these events are a local-HUD board's.
+
+_HITS = frozenset({"Single", "Double", "Triple", "HR"})
+
+
+def _play(sb: int) -> dict:
+    play = _board(sb, "play")
+    return play if isinstance(play, dict) else {}
+
+
+def _play_event(test):
+    return _Event(
+        value=lambda sb: _play(sb).get("id") or "",
+        fires=lambda prev, new, sb: bool(new) and test(_play(sb)),
+        actor=_batting_side,
+    )
+
+
+def _lead(sb: int) -> int:
+    """Which side leads: 1, 2, or 0 for a tie. score_left/right are sides 1/2
+    as the board draws them."""
+    a, b = _int(_board(sb, "score_left")), _int(_board(sb, "score_right"))
+    return 1 if a > b else 2 if b > a else 0
+
+
 EVENTS: dict[str, _Event] = {
     # Empty is "nobody" (a cleared board), never an arrival: it resets the
     # baseline so the next real name reads as a change.
     "batter_up": _Event(
         value=lambda sb: _board(sb, "batter", "") or "",
-        fires=lambda prev, new: new != "",
+        fires=lambda prev, new, sb: new != "",
         actor=_batting_side,
     ),
     "pitcher_change": _Event(
         value=lambda sb: _board(sb, "pitcher", "") or "",
-        fires=lambda prev, new: new != "",
+        fires=lambda prev, new, sb: new != "",
         actor=lambda sb: 3 - _batting_side(sb),
     ),
-    "half_end": _Event(value=_half_value, fires=_half_fires),
+    "home_run": _play_event(lambda p: p.get("result") == "HR"),
+    "hit": _play_event(lambda p: p.get("result") in _HITS),
+    "strikeout": _play_event(lambda p: p.get("result") == "Strikeout"),
+    # A star pitch is the PITCHER's and a star swing the batter's, so this one
+    # has no side of its own.
+    "star": _Event(
+        value=lambda sb: _play(sb).get("id") or "",
+        fires=lambda prev, new, sb: bool(new) and bool(_play(sb).get("star")),
+    ),
+    # Taking the lead counts (a tie broken); falling back to a tie does not —
+    # nobody has the lead to have changed to.
+    "lead_change": _Event(
+        value=lambda sb: (_board(sb, "game_id"), _lead(sb)),
+        fires=lambda prev, new, sb: prev[0] == new[0] and new[1] != 0 and new[1] != prev[1],
+        actor=_lead,
+    ),
+    "half_end": _Event(value=_half_value, fires=lambda prev, new, sb: _half_fires(prev, new)),
     "game_end": _Event(
         value=_is_final,
-        fires=lambda prev, new: bool(new) and not prev,
+        fires=lambda prev, new, sb: bool(new) and not prev,
     ),
 }
 
@@ -278,6 +330,8 @@ CONDITIONS = {
     "inning": lambda sb: _int(_board(sb, "inning"), 1),
     "margin": lambda sb: abs(_int(_board(sb, "score_left")) - _int(_board(sb, "score_right"))),
     "outs": lambda sb: _int(_board(sb, "outs")),
+    # The play's own RBI — 0 for a moment that is not a play.
+    "rbi": lambda sb: _int(_play(sb).get("rbi")),
 }
 
 OPS = {
@@ -660,7 +714,7 @@ class Automations:
             cls._prev[key] = prev
             if prev is ... or new == prev:
                 continue
-            if event.fires(prev, new):
+            if event.fires(prev, new, sb):
                 fired[key] = event.actor(sb) if event.actor else None
         return fired
 

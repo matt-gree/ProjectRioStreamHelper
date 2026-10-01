@@ -96,9 +96,9 @@ def test_every_word_the_console_offers_is_one_the_engine_implements():
 def test_a_rule_built_from_unknown_words_is_inert():
     defs = {C: {"members": ["statscard"]}}
     assert normalize_rule("x", {**when(), "container": C}, defs) is not None
-    for bad in ({"event": "home_run"}, {"by": "home"}, {"once": "hourly"},
+    for bad in ({"event": "grand_slam"}, {"by": "home"}, {"once": "hourly"},
                 {"until": "forever"}, {"subject": "the crowd"},
-                {"conditions": [{"field": "rbi", "op": ">=", "value": 2}]},
+                {"conditions": [{"field": "pitch_count", "op": ">=", "value": 2}]},
                 {"conditions": [{"field": "inning", "op": ">", "value": 2}]}):
         assert normalize_rule("x", {**when(), "container": C, **bad}, defs) is None, bad
 
@@ -214,6 +214,74 @@ async def test_a_new_game_is_not_a_half_inning_ending(card, set_setting):
     await hud(half="Bottom", inning=9, game_id=100)
     await hud(half="Top", inning=1, game_id=101)
     assert reason() == RESTING
+
+
+# ── plays ────────────────────────────────────────────────────────────────────
+#
+# `score.{N}.play` is written once per RESOLVED HUD frame; the moment is its id
+# changing.
+
+
+def play(n, result, rbi=0, star=False):
+    return {"id": f"100:{n}b", "result": result, "rbi": rbi, "star": star}
+
+
+async def test_a_home_run_is_a_moment_once(card, set_setting):
+    rules(set_setting, when(event="home_run", until="manual"))
+    await Automations.Start()
+    await hud(play=play(1, "Single"))
+    await hud(play=play(2, "Single"))
+    assert reason() == RESTING
+    await hud(play=play(3, "HR", rbi=2))
+    assert reason() == RULE
+    # The same play written again (the next in-flight frame) is not a second one.
+    await State.UnsetBatch([FEED])
+    await Automations.pending(C)
+    await hud(play=play(3, "HR", rbi=2), outs=1)
+    assert reason() == RESTING
+
+
+async def test_rbi_gates_a_play(card, set_setting):
+    rules(set_setting, when(event="hit", conditions=[{"field": "rbi", "op": ">=", "value": 2}]))
+    await Automations.Start()
+    await hud(play=play(1, "Single"))
+    await hud(play=play(2, "Double", rbi=1))
+    assert reason() == RESTING
+    await hud(play=play(3, "Triple", rbi=2))
+    assert reason() == RULE
+
+
+async def test_a_strikeout_belongs_to_the_batting_side(card, set_setting):
+    # Side 1 bats on a Top half; this container is side 1's.
+    rules(set_setting, when(event="strikeout", by="scope"))
+    await Automations.Start()
+    await hud(play=play(1, "Out"), half="Bottom")
+    await hud(play=play(2, "Strikeout"), half="Bottom")
+    assert reason() == RESTING
+    await hud(play=play(3, "Strikeout"), half="Top")
+    assert reason() == RULE
+
+
+async def test_a_star_play(card, set_setting):
+    rules(set_setting, when(event="star"))
+    await Automations.Start()
+    await hud(play=play(1, "Out"))
+    await hud(play=play(2, "Out", star=True))
+    assert reason() == RULE
+
+
+async def test_taking_the_lead_is_a_lead_change_and_a_tie_is_not(card, set_setting):
+    rules(set_setting, when(event="lead_change", subject="event", member="roster", until="manual"))
+    await Automations.Start()
+    await hud(score_left=0, score_right=0)
+    await hud(score_left=1, score_right=0)
+    assert reason() == RULE and feed()["team"] == 1
+    await State.UnsetBatch([FEED])
+    await Automations.pending(C)
+    await hud(score_left=1, score_right=1)
+    assert reason() == RESTING
+    await hud(score_left=1, score_right=3)
+    assert reason() == RULE and feed()["team"] == 2
 
 
 # ── while ────────────────────────────────────────────────────────────────────

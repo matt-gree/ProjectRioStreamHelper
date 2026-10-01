@@ -172,3 +172,35 @@ async def test_an_ongoing_api_game_is_never_marked_over_by_this_key(mock_socket)
     api_frame.pop("game_over", None)
     await apply_parsed_game_to_state(api_frame, 1)
     assert deep_get(State.state, "score.1.game_over") is False
+
+
+# ── the resolved play (container rules' "a home run is hit") ────────────────
+
+
+def test_a_resolved_frame_reports_its_play():
+    """`game1_mid` is a "…b" frame, so `Previous Event` IS the play it
+    resolves — reported once, with Rio's own result word."""
+    play = _parse("game1_mid")["play"]
+    assert play == {"event": "197b", "result": "Caught line-drive", "rbi": 0, "star": False}
+
+
+def test_an_in_flight_frame_reports_no_play():
+    raw = orjson.loads((FIXTURE_DIR / "game1_mid.json").read_bytes())
+    raw["Event Num"] = "197"
+    flat = HudWatcher._convert_hud_data_format(HudObj(raw))
+    assert flat["play"] is None
+
+
+async def test_the_play_lands_on_the_board_keyed_by_game_and_event():
+    from server.rio.apply import apply_parsed_game_to_state
+    from server.state import State
+    from server.utils.deep_dict import deep_get
+
+    parsed = _parse("game1_mid")
+    await apply_parsed_game_to_state(parsed, 1)
+    assert deep_get(State.state, "score.1.play") == {
+        "id": f"{parsed['game_id']}:197b", "result": "Caught line-drive", "rbi": 0, "star": False,
+    }
+    # An in-flight frame leaves the last play alone rather than blanking it.
+    await apply_parsed_game_to_state({**parsed, "play": None}, 1)
+    assert deep_get(State.state, "score.1.play")["id"] == f"{parsed['game_id']}:197b"

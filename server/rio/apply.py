@@ -209,6 +209,21 @@ async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_
         (f"{sb}.home_linescore", right.get("inning_scores", [])),
     ]
 
+    # THE PLAY THIS FRAME RESOLVES, written only when there is one. A resolved
+    # frame names a finished play; an in-flight frame (and every API game, which
+    # has no frames) says nothing, and must not blank the last play — the key is
+    # what a container rule's "a home run is hit" watches, and the moment is its
+    # `id` CHANGING. The id carries the game, so the same event number in the
+    # next game is a new play.
+    play = parsed.get("play")
+    if isinstance(play, dict) and play.get("event"):
+        entries.append((f"{sb}.play", {
+            "id": f"{parsed.get('game_id')}:{play['event']}",
+            "result": play.get("result", ""),
+            "rbi": int(play.get("rbi") or 0),
+            "star": bool(play.get("star")),
+        }))
+
     eff_names: list[str] = []
     for team_idx in range(2):
         team_num = team_idx + 1
@@ -491,6 +506,7 @@ def clear_game_entries(scoreboard_number: int) -> list[tuple]:
         (f"{base}.runner3Name", ""),
         (f"{base}.batter", ""),
         (f"{base}.pitcher", ""),
+        (f"{base}.play", None),
         (f"{base}.batter_hand", 0),
         (f"{base}.pitcher_hand", 0),
         (f"{base}.batterSide", "right"),

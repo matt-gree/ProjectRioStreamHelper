@@ -450,6 +450,9 @@ class RioGameDataProvider:
 
             batter_index = game_json["batter"]
             data["batter_roster_index"] = batter_index
+            # The play a resolved frame finishes (HudWatcher._extract_play), or
+            # None — an in-flight frame says nothing about plays.
+            data["play"] = game_json.get("play")
 
             half = game_json["half_inning"]
             # Batting side: Top (0) → away, Bottom (1) → home.

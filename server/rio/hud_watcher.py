@@ -142,6 +142,49 @@ class HudWatcher:
             return False
 
     @staticmethod
+    def _extract_play(hud_data: HudObj) -> dict | None:
+        """The play this frame RESOLVES, or None for an in-flight frame.
+
+        Project Rio writes two frames per event — "120" while the play is in
+        flight and "120b" when it resolves — and only the second describes a
+        finished play (`HudObj.event_resolved`); on it, ``Previous Event`` IS
+        that play. So a play is reported exactly once, keyed by its event
+        number, which is what lets a container rule fire on "a home run is hit"
+        once per home run rather than once per HUD write.
+
+        ``result`` is Rio's own ``Result of AB`` word ("HR", "Strikeout",
+        "Single", …, see ``LookupDicts.FINAL_RESULT``) — kept as Rio says it, so
+        a rule's vocabulary maps onto it in one place (server/automations.py).
+        """
+        try:
+            if not hud_data.event_resolved():
+                return None
+            hud_json = hud_data.hud_json
+            pe = hud_json.get("Previous Event")
+            if not isinstance(pe, dict):
+                return None
+            pitch = pe.get("Pitch") if isinstance(pe.get("Pitch"), dict) else {}
+            contact = pitch.get("Contact") if isinstance(pitch.get("Contact"), dict) else {}
+
+            def num(v):
+                try:
+                    return int(v)
+                except (TypeError, ValueError):
+                    return 0
+
+            return {
+                "event": str(hud_json.get("Event Num", "")),
+                "result": str(pe.get("Result of AB") or ""),
+                "rbi": num(pe.get("RBI")),
+                "star": bool(num(pitch.get("Star Pitch"))
+                             or pitch.get("Type of Swing") == "Star"
+                             or num(contact.get("Star Swing Five-Star"))),
+            }
+        except Exception:
+            logger.exception("[HUD] reading the resolved play failed")
+            return None
+
+    @staticmethod
     def _extract_contact(hud_json: dict) -> dict | None:
         """Pull the last completed contact (inputs + measured outputs).
 
@@ -242,6 +285,8 @@ class HudWatcher:
             "event_num": hud_data.event_number,
             # Last completed contact (for the hit visualizer), or None.
             "contact": HudWatcher._extract_contact(hud_data.hud_json),
+            # The play this frame resolves, or None mid-flight. See _extract_play.
+            "play": HudWatcher._extract_play(hud_data),
             # Whether this frame is the last one of the game. See _game_over.
             "game_over": HudWatcher._game_over(hud_data),
         }
