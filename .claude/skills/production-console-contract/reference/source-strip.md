@@ -168,7 +168,7 @@ bolted on:
 - **A source's NAME is a function of its URL** (`sourcename.js`):
   `Stat Bar — Side 1 (Board 2)` — the board as a word, only on a multi-board
   rig, never a bare number (beside a side it read `Side 1 1`). Add, Bind and the
-  rename all use it. The name FOLLOWS the URL: `followUrlWithName` in `obs.jsx`
+  rename all use it. The name FOLLOWS the URL: `followUrlWithName` in `obs-source-passes.js`
   runs on every `InputSettingsChanged`, so a board switch or a producer's own URL
   edit in OBS Properties renames the source — but only when its current name is
   one PRSH gives the OLD url (today's form, or the retired bare-number forms),

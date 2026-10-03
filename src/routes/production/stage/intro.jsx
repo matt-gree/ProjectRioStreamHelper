@@ -14,7 +14,7 @@ import { notifications } from '../../../lib/notify';
  * starts from a blank frame instead of a retained full-alpha texture (the
  * eye-toggle stutter). Turning the intro OFF flips that: the source stays
  * resident (shutdown=false) and nothing animates — what a persistent always-on
- * overlay wants. obs.jsx (`desiredShutdown`) reconciles the OBS property from
+ * overlay wants. obs-session.js (`desiredShutdown`) reconciles the OBS property from
  * the URL's `?intro=` param; this toggle owns the preference and the rewrite.
  *
  * The preference is stored under the layout TYPE (overlays.{type}.disableIntro),

@@ -5,11 +5,15 @@ import { useSettingsStore } from './store';
 // Pure helper, no imports of its own — the one rule for reading a boolean
 // setting that the string-typed REST route can deliver as "true".
 import { settingOn } from '../routes/design/designConstants';
-import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/sourcename';
-import { upgradeRetiredCanvas } from '../routes/production/sources/canvas-migrate';
-import { notifications } from '../lib/notify';
-import { checkObsSources, obsHostSetting, resolveUrlForObs } from '../lib/obs-reach';
-import { obsKeyNames, useStagingStore } from './staging';
+import { resolveUrlForObs } from '../lib/obs-reach';
+import {
+    session, resetMirror, inputSettingsFor, isPrshUrl, loadGcLegacyPorts, ownerScene, reconcileShutdown,
+    liveName, desiredShutdown,
+} from './obs-session';
+import { reconcileOnConnect, renameEverywhere, replayRenames } from './obs-renames';
+import {
+    followUrlWithName, repairSourceAddresses, upgradeRetiredCanvases, upgradeRetiredNames,
+} from './obs-source-passes';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, reshapePatch, isCropped, stretchOf,
     inputSize, sameInputSize, typeScaleOf, growPatch,
@@ -30,127 +34,23 @@ import {
  * firing come in later slices.
  */
 
-// Single shared client + reconnect bookkeeping, kept at module scope so the
-// store actions and the React manager share one OBS connection.
-let obs = null;
+// The connection's shared state lives in ./obs-session; rename tracking in
+// ./obs-renames; the connect-time passes over PRSH's sources in
+// ./obs-source-passes. Their public names are re-exported here, so the
+// console keeps importing one module.
+export { liveName, ownerScene, isPrshUrl, setGcLegacyPorts } from './obs-session';
+export { onObsRename } from './obs-renames';
+
 let reconnectTimer = null;
 let reconnectAttempts = 0;
-// Bumped on every connect()/disconnect(); async work and event handlers from a
-// superseded generation no-op, so a settings change mid-flight can't race.
-let generation = 0;
-
-/*
- * Which scenes we mirror. Program + preview are eager (refreshAll re-seeds them
- * on every connect and studio-mode change); every other scene joins on demand
- * via mirrorScene() and then stays for the life of the connection.
- *
- * This set is also the AUTHORITY for scene-item events. Before lazy mirroring
- * the handlers refreshed whatever scene an event named, which quietly pulled
- * scenes nobody had asked for into the store; now an event for an untracked
- * scene is dropped, and one for a lazily-mirrored scene is honoured — the whole
- * point, since a producer staging a Break scene needs it live, not a snapshot.
- */
-let tracked = new Set();
-
-/*
- * sourceName -> Promise<inputSettings | null>.
- *
- * GetInputSettings is one round trip per browser source, and refreshScene ran
- * it per source PER SCENE. At program+preview that was the "scenes are small,
- * so the per-source call is cheap" bargain; across N mirrored scenes sharing
- * sources it stops being cheap, and it is exactly what lazy mirroring would
- * otherwise multiply. Caching the PROMISE (not the value) also collapses the
- * two concurrent refreshes of scenes sharing a source into one call.
- *
- * Invalidated by InputSettingsChanged and InputRemoved — a name can be reused
- * by a different input, so a stale entry is not merely out of date.
- */
-let inputCache = new Map();
-
-/*
- * NAMES ARE THE PRODUCER'S, AND OBS ADDRESSES EVERYTHING BY NAME.
- *
- * obs-websocket 5 on OBS 28/29 has no stable id for an input or a scene — every
- * request names one — and a producer can rename either in OBS at any moment
- * (PRSH renames its own sources too: followUrlWithName). So anything holding a
- * name across time is holding something that can go stale under it: a staged
- * confirm-mode action whose `run` captured "Stat Bar — Side 1 (Board 1)", a
- * Go Live that runs a board switch and then, a beat later, a redraw of the
- * same source the switch has just renamed.
- *
- * `aliases` is old name -> current name, for every rename seen on this
- * connection, kept flat (a chain A -> B -> C stores A -> C and B -> C). Every
- * store action passes the names it was handed through `liveName` at the moment
- * it calls OBS, so a request made under a name that has since moved still
- * reaches the thing it meant. A name reused by a NEW input or scene drops its
- * alias (InputCreated / SceneCreated): from then on it means the new thing.
- */
-let aliases = new Map();
-
-export function liveName(name) {
-    return (name != null && aliases.get(name)) || name;
-}
-
-/*
- * Who else keeps names — the console's browser-local layout (selection, rail
- * pins, open/hidden scenes, folded folders; ../routes/production/sources/
- * renames.js). Told after the mirror has moved, once per rename.
- */
-const renameListeners = new Set();
-export function onObsRename(fn) {
-    renameListeners.add(fn);
-    return () => renameListeners.delete(fn);
-}
-
-/*
- * A Controller source from before PRSH proxied gc-overlay (/gc/) iframed it
- * directly on its own port. Recognised by the ports PRSH has ON RECORD — the
- * default, the one the retired setting held, and this launch's
- * (`legacy_ports` in /controller/status, loaded on every connect) — plus the
- * root path and a controller `port` of 1-4. Never a guessed range: whatever
- * this claims, the address repair rewrites, and a range would have claimed a
- * producer's own tool on 8080.
- */
-let gcLegacyPorts = new Set([8069]);
-
-async function loadGcLegacyPorts() {
-    try {
-        const s = await (await fetch('/api/v1/controller/status')).json();
-        if (Array.isArray(s?.legacy_ports) && s.legacy_ports.length) gcLegacyPorts = new Set(s.legacy_ports.map(Number));
-    } catch { /* keep the last answer */ }
-}
-
-// Tests only.
-export function setGcLegacyPorts(ports) { gcLegacyPorts = new Set(ports); }
-
-function isLegacyGcUrl(u) {
-    return gcLegacyPorts.has(Number(u.port)) && u.pathname === '/'
-        && /^[1-4]$/.test(u.searchParams.get('port') || '');
-}
-
-function resetMirror() {
-    tracked = new Set();
-    inputCache = new Map();
-    groupParents = new Map();
-    aliases = new Map();
-}
-
-/*
- * The OBS scene a mirrored item must be ADDRESSED through — the group, for an
- * item inside one. Every request that names a (scene, item id) pair goes
- * through this, because an item id is only unique within the scene that owns
- * it: a child of a group asked for by its outer scene is either a 600 or, worse,
- * a different item that happens to share the number.
- */
-export const ownerScene = (sceneName, item) => item?.owner ?? sceneName;
 
 // Track a scene and pull it in. Tracking BEFORE the fetch matters twice: the
 // refreshScene write guards on membership, and a second concurrent request for
 // the same scene short-circuits in mirrorScene.
 function track(sceneName, gen) {
     if (!sceneName) return undefined;
-    tracked.add(sceneName);
-    useObsStore.setState({ mirroredScenes: [...tracked] });
+    session.tracked.add(sceneName);
+    useObsStore.setState({ mirroredScenes: [...session.tracked] });
     return refreshScene(sceneName, gen);
 }
 
@@ -202,50 +102,6 @@ const mapItem = (it) => ({
     renderHeight: it.sceneItemTransform?.sourceHeight ?? null,
 });
 
-// A browser source is "fed by PRSH" when it's one of the app's overlays:
-//   1. served from the app's /layout/ mount (host/port can be anything, so
-//      this holds in single- and dual-machine setups), OR
-//   2. gc-overlay, served through PRSH's /gc/ proxy — or, from before the
-//      proxy, iframed directly on its own port (http://<host>:8069/?port=N, no
-//      /layout/ path, so matched by port). The address repair moves those
-//      onto /gc/, since that port is now picked per launch.
-// Everything else (cams, game capture, audio, third-party browser sources) is
-// ignored — the rail should only show PRSH's own overlay elements.
-// A PRSH overlay's intro animation is disabled per-source via `?intro=0` on its
-// URL (see reveal-gate.js). That single flag also decides the OBS browser
-// source's "Shutdown source when not visible" property:
-//   • intro ON  (default) → shutdown TRUE: the source fully unloads on hide and
-//     gets a fresh, clean load on every show, so its reveal animation always
-//     plays from a blank frame — no retained full-alpha texture to flash (the
-//     eye-toggle stutter). This is the only page-independent cure for the
-//     OBS-native eye, which can't be intercepted the way the app's hide is.
-//   • intro OFF → shutdown FALSE: nothing animates, so a retained texture is
-//     harmless; keep the source resident (no reload flash) — what a persistent
-//     always-on overlay wants.
-function urlIntroDisabled(url) {
-    try { return new URL(url).searchParams.get('intro') === '0'; } catch { return false; }
-}
-// Only overlays that play a reveal on show are affected — static overlays
-// (stats, roster, team logo, bracket, ticker, scenes) have nothing to stutter,
-// so we leave their source resident (OBS default shutdown=false) and never
-// touch them. Matches the scoreboard BAND specifically (scoreboardN/scoreboard),
-// not the sibling stats/roster/teamlogo files in the same folder.
-// The post-game callouts belong here for the same reason the hit visualizer
-// does — a GSAP walkthrough on show, and a heavy one. Their in-page gate
-// (lib/reveal-gate.js) covers the app's own hide and the container path, but
-// the OBS-NATIVE eye stops the source's frames before any snap-dark can be
-// painted, so a resident callout composites the last frame of the finished
-// graphic for a beat before the intro starts. A fresh load per show is the
-// only cure for that one, and it is the trade every animated PRSH source
-// already makes.
-const ANIMATED_LAYOUT = /\/layout\/(?:scoreboard\d*\/scoreboard|scorecard\/|lowerthird\/|matchup\/|commentary\/|playerplates\/|hitvisualizer\/|postgame\/)/i;
-function layoutAnimates(url) {
-    try { return ANIMATED_LAYOUT.test(new URL(url).pathname); } catch { return false; }
-}
-function desiredShutdown(url) {
-    return layoutAnimates(url) && !urlIntroDisabled(url);
-}
-
 /*
  * EVERY scene item drawing this source, with its transform.
  *
@@ -273,95 +129,17 @@ async function itemsOfSource(sourceName) {
     };
     for (const sceneName of useObsStore.getState().scenes || []) {
         try {
-            visit(sceneName, (await obs.call('GetSceneItemList', { sceneName })).sceneItems);
+            visit(sceneName, (await session.client.call('GetSceneItemList', { sceneName })).sceneItems);
         } catch {
             continue;   // a scene that vanished between the list and here
         }
     }
     for (const group of groups) {
         try {
-            visit(group, (await obs.call('GetGroupSceneItemList', { sceneName: group })).sceneItems);
+            visit(group, (await session.client.call('GetGroupSceneItemList', { sceneName: group })).sceneItems);
         } catch { /* removed between the two reads */ }
     }
     return out;
-}
-
-export function isPrshUrl(url) {
-    if (!url) return false;
-    try {
-        const u = new URL(url);
-        if (!/^https?:$/.test(u.protocol)) return false;
-        if (u.pathname.startsWith('/layout/')) return true;
-        if (u.pathname === '/gc' || u.pathname.startsWith('/gc/')) return true;
-        return isLegacyGcUrl(u);
-    } catch {
-        return false;
-    }
-}
-
-/*
- * THE ADDRESS REPAIR — every PRSH browser source whose URL no longer reaches
- * PRSH from where OBS is gets the address that does.
- *
- * A source's address goes stale with nothing to say so: made on the PRSH
- * machine it says 127.0.0.1 and OBS is elsewhere; the router hands PRSH a new
- * IP; LAN access goes off; PRSH moves off a busy port. The rack recognises a
- * source by its PATH, so a dead one went on listing as healthy while the scene
- * drew nothing. Only BROKEN sources are rewritten (the server judges, see
- * server/source_addresses.py) — a rewrite reloads the source, and this runs on
- * every OBS connect and every PRSH reconnect (a LAN or port change needs a
- * restart, and the console's OBS connection survives one), mid-show included.
- *
- * ALL inputs, not the mirrored scenes, like the rename pass. One toast when
- * something moved; a louder one when nothing CAN reach PRSH (OBS on another
- * machine with LAN access off), because then the fix is the producer's.
- */
-async function repairSourceAddresses(gen = generation) {
-    if (!obs) return;
-    let inputs;
-    try {
-        ({ inputs } = await obs.call('GetInputList', { inputKind: 'browser_source' }));
-    } catch {
-        return;
-    }
-    const byUrl = new Map();
-    for (const { inputName } of inputs || []) {
-        if (gen !== generation) return;
-        const url = (await inputSettingsFor(inputName, gen))?.url;
-        if (!url || !isPrshUrl(url)) continue;
-        if (!byUrl.has(url)) byUrl.set(url, []);
-        byUrl.get(url).push(inputName);
-    }
-    if (!byUrl.size || gen !== generation) return;
-    const { fixed, unreachable } = await checkObsSources([...byUrl.keys()], obsHostSetting(useSettingsStore.getState()));
-    if (gen !== generation) return;
-    let moved = 0;
-    for (const [from, to] of Object.entries(fixed)) {
-        for (const inputName of byUrl.get(from) || []) {
-            try {
-                await obs.call('SetInputSettings', { inputName, inputSettings: { url: to }, overlay: true });
-                moved++;
-            } catch { /* removed meanwhile */ }
-        }
-    }
-    if (moved) {
-        notifications.show({
-            id: 'source-addresses',
-            color: 'green',
-            message: `Pointed ${moved} PRSH source${moved === 1 ? '' : 's'} in OBS at PRSH's current address — `
-                + `${moved === 1 ? 'it' : 'they'} could no longer reach it.`,
-        });
-    }
-    const stranded = unreachable.reduce((n, url) => n + (byUrl.get(url)?.length || 0), 0);
-    if (stranded) {
-        notifications.show({
-            id: 'source-addresses-unreachable',
-            color: 'yellow',
-            autoClose: false,
-            title: `${stranded} PRSH source${stranded === 1 ? '' : 's'} can't reach PRSH`,
-            message: 'OBS is on another computer and LAN access is off. Turn on LAN access on the Connections tab and restart PRSH.',
-        });
-    }
 }
 
 export const useObsStore = create((set) => ({
@@ -387,7 +165,7 @@ export const useObsStore = create((set) => ({
     // events (SceneItemEnableStateChanged, CurrentProgram/PreviewSceneChanged,
     // StudioModeStateChanged), so the rail stays the single source of truth.
     setSceneItemEnabled: async (sceneName, sceneItemId, enabled) => {
-        if (!obs) throw new Error('Not connected to OBS');
+        if (!session.client) throw new Error('Not connected to OBS');
         // Two-phase hide for PRSH overlays. OBS stops producing frames for a
         // browser source the instant its scene item is disabled, keeping the
         // last painted frame in the source's GPU texture — a full-alpha
@@ -417,7 +195,7 @@ export const useObsStore = create((set) => ({
                 } catch { /* best-effort — worst case is the old stutter */ }
             }
         }
-        await obs.call('SetSceneItemEnabled', { sceneName, sceneItemId, sceneItemEnabled: enabled });
+        await session.client.call('SetSceneItemEnabled', { sceneName, sceneItemId, sceneItemEnabled: enabled });
     },
     /*
      * Take a source out of ONE scene — the inverse of addBrowserSource, and the
@@ -434,8 +212,8 @@ export const useObsStore = create((set) => ({
      * wiring below), so the rack drops the row when OBS says it is gone.
      */
     removeSceneItem: async (sceneName, sceneItemId) => {
-        if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('RemoveSceneItem', { sceneName: liveName(sceneName), sceneItemId });
+        if (!session.client) throw new Error('Not connected to OBS');
+        await session.client.call('RemoveSceneItem', { sceneName: liveName(sceneName), sceneItemId });
     },
 
     /*
@@ -473,15 +251,15 @@ export const useObsStore = create((set) => ({
     matchSceneItemSize: async ({
         scene, itemId, modelScene, modelItemId, sourceName, matchRender = false,
     }) => {
-        if (!obs) throw new Error('Not connected to OBS');
+        if (!session.client) throw new Error('Not connected to OBS');
         scene = liveName(scene);
         modelScene = liveName(modelScene);
         sourceName = liveName(sourceName);
         const [model, target] = await Promise.all([
-            obs.call('GetSceneItemTransform', {
+            session.client.call('GetSceneItemTransform', {
                 sceneName: modelScene, sceneItemId: modelItemId,
             }),
-            obs.call('GetSceneItemTransform', { sceneName: scene, sceneItemId: itemId }),
+            session.client.call('GetSceneItemTransform', { sceneName: scene, sceneItemId: itemId }),
         ]);
         let mine = target?.sceneItemTransform;
         const theirs = model?.sceneItemTransform;
@@ -501,7 +279,7 @@ export const useObsStore = create((set) => ({
                 throw new Error('This source is cropped in at least one scene — changing its '
                     + 'render size would move what the crop cuts. Match it in OBS instead.');
             }
-            await obs.call('SetInputSettings', {
+            await session.client.call('SetInputSettings', {
                 inputName: sourceName,
                 inputSettings: { width: render.width, height: render.height },
                 overlay: true,
@@ -511,7 +289,7 @@ export const useObsStore = create((set) => ({
                 if (o.sceneName === scene && o.id === itemId) return null;
                 const keep = rescaleForSource(o.transform, render);
                 if (!keep) return null;   // a bounded item's box already fixes its size
-                return obs.call('SetSceneItemTransform', {
+                return session.client.call('SetSceneItemTransform', {
                     sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: keep,
                 }).catch(() => { /* one scene's correction must not strand the rest */ });
             }).filter(Boolean));
@@ -522,7 +300,7 @@ export const useObsStore = create((set) => ({
         if (!patch) {
             throw new Error('OBS reports no size for one of these sources yet');
         }
-        await obs.call('SetSceneItemTransform', {
+        await session.client.call('SetSceneItemTransform', {
             sceneName: scene, sceneItemId: itemId, sceneItemTransform: patch,
         });
         return { ...renderedSize(theirs), render };
@@ -556,10 +334,10 @@ export const useObsStore = create((set) => ({
      * type. `typeScale` is measured off the item the producer pressed on.
      */
     redrawSourceAtSize: async ({ scene, itemId, sourceName, rewriteUrl = null }) => {
-        if (!obs) throw new Error('Not connected to OBS');
+        if (!session.client) throw new Error('Not connected to OBS');
         scene = liveName(scene);
         sourceName = liveName(sourceName);
-        const { sceneItemTransform } = await obs.call('GetSceneItemTransform', {
+        const { sceneItemTransform } = await session.client.call('GetSceneItemTransform', {
             sceneName: scene, sceneItemId: itemId,
         });
         const plan = redrawPlan(sceneItemTransform);
@@ -583,17 +361,17 @@ export const useObsStore = create((set) => ({
         const inputSettings = { width: plan.width, height: plan.height };
         let url = null;
         if (rewriteUrl) {
-            const { inputSettings: current } = await obs.call('GetInputSettings', { inputName: sourceName });
+            const { inputSettings: current } = await session.client.call('GetInputSettings', { inputName: sourceName });
             url = rewriteUrl(current?.url || '', typeScaleOf(sceneItemTransform));
             if (url) inputSettings.url = url;
         }
 
-        await obs.call('SetInputSettings', { inputName: sourceName, inputSettings, overlay: true });
+        await session.client.call('SetInputSettings', { inputName: sourceName, inputSettings, overlay: true });
 
         await Promise.all(occurrences.map((o) => {
             const patch = rescaleForSource(o.transform, plan);
             if (!patch) return null;   // a bounded item's box already fixes its size
-            return obs.call('SetSceneItemTransform', {
+            return session.client.call('SetSceneItemTransform', {
                 sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: patch,
             }).catch(() => { /* one scene's correction failing must not strand the rest */ });
         }).filter(Boolean));
@@ -615,14 +393,14 @@ export const useObsStore = create((set) => ({
      * pixels, and the source is about to be a different picture.
      */
     reshapeBrowserSource: async ({ sourceName, url, width, height }) => {
-        if (!obs) throw new Error('Not connected to OBS');
+        if (!session.client) throw new Error('Not connected to OBS');
         sourceName = liveName(sourceName);
         const occurrences = await itemsOfSource(sourceName);
         if (occurrences.some(o => isCropped(o.transform))) {
             throw new Error('This source is cropped in at least one scene — changing its '
                 + 'shape would move what the crop cuts. Remove the crop in OBS first.');
         }
-        await obs.call('SetInputSettings', {
+        await session.client.call('SetInputSettings', {
             inputName: sourceName,
             inputSettings: { url, width, height },
             overlay: true,
@@ -630,7 +408,7 @@ export const useObsStore = create((set) => ({
         await Promise.all(occurrences.map((o) => {
             const patch = reshapePatch(o.transform, width, height);
             if (!patch) return null;
-            return obs.call('SetSceneItemTransform', {
+            return session.client.call('SetSceneItemTransform', {
                 sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: patch,
             }).catch(() => { /* one scene's correction failing must not strand the rest */ });
         }).filter(Boolean));
@@ -646,18 +424,18 @@ export const useObsStore = create((set) => ({
      * is never half-changed.
      */
     growBrowserSource: async ({ sourceName, from, width, height }) => {
-        if (!obs) throw new Error('Not connected to OBS');
+        if (!session.client) throw new Error('Not connected to OBS');
         sourceName = liveName(sourceName);
         const to = { width, height };
         const occurrences = await itemsOfSource(sourceName);
         const patches = occurrences.map(o => growPatch(o.transform, from, to));   // throws first
-        await obs.call('SetInputSettings', {
+        await session.client.call('SetInputSettings', {
             inputName: sourceName,
             inputSettings: { width, height },
             overlay: true,
         });
         await Promise.all(occurrences.map((o, i) => (patches[i]
-            ? obs.call('SetSceneItemTransform', {
+            ? session.client.call('SetSceneItemTransform', {
                 sceneName: o.sceneName, sceneItemId: o.id, sceneItemTransform: patches[i],
             }).catch(() => { /* one scene's correction failing must not strand the rest */ })
             : null)).filter(Boolean));
@@ -665,30 +443,30 @@ export const useObsStore = create((set) => ({
     },
 
     // Pull a scene's items into the mirror and keep them live from then on.
-    // Idempotent and safe to call from render effects — a scene already tracked
+    // Idempotent and safe to call from render effects — a scene already session.tracked
     // returns immediately rather than re-fetching, which is what makes "expand
     // a scene section" cheap on the second expand.
     mirrorScene: async (sceneName) => {
         sceneName = liveName(sceneName);
-        if (!obs || !sceneName || tracked.has(sceneName)) return;
-        await track(sceneName, generation);
+        if (!session.client || !sceneName || session.tracked.has(sceneName)) return;
+        await track(sceneName, session.generation);
     },
 
     setProgramScene: async (sceneName) => {
-        if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('SetCurrentProgramScene', { sceneName: liveName(sceneName) });
+        if (!session.client) throw new Error('Not connected to OBS');
+        await session.client.call('SetCurrentProgramScene', { sceneName: liveName(sceneName) });
     },
     setPreviewScene: async (sceneName) => {
-        if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('SetCurrentPreviewScene', { sceneName: liveName(sceneName) });
+        if (!session.client) throw new Error('Not connected to OBS');
+        await session.client.call('SetCurrentPreviewScene', { sceneName: liveName(sceneName) });
     },
     triggerTransition: async () => {
-        if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('TriggerStudioModeTransition');
+        if (!session.client) throw new Error('Not connected to OBS');
+        await session.client.call('TriggerStudioModeTransition');
     },
     setStudioMode: async (enabled) => {
-        if (!obs) throw new Error('Not connected to OBS');
-        await obs.call('SetStudioModeEnabled', { studioModeEnabled: enabled });
+        if (!session.client) throw new Error('Not connected to OBS');
+        await session.client.call('SetStudioModeEnabled', { studioModeEnabled: enabled });
     },
 
     // Create a PRSH overlay as a browser source in OBS and drop it into a scene
@@ -709,7 +487,7 @@ export const useObsStore = create((set) => ({
     repairSourceAddresses: () => (useObsStore.getState().status === 'connected' ? repairSourceAddresses() : null),
 
     addBrowserSource: async ({ inputName, url, width, height, sceneName, enabled = true }) => {
-        if (!obs) throw new Error('Not connected to OBS');
+        if (!session.client) throw new Error('Not connected to OBS');
         // The URL is qualified with the host THIS browser reached PRSH at; an
         // OBS on another machine needs PRSH's LAN address instead (obs-reach.js).
         url = await resolveUrlForObs(url, useSettingsStore.getState());
@@ -718,7 +496,7 @@ export const useObsStore = create((set) => ({
 
         const taken = new Set();
         try {
-            const { inputs } = await obs.call('GetInputList');
+            const { inputs } = await session.client.call('GetInputList');
             for (const i of inputs) taken.add(i.inputName);
         } catch { /* best-effort; CreateInput still guards uniqueness */ }
 
@@ -726,7 +504,7 @@ export const useObsStore = create((set) => ({
         let name = base;
         for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
 
-        await obs.call('CreateInput', {
+        await session.client.call('CreateInput', {
             sceneName: scene,
             inputName: name,
             inputKind: 'browser_source',
@@ -750,10 +528,10 @@ export const useObsStore = create((set) => ({
      * source for any URL change, this one included (followUrlWithName).
      */
     repointBrowserSource: async ({ sourceName, url }) => {
-        if (!obs) throw new Error('Not connected to OBS');
+        if (!session.client) throw new Error('Not connected to OBS');
         url = await resolveUrlForObs(url, useSettingsStore.getState());
         sourceName = liveName(sourceName);
-        await obs.call('SetInputSettings', {
+        await session.client.call('SetInputSettings', {
             inputName: sourceName,
             inputSettings: { url },
             overlay: true,
@@ -767,7 +545,7 @@ export const useObsStore = create((set) => ({
     // property in lockstep, so an already-added source updates without the user
     // re-copying its URL. `pathname` is the layout's URL path (no query).
     setLayoutIntroDisabled: async (pathname, disabled) => {
-        if (!obs || !pathname) return 0;
+        if (!session.client || !pathname) return 0;
         const scenes = useObsStore.getState().sceneItems;
         const seen = new Set();
         let changed = 0;
@@ -781,7 +559,7 @@ export const useObsStore = create((set) => ({
                 if (disabled) u.searchParams.set('intro', '0');
                 else u.searchParams.delete('intro');
                 try {
-                    await obs.call('SetInputSettings', {
+                    await session.client.call('SetInputSettings', {
                         inputName: it.sourceName,
                         inputSettings: { url: u.toString(), shutdown: !disabled },
                         overlay: true,
@@ -815,13 +593,13 @@ export const useObsStore = create((set) => ({
         const password = s?.obs?.password || '';
 
         // Supersede any in-flight connection/reconnect.
-        const myGen = ++generation;
+        const myGen = ++session.generation;
         resetMirror();
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-        if (obs) { try { await obs.disconnect(); } catch { /* ignore */ } }
+        if (session.client) { try { await session.client.disconnect(); } catch { /* ignore */ } }
 
         const client = new OBSWebSocket();
-        obs = client;
+        session.client = client;
         wireEvents(client, myGen);
         if (!background) set({ status: 'connecting', error: null });
 
@@ -854,15 +632,15 @@ export const useObsStore = create((set) => ({
                         | EventSubscription.SceneItemTransformChanged,
                 },
             ));
-            if (myGen !== generation) return; // superseded while connecting
+            if (myGen !== session.generation) return; // superseded while connecting
             reconnectAttempts = 0;
             await loadGcLegacyPorts();
             await reconcileOnConnect(myGen);
-            if (myGen !== generation) return;
+            if (myGen !== session.generation) return;
             set({ status: 'connected', error: null, obsVersion: obsWebSocketVersion });
             /*
              * One success is what turns a later failure into an ERROR rather
-             * than into "not set up yet" — see obs.ever_connected in
+             * than into "not set up yet" — see session.client.ever_connected in
              * server/settings.py. Written once and never cleared: the claim is
              * that this install has talked to OBS at some point, which a
              * subsequent outage does not undo.
@@ -886,7 +664,7 @@ export const useObsStore = create((set) => ({
             if (e?.name === TIMED_OUT) {
                 Promise.resolve(client.disconnect()).catch(() => { /* already gone */ });
             }
-            if (myGen !== generation) return;
+            if (myGen !== session.generation) return;
             const error = friendlyError(e, { host, port });
             // Same failure as last time on a background retry — writing it
             // again would only churn subscribers.
@@ -899,12 +677,12 @@ export const useObsStore = create((set) => ({
     },
 
     disconnect: async () => {
-        generation++; // invalidate handlers/in-flight work
+        session.generation++; // invalidate handlers/in-flight work
         resetMirror();
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         reconnectAttempts = 0;
-        const client = obs;
-        obs = null;
+        const client = session.client;
+        session.client = null;
         set({
             status: 'disconnected', error: null, obsVersion: null,
             studioMode: false, programScene: null, previewScene: null,
@@ -921,7 +699,7 @@ export const useObsStore = create((set) => ({
  * With OBS simply closed on loopback the SYN is REFUSED, so client.connect()
  * rejects in milliseconds and the console lands on 'error' — which
  * useConsoleOffline counts, so the catalog tier takes over. But a SYN that is
- * DROPPED rather than refused (a host firewall, a VPN, obs.host pointed at a
+ * DROPPED rather than refused (a host firewall, a VPN, session.client.host pointed at a
  * LAN machine that is off) never produces either outcome: obs-websocket-js
  * has no connect timeout of its own, so the promise stays pending, the status
  * stays 'connecting' — which useConsoleOffline deliberately does NOT count —
@@ -970,13 +748,13 @@ export function friendlyError(e, { host, port } = {}) {
 }
 
 async function refreshAll(gen) {
-    if (!obs || gen !== generation) return;
+    if (!session.client || gen !== session.generation) return;
     try {
         const [{ studioModeEnabled }, sceneList] = await Promise.all([
-            obs.call('GetStudioModeEnabled'),
-            obs.call('GetSceneList'),
+            session.client.call('GetStudioModeEnabled'),
+            session.client.call('GetSceneList'),
         ]);
-        if (gen !== generation) return;
+        if (gen !== session.generation) return;
         const programScene = sceneList.currentProgramSceneName || null;
         const previewScene = sceneList.currentPreviewSceneName || null;
         const scenes = (sceneList.scenes || []).map(sc => sc.sceneName);
@@ -987,59 +765,18 @@ async function refreshAll(gen) {
         // Everything else drops out of sceneItems so the store never serves
         // items for a scene it has stopped following.
         const eager = [programScene, studioModeEnabled ? previewScene : null];
-        const keep = [...tracked].filter(n => scenes.includes(n));
-        tracked = new Set([...eager, ...keep].filter(Boolean));
+        const keep = [...session.tracked].filter(n => scenes.includes(n));
+        session.tracked = new Set([...eager, ...keep].filter(Boolean));
         useObsStore.setState(state => ({
-            mirroredScenes: [...tracked],
+            mirroredScenes: [...session.tracked],
             sceneItems: Object.fromEntries(
-                Object.entries(state.sceneItems).filter(([n]) => tracked.has(n))),
+                Object.entries(state.sceneItems).filter(([n]) => session.tracked.has(n))),
         }));
 
-        await Promise.all([...tracked].map(n => refreshScene(n, gen)));
+        await Promise.all([...session.tracked].map(n => refreshScene(n, gen)));
     } catch (e) {
-        if (gen === generation) console.debug('OBS refreshAll failed', e);
+        if (gen === session.generation) console.debug('OBS refreshAll failed', e);
     }
-}
-
-/*
- * Auto-correct the "Shutdown source when not visible" property for PRSH
- * overlays so their reveals never flash a stale OBS texture (see
- * desiredShutdown). Idempotent: only writes when the current value differs, so
- * it settles after one pass and can't loop on the InputSettingsChanged echo.
- *
- * Runs once per source rather than once per (source × scene) — it hangs off
- * the cache miss, which is the one place a source's settings are freshly seen.
- */
-function reconcileShutdown(sourceName, settings) {
-    const url = settings?.url || '';
-    if (!isPrshUrl(url) || !url.includes('/layout/')) return;
-    const want = desiredShutdown(url);
-    if ((settings.shutdown === true) === want) return;
-    obs?.call('SetInputSettings', {
-        inputName: sourceName,
-        inputSettings: { shutdown: want },
-        overlay: true,
-    }).catch(() => { /* best-effort */ });
-}
-
-function inputSettingsFor(sourceName, gen) {
-    const hit = inputCache.get(sourceName);
-    if (hit) return hit;
-    const pending = (async () => {
-        try {
-            const { inputSettings } = await obs.call('GetInputSettings', { inputName: sourceName });
-            const settings = inputSettings || {};
-            if (gen === generation) reconcileShutdown(sourceName, settings);
-            return settings;
-        } catch {
-            // Input may have been removed between calls — don't cache the miss,
-            // or a source recreated under the same name stays invisible.
-            inputCache.delete(sourceName);
-            return null;
-        }
-    })();
-    inputCache.set(sourceName, pending);
-    return pending;
 }
 
 /*
@@ -1056,21 +793,10 @@ function topFirst(items) {
     return [...items].sort((a, b) => b.sceneItemIndex - a.sceneItemIndex);
 }
 
-/*
- * Which scenes hold each GROUP — `group name -> Set(scene)`.
- *
- * An item inside a group lives in the group's own scene as far as obs-websocket
- * is concerned: its events arrive with `sceneName` = the group, and every
- * request against it has to name the group, never the scene the producer sees
- * it in. This is how an event about a group's contents finds the mirrored
- * scenes that list it.
- */
-let groupParents = new Map();
-
 async function refreshScene(sceneName, gen) {
-    if (!obs || !sceneName || gen !== generation) return;
+    if (!session.client || !sceneName || gen !== session.generation) return;
     try {
-        const { sceneItems } = await obs.call('GetSceneItemList', { sceneName });
+        const { sceneItems } = await session.client.call('GetSceneItemList', { sceneName });
         // Enrich browser sources with their URL so we can tell which are fed by
         // PRSH. Cached per source name, so mirroring a fifth scene costs one
         // GetSceneItemList plus a call only for sources not seen before.
@@ -1095,7 +821,7 @@ async function refreshScene(sceneName, gen) {
             if (!it.isGroup) return [own];
             let children = [];
             try {
-                ({ sceneItems: children } = await obs.call('GetGroupSceneItemList', { sceneName: it.sourceName }));
+                ({ sceneItems: children } = await session.client.call('GetGroupSceneItemList', { sceneName: it.sourceName }));
             } catch { /* a group removed between the two calls */ }
             const inner = await Promise.all(topFirst(children).map(c => enrich(c, {
                 owner: it.sourceName, group: it.sourceName, groupEnabled: !!it.sceneItemEnabled,
@@ -1103,18 +829,18 @@ async function refreshScene(sceneName, gen) {
             return [own, ...inner];
         }));
         const enriched = lists.flat();
-        if (gen !== generation || !tracked.has(sceneName)) return;
+        if (gen !== session.generation || !session.tracked.has(sceneName)) return;
         // A GROUP's uuid is reported here and nowhere else, so a folder renamed
         // while PRSH was away is only recognised once a scene holding it loads.
         replayRenames(enriched.map(it => ({ uuid: it.uuid, name: it.sourceName })));
-        for (const [g, parents] of groupParents) {
+        for (const [g, parents] of session.groupParents) {
             parents.delete(sceneName);
-            if (!parents.size) groupParents.delete(g);
+            if (!parents.size) session.groupParents.delete(g);
         }
         for (const it of enriched) {
             if (!it.isGroup) continue;
-            if (!groupParents.has(it.sourceName)) groupParents.set(it.sourceName, new Set());
-            groupParents.get(it.sourceName).add(sceneName);
+            if (!session.groupParents.has(it.sourceName)) session.groupParents.set(it.sourceName, new Set());
+            session.groupParents.get(it.sourceName).add(sceneName);
         }
         useObsStore.setState(state => ({
             sceneItems: { ...state.sceneItems, [sceneName]: enriched },
@@ -1149,7 +875,7 @@ function patchOwned(owner, id, fn) {
 }
 
 function wireEvents(client, gen) {
-    const alive = () => gen === generation;
+    const alive = () => gen === session.generation;
 
     client.on('ConnectionClosed', () => {
         if (!alive()) return;
@@ -1163,15 +889,15 @@ function wireEvents(client, gen) {
     client.on('SceneListChanged', ({ scenes }) => {
         if (!alive()) return;
         const names = (scenes || []).map(sc => sc.sceneName);
-        // A deleted or renamed scene stops being tracked here rather than
+        // A deleted or renamed scene stops being session.tracked here rather than
         // lingering in the mirror until the next refreshAll.
-        const gone = [...tracked].filter(n => !names.includes(n));
+        const gone = [...session.tracked].filter(n => !names.includes(n));
         if (gone.length) {
-            for (const n of gone) tracked.delete(n);
+            for (const n of gone) session.tracked.delete(n);
             useObsStore.setState(state => ({
-                mirroredScenes: [...tracked],
+                mirroredScenes: [...session.tracked],
                 sceneItems: Object.fromEntries(
-                    Object.entries(state.sceneItems).filter(([n]) => tracked.has(n))),
+                    Object.entries(state.sceneItems).filter(([n]) => session.tracked.has(n))),
             }));
         }
         useObsStore.setState({ scenes: names });
@@ -1246,9 +972,9 @@ function wireEvents(client, gen) {
     // names the group, so it reloads every mirrored scene that holds it.
     const reloadScene = ({ sceneName }) => {
         if (!alive()) return;
-        if (tracked.has(sceneName)) refreshScene(sceneName, gen);
-        for (const parent of groupParents.get(sceneName) ?? []) {
-            if (tracked.has(parent)) refreshScene(parent, gen);
+        if (session.tracked.has(sceneName)) refreshScene(sceneName, gen);
+        for (const parent of session.groupParents.get(sceneName) ?? []) {
+            if (session.tracked.has(parent)) refreshScene(parent, gen);
         }
     };
     client.on('SceneItemCreated', reloadScene);
@@ -1261,7 +987,7 @@ function wireEvents(client, gen) {
     client.on('InputSettingsChanged', ({ inputName, inputSettings }) => {
         if (!alive()) return;
         const settings = inputSettings || {};
-        inputCache.set(inputName, Promise.resolve(settings));
+        session.inputCache.set(inputName, Promise.resolve(settings));
         reconcileShutdown(inputName, settings);
         const url = settings.url || null;
         const isPrsh = isPrshUrl(url);
@@ -1292,7 +1018,7 @@ function wireEvents(client, gen) {
     client.on('SceneNameChanged', ({ oldSceneName, sceneName }) => {
         if (!alive()) return;
         const { programScene, previewScene } = useObsStore.getState();
-        const wasMirrored = tracked.has(oldSceneName)
+        const wasMirrored = session.tracked.has(oldSceneName)
             || oldSceneName === programScene || oldSceneName === previewScene;
         renameEverywhere(oldSceneName, sceneName);
         if (wasMirrored && !useObsStore.getState().sceneItems[sceneName]) track(sceneName, gen);
@@ -1304,426 +1030,19 @@ function wireEvents(client, gen) {
     // disconnect would find no record of what it was called.
     client.on('InputCreated', ({ inputName, inputUuid }) => {
         if (!alive()) return;
-        aliases.delete(inputName);
+        session.aliases.delete(inputName);
         replayRenames([{ uuid: inputUuid, name: inputName }]);
     });
     client.on('SceneCreated', ({ sceneName, sceneUuid }) => {
         if (!alive()) return;
-        aliases.delete(sceneName);
+        session.aliases.delete(sceneName);
         replayRenames([{ uuid: sceneUuid, name: sceneName }]);
     });
 
     // A name freed by one input can be taken by another, so a stale cache entry
     // would describe the wrong source rather than merely be out of date.
     client.on('InputRemoved', ({ inputName }) => {
-        if (alive()) inputCache.delete(inputName);
-    });
-}
-
-/*
- * Move every name-keyed thing this layer holds from `from` to `to`.
- *
- * ONE function for sources, scenes and groups, because OBS keeps them in one
- * namespace — no input may share a name with a scene — and because a group is
- * both at once: the group's own scene item is listed by `sourceName`, and each
- * item inside it carries the group as `owner` (the scene every request against
- * it must name) and `group` (the folder the rack draws). Missing any of those
- * leaves a folder whose children's events arrive under a name the mirror no
- * longer matches, and whose eyes send the old one to OBS.
- */
-function renameEverywhere(from, to) {
-    if (!from || !to || from === to) return;
-
-    const book = readBook();
-    let booked = false;
-    for (const [uuid, name] of Object.entries(book)) {
-        if (name === from) { book[uuid] = to; booked = true; }
-    }
-    if (booked) writeBook(book);
-
-    for (const [k, v] of aliases) if (v === from) aliases.set(k, to);
-    aliases.delete(to);
-    aliases.set(from, to);
-
-    const hit = inputCache.get(from);
-    inputCache.delete(from);
-    if (hit) inputCache.set(to, hit);
-
-    if (tracked.has(from)) {
-        tracked.delete(from);
-        tracked.add(to);
-    }
-    for (const parents of groupParents.values()) {
-        if (parents.delete(from)) parents.add(to);
-    }
-    if (groupParents.has(from)) {
-        groupParents.set(to, groupParents.get(from));
-        groupParents.delete(from);
-    }
-
-    const swap = n => (n === from ? to : n);
-    useObsStore.setState((state) => {
-        const sceneItems = {};
-        for (const [scene, items] of Object.entries(state.sceneItems)) {
-            sceneItems[swap(scene)] = items.map((it) => (
-                it.sourceName === from || it.owner === from || it.group === from
-                    ? { ...it, sourceName: swap(it.sourceName), owner: swap(it.owner), group: swap(it.group) }
-                    : it));
-        }
-        return {
-            sceneItems,
-            programScene: swap(state.programScene),
-            previewScene: swap(state.previewScene),
-            scenes: state.scenes.map(swap),
-            mirroredScenes: [...tracked],
-        };
-    });
-
-    renameRemembered(from, to);
-}
-
-// The half of a rename that outlives a connection: everything kept by NAME in
-// this browser (and the in-memory staging buffer, which outlives a dropped
-// socket). The mirror is not in it — a fresh connection reads that from OBS.
-function renameRemembered(from, to) {
-    renameKeptCanvases(from, to);
-    useStagingStore.getState().renameObs(from, to);
-    for (const fn of renameListeners) {
-        try { fn(from, to); } catch (e) { console.debug('OBS rename listener failed', e); }
-    }
-}
-
-/*
- * THE NAME BOOK — OBS uuid -> the name it had when this browser last saw it.
- *
- * A rename made while PRSH was closed (or its socket down) is never announced:
- * obs-websocket only reports what happens while a client is listening, and on
- * the next connect the old name is simply absent, indistinguishable from a
- * delete. OBS 30+ gives every input and scene a uuid that survives renames and
- * restarts, so remembering uuid -> name turns that absence back into a rename:
- * a uuid whose name moved is REPLAYED through the same path as a live rename
- * (`replayRenames`). OBS 28/29 report no uuids, and there nothing is recorded
- * and nothing changes.
- *
- * Kept up to date live by renameEverywhere (by name, so no uuid is needed on
- * the event) and by every list that carries uuids: the connect pass, created
- * events, and each mirrored scene's items — the only place a GROUP's uuid is
- * reported at all.
- */
-const NAME_BOOK = 'prsh.obs.nameBook';
-function readBook() {
-    try {
-        const v = JSON.parse(localStorage.getItem(NAME_BOOK) || '{}');
-        return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
-    } catch { return {}; }
-}
-function writeBook(book) {
-    try { localStorage.setItem(NAME_BOOK, JSON.stringify(book)); } catch { /* private window */ }
-}
-
-let placeholderSeq = 0;
-
-/*
- * Record `pairs` ({uuid, name}) and replay every name that moved since this
- * browser last saw it. Returns the moves, [from, to].
- *
- * `current` — every name OBS has right now — is what makes a replay safe to
- * ALIAS: a request under an old name may be redirected only while nothing else
- * answers to that name. Two sources that swapped names offline both still
- * exist, so neither old name aliases (the staged-change pass below drops what
- * would otherwise run against the wrong one). Without `current` (a single
- * scene's items) nothing aliases.
- *
- * Through a PLACEHOLDER, both halves: replaying A->B then B->A one at a time
- * would move everything stored under A onto B and then all of it back onto A,
- * merging the two. A NUL cannot appear in a name OBS accepts.
- */
-function replayRenames(pairs, current = null) {
-    const book = readBook();
-    const moves = [];
-    let dirty = false;
-    for (const { uuid, name } of pairs) {
-        if (!uuid || !name) continue;
-        const was = book[uuid];
-        if (was && was !== name) moves.push([was, name]);
-        if (was !== name) { book[uuid] = name; dirty = true; }
-    }
-    if (dirty) writeBook(book);
-    if (!moves.length) return moves;
-    const held = moves.map(([from, to]) => {
-        const hold = `\u0000prsh-rename-${++placeholderSeq}`;
-        renameRemembered(from, hold);
-        return [hold, to];
-    });
-    for (const [hold, to] of held) renameRemembered(hold, to);
-    if (current) {
-        for (const [from, to] of moves) {
-            if (!current.has(from)) aliases.set(from, to);
-        }
-    }
-    return moves;
-}
-
-/*
- * THE CONNECT PASS — before the console reports connected, so the rack reads
- * its stored layout under today's names from the first frame.
- *
- * 1. Replay renames made while no PRSH was listening (the name book).
- * 2. Drop every staged change that still names something OBS does not have.
- *    The buffer is in memory, so this only matters to a console that stayed
- *    open across a dropped socket — but there, an entry naming a deleted scene
- *    would otherwise sit in the pending bar until Go Live and then fail.
- *    A name is fine if OBS has it and it did not move away, or if it moved
- *    away and nothing took its place (then it is re-keyed and aliased). A name
- *    that moved while something ELSE now answers to it is ambiguous — the
- *    staged `run` captured it and would reach the newcomer — so it is dropped,
- *    and said so, rather than guessed at.
- *
- * Any list failing skips the pass: dropping staged work on half an answer is
- * worse than leaving it to fail loudly at Go Live.
- */
-async function reconcileOnConnect(gen) {
-    let scenes;
-    let inputs;
-    let groups;
-    try {
-        [{ scenes }, { inputs }, { groups }] = await Promise.all([
-            obs.call('GetSceneList'),
-            obs.call('GetInputList'),
-            obs.call('GetGroupList'),
-        ]);
-    } catch {
-        return;
-    }
-    if (gen !== generation) return;
-    const current = new Set([
-        ...(scenes || []).map(sc => sc.sceneName),
-        ...(inputs || []).map(i => i.inputName),
-        ...(groups || []),
-    ]);
-    const pairs = [
-        ...(scenes || []).map(sc => ({ uuid: sc.sceneUuid, name: sc.sceneName })),
-        ...(inputs || []).map(i => ({ uuid: i.inputUuid, name: i.inputName })),
-    ];
-
-    // Which old names are about to move — decided BEFORE the replay re-keys the
-    // buffer, while each entry still carries the name its `run` captured.
-    const book = readBook();
-    const movedAway = new Set();
-    for (const { uuid, name } of pairs) {
-        if (uuid && book[uuid] && book[uuid] !== name) movedAway.add(book[uuid]);
-    }
-    const staging = useStagingStore.getState();
-    const dropped = [];
-    for (const key of staging.order) {
-        const names = obsKeyNames(key);
-        if (!names) continue;
-        const ok = names.every(n => (current.has(n) ? !movedAway.has(n) : movedAway.has(n)));
-        if (!ok) {
-            dropped.push(staging.pending[key]?.label || key);
-            staging.discard(key);
-        }
-    }
-
-    replayRenames(pairs, current);
-
-    if (dropped.length) {
-        notifications.show({
-            color: 'yellow',
-            message: `Dropped ${dropped.length} staged change${dropped.length === 1 ? '' : 's'} — `
-                + `OBS changed while PRSH was disconnected: ${dropped.join('; ')}`,
-        });
-    }
-}
-
-/*
- * A source's NAME follows its URL — when PRSH named it.
- *
- * The URL is what a source reads; the name is only what OBS lists it as. When a
- * board switch or a producer's own edit in OBS Properties changes the URL, a
- * name PRSH gave it ("Stat Bar — Side 1 (Board 1)") would go on describing the
- * old one. So a name that is one PRSH gives the OLD url is rewritten to the one
- * it gives the new url; anything else is the producer's and is never touched
- * (../routes/production/sourcename). Every PRSH console receives the event, so a
- * second one's rename finds the old name gone and is dropped.
- */
-function followUrlWithName(inputName, url) {
-    if (!url || !isPrshUrl(url)) return;
-    const items = Object.values(useObsStore.getState().sceneItems).flat();
-    const before = items.find(it => it.sourceName === inputName)?.url;
-    const settings = useSettingsStore.getState() || {};
-    const active = settings?.scoreboards?.active;
-    const next = renameForUrl(inputName, before, url, {
-        boards: Array.isArray(active) && active.length ? active : [1],
-        mode: settings?.production?.side_labels,
-    });
-    if (!next) return;
-    obs?.call('SetInputName', { inputName, newInputName: next })
-        .catch(() => { /* name taken, or another console got there first */ });
-}
-
-/*
- * THE ONE-TIME RENAME PASS — every PRSH browser source still wearing a name in a
- * retired form ("Stat Bar — Side 1 1", "Scoreboard Small 2") gets today's
- * ("Stat Bar — Side 1 (Board 1)"). See `upgradeRetiredName`.
- *
- * Runs on every connect, and that is what "one-time" means here: it only ever
- * matches a retired form, so after the first pass there is nothing left for it
- * to do and a name the producer typed is never a candidate. ALL inputs, not the
- * mirrored scenes — a source in a scene nobody has expanded is exactly the one
- * that would otherwise keep its old name forever. One toast, only when
- * something moved.
- */
-async function upgradeRetiredNames(gen) {
-    if (!obs) return;
-    let inputs;
-    try {
-        ({ inputs } = await obs.call('GetInputList', { inputKind: 'browser_source' }));
-    } catch {
-        return;
-    }
-    const settings = useSettingsStore.getState() || {};
-    const active = settings?.scoreboards?.active;
-    const ctx = {
-        boards: Array.isArray(active) && active.length ? active : [1],
-        mode: settings?.production?.side_labels,
-    };
-    let renamed = 0;
-    for (const { inputName } of inputs || []) {
-        if (gen !== generation) return;
-        const url = (await inputSettingsFor(inputName, gen))?.url;
-        if (!url || !isPrshUrl(url)) continue;
-        const next = upgradeRetiredName(inputName, url, ctx);
-        if (!next) continue;
-        try {
-            // InputNameChanged moves the mirror and the settings cache.
-            await obs.call('SetInputName', { inputName, newInputName: next });
-            renamed++;
-        } catch { /* the new name is taken — leave this one as it is */ }
-    }
-    if (renamed && gen === generation) {
-        notifications.show({
-            color: 'green',
-            message: `Renamed ${renamed} PRSH source${renamed === 1 ? '' : 's'} in OBS to name `
-                + 'the side and board plainly — e.g. “Stat Bar — Side 1 (Board 2)”.',
-        });
-    }
-}
-
-/*
- * THE RETIRED-CANVAS PROMPT — every PRSH browser source still at a canvas its
- * element has since outgrown (`RETIRED_CANVASES`: the Stat Bar 452x118 and the
- * Stat Card 380x240, before their roster band).
- *
- * At the old resolution the page fits its taller canvas into the old box and
- * the whole card draws smaller. Whether to fix that is the PRODUCER's call — a
- * finished scene is theirs — so this asks, once, in one toast:
- *
- *   Resize     grows each source (`growBrowserSource`): it stays where and as
- *              big as it was on screen, a crop keeps showing the same area,
- *              and the new height opens underneath.
- *   Keep size  touches nothing, and is remembered in this browser (by source
- *              name AND size) so the question is not asked on every connect.
- *
- * Only a resolution EXACTLY at a retired size is a candidate, so a size set by
- * hand never is, and once resized there is nothing left to ask about.
- */
-const KEPT_CANVASES = 'prsh.ui.production.keptCanvases';
-const keptKey = (name, s) => `${name}@${s.width}x${s.height}`;
-function readKept() {
-    try {
-        const v = JSON.parse(localStorage.getItem(KEPT_CANVASES) || '[]');
-        return new Set(Array.isArray(v) ? v : []);
-    } catch { return new Set(); }
-}
-function writeKept(set) {
-    try { localStorage.setItem(KEPT_CANVASES, JSON.stringify([...set])); } catch { /* private window */ }
-}
-// A Keep size is an answer about a SOURCE, so it follows the source's name — or
-// a rename would ask the question again on the next connect. Split on the LAST
-// '@': a source name may hold one, the size never does.
-function renameKeptCanvases(from, to) {
-    const kept = readKept();
-    let moved = false;
-    const next = new Set([...kept].map((k) => {
-        const at = k.lastIndexOf('@');
-        if (at < 0 || k.slice(0, at) !== from) return k;
-        moved = true;
-        return `${to}${k.slice(at)}`;
-    }));
-    if (moved) writeKept(next);
-}
-
-async function upgradeRetiredCanvases(gen) {
-    if (!obs) return;
-    let inputs;
-    try {
-        ({ inputs } = await obs.call('GetInputList', { inputKind: 'browser_source' }));
-    } catch {
-        return;
-    }
-    const kept = readKept();
-    const stale = [];
-    for (const { inputName } of inputs || []) {
-        if (gen !== generation) return;
-        const settings = await inputSettingsFor(inputName, gen);
-        const url = settings?.url;
-        if (!url || !isPrshUrl(url)) continue;
-        const next = upgradeRetiredCanvas(url, settings.width, settings.height);
-        if (!next) continue;
-        const from = { width: Number(settings.width), height: Number(settings.height) };
-        if (kept.has(keptKey(inputName, from))) continue;
-        stale.push({ inputName, from, to: { width: next.width, height: next.height } });
-    }
-    if (!stale.length || gen !== generation) return;
-
-    const n = stale.length;
-    const plural = n === 1 ? '' : 's';
-    notifications.show({
-        id: 'retired-canvases',
-        color: 'yellow',
-        autoClose: false,
-        title: `Resize ${n} stat card source${plural} in OBS?`,
-        // Short: sonner sets the two buttons BESIDE the text, so every word
-        // here narrows the column the rest wraps into.
-        message: 'They grew a roster row. Resize keeps each looking the same on screen.',
-        action: {
-            label: 'Resize',
-            onClick: async () => {
-                const failed = [];
-                let done = 0;
-                for (const s of stale) {
-                    try {
-                        await useObsStore.getState().growBrowserSource({
-                            sourceName: s.inputName, from: s.from, width: s.to.width, height: s.to.height,
-                        });
-                        done++;
-                    } catch {
-                        failed.push(s.inputName);
-                    }
-                }
-                if (done) {
-                    notifications.show({
-                        color: 'green',
-                        message: `Resized ${done} source${done === 1 ? '' : 's'} — each draws where and as big as it did.`,
-                    });
-                }
-                if (failed.length) {
-                    notifications.show({
-                        color: 'red',
-                        message: `Couldn’t resize ${failed.join(', ')} — set its size in OBS Properties instead.`,
-                    });
-                }
-            },
-        },
-        cancel: {
-            label: 'Keep size',
-            onClick: () => {
-                const set = readKept();
-                for (const s of stale) set.add(keptKey(s.inputName, s.from));
-                writeKept(set);
-            },
-        },
+        if (alive()) session.inputCache.delete(inputName);
     });
 }
 
@@ -1746,7 +1065,7 @@ function scheduleReconnect() {
  * expand, and the mirror is small.
  *
  * Re-runs on reconnect (`status`): a fresh connection starts with only program
- * and preview tracked, so anything a surface had opened has to re-ask.
+ * and preview session.tracked, so anything a surface had opened has to re-ask.
  */
 export function useMirrorScene(sceneName) {
     const status = useObsStore(s => s.status);

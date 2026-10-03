@@ -331,7 +331,7 @@ export function reshapePatch(t, width, height) {
 /*
  * ── A CANVAS THAT GREW AT THE BOTTOM ────────────────────────────────────────
  *
- * The retired-canvas migration (`upgradeRetiredCanvases`, obs.jsx): an element
+ * The retired-canvas migration (`upgradeRetiredCanvases`, obs-source-passes.js): an element
  * whose canvas grew DOWNWARD — same width, same content at the same pixels,
  * new height opening underneath (the stat cards' roster band). Unlike a
  * reshape, a crop can be kept: every crop edge but the bottom is measured from
