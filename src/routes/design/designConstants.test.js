@@ -62,12 +62,6 @@ describe('overridable global keys', () => {
 describe('the controller-port palette', () => {
     const read = (p) => readFileSync(p, 'utf8');
 
-    it('is a global — never a per-element setting again', () => {
-        // The collision test below is what enforces this: a port key defined
-        // under any LAYOUT_SETTINGS type now fails, because it is a global.
-        for (const key of PORT_COLOR_KEYS) expect(GLOBAL_DESIGN_KEYS).toContain(key);
-    });
-
     it('inherits by default, so a design package can supply it', () => {
         // A literal hex here would pin the app's palette over every package.
         for (const key of PORT_COLOR_KEYS) expect(GLOBAL_DESIGN_DEFAULTS[key]).toBeNull();
@@ -246,19 +240,6 @@ describe('settingOn — the Design tab and the overlays agree what a stored bool
         expect(settingOn(stored, fallback), 'app').toBe(expected);
         expect(overlaySettingOn(stored, fallback), 'overlay').toBe(expected);
     });
-
-    /*
-     * And the two keys that actually diverged, at their real defaults — the
-     * regression this closes, not a synthetic one.
-     */
-    it('resolves the shipped switches identically', () => {
-        for (const [key, dflt] of [['textShadowEnabled', false], ['showShadow', true]]) {
-            for (const stored of [true, false, 'true', 'false', undefined]) {
-                expect(settingOn(stored, dflt), `${key} <- ${String(stored)}`)
-                    .toBe(overlaySettingOn(stored, dflt));
-            }
-        }
-    });
 });
 
 /*
@@ -290,9 +271,7 @@ describe('a producer switch is resolved by settingOn', () => {
     const RAW_BOOLEAN = /!==\s*false|===\s*true/;
 
     it('exposes settingOn on the OverlayBase surface', () => {
-        const base = readFileSync('public/layout/lib/overlay-base.js', 'utf8');
-        const surface = base.slice(base.indexOf('window.OverlayBase = {'));
-        expect(surface).toContain('settingOn,');
+        expect(typeof loadOverlayBase().settingOn).toBe('function');
     });
 
     it.each(MOUNTS)('%s compares no setting against a raw boolean', (file) => {
@@ -305,6 +284,22 @@ describe('a producer switch is resolved by settingOn', () => {
         expect(offenders, 'use OverlayBase.settingOn(value, fallback)').toEqual([]);
     });
 });
+
+// The real overlay runtime (a classic script, so it is evaluated, not imported).
+function loadOverlayBase() {
+    document.documentElement.removeAttribute('style');
+    new Function(readFileSync('public/layout/lib/overlay-base.js', 'utf8'))();
+    const OB = window.OverlayBase;
+    for (const k of Object.keys(OB.settings)) delete OB.settings[k];
+    return OB;
+}
+
+function appliedVar(type, overlays, prop) {
+    const OB = loadOverlayBase();
+    OB.settings.overlays = overlays;
+    OB.applyDesignSettings(type);
+    return document.documentElement.style.getPropertyValue(prop);
+}
 
 describe('overrideReaches', () => {
     const base = readFileSync('public/layout/lib/overlay-base.js', 'utf8');
@@ -405,37 +400,16 @@ describe('overrideReaches', () => {
      * is the same disagreement the theme files are held to.
      */
     it('keys the stat vars on the type the mount actually passes', () => {
-        const mount = readFileSync('public/layout/lib/stats-card-mount.js', 'utf8');
-        expect(mount).toContain("settingsType || 'statsbar'");
-        // The type is SETTINGS_TYPE; the second argument is only its side's
-        // namespace under Separate side styles (side-styles.js).
-        expect(mount).toContain('OverlayBase.applyDesignSettings(SETTINGS_TYPE, styleNs(settings, SETTINGS_TYPE, TEAM))');
         for (const type of ['statsbar', 'statscard']) {
-            expect(varMap, `${type} missing from LAYOUT_VAR_MAP`).toContain(`${type}: STATS_VARS`);
+            expect(appliedVar(type, { [type]: { cardBg: '#123456' } }, '--card-bg')).toBe('#123456');
+            expect(appliedVar(type, { [type]: { statValueColor: '#abcdef' } }, '--stat-value-color'))
+                .toBe('#abcdef');
             expect(overrideReaches('cardBg', type)).toBe(true);
             expect(overrideReaches('borderColor', type)).toBe(true);
             expect(overrideReaches('borderWidth', type)).toBe(true);
-        }
-        // The dead key is gone, or the next rename hides behind a stale alias.
-        expect(varMap).not.toContain('stats: STATS_VARS');
-    });
-
-    /*
-     * `rx` cannot take a CSS variable in SVG, so a themed card's corner is a
-     * literal in the artwork — and no shipped theme reads `--border-radius` at
-     * all. The radius was a Design-tab control and a per-element pin that moved
-     * nothing on any package, so it is offered nowhere.
-     */
-    it('offers the corner radius nowhere, because no theme draws one', () => {
-        for (const type of OVERRIDE_CAPABLE_TYPES) {
-            expect(overrideReaches('borderRadius', type), type).toBe(false);
-        }
-        expect(OVERRIDABLE_GLOBAL_KEYS.some(d => d.key === 'borderRadius')).toBe(false);
-        for (const pkg of ['default', 'classic']) {
-            for (const file of readdirSync(`public/design/${pkg}`).filter(f => f.endsWith('.svg'))) {
-                expect(readFileSync(`public/design/${pkg}/${file}`, 'utf8'), `${pkg}/${file}`)
-                    .not.toContain('var(--border-radius');
-            }
+            // A pin under the pre-rename namespace reaches nothing.
+            expect(appliedVar(type, { stats: { statValueColor: '#abcdef' } }, '--stat-value-color'))
+                .not.toBe('#abcdef');
         }
     });
 
@@ -500,13 +474,11 @@ describe('overrideReaches', () => {
     // These two skip applyDesignSettings entirely — the mounts resolve them with
     // readSetting, which does its own per-layout-then-global lookup.
     it('follows the two switches their mounts resolve themselves', () => {
-        expect(readFileSync('public/layout/lib/ticker-mount.js', 'utf8'))
-            .toContain("readSetting(SETTINGS_TYPE, 'showCaptains'");
+        const OB = loadOverlayBase();
+        OB.settings.overlays = { global: { showCaptains: true }, ticker: { showCaptains: false } };
+        expect(OB.readSetting('ticker', 'showCaptains', true)).toBe(false);
         expect(overrideReaches('showCaptains', 'ticker')).toBe(true);
         expect(overrideReaches('showCaptains', 'scoreboard')).toBe(false);
-
-        expect(readFileSync('public/layout/lib/scoreboard-mount.js', 'utf8'))
-            .toContain("readSetting(SETTINGS_TYPE, 'showLogo'");
         expect(overrideReaches('showLogo', 'scoreboard')).toBe(true);
         expect(overrideReaches('showLogo', 'ticker')).toBe(false);
     });

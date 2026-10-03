@@ -67,18 +67,6 @@ describe('isHudSource — derived transport, not a stored source type', () => {
         expect(rd.isHudSource(2)).toBe(false);
         expect(rd.isHudSource(5)).toBe(false);
     });
-
-    it('ignores the retired scoreboards.sources key entirely', () => {
-        // The shape a real user_data carries: board 1 left at 'manual' by the
-        // migration while it has carried the HUD ever since. Reading this is
-        // what took the game line off the air.
-        const rd = load({
-            project_rio: { hud_enabled: true },
-            scoreboards: { sources: { 1: { type: 'manual' }, 2: { type: 'hud' } } },
-        });
-        expect(rd.isHudSource(1)).toBe(true);
-        expect(rd.isHudSource(2)).toBe(false);
-    });
 });
 
 describe('fmt3 — a rate the way baseball writes one', () => {

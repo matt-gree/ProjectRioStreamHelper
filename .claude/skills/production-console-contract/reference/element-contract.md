@@ -541,8 +541,8 @@ position, not an identity).
   in `PREVIEW_MODE`. **Every silent mount names its own blank reason** (Phase 6b):
   a source that hides itself when it has nothing to draw calls `setBlank(reason)`
   at that hide path, so the preview says *why* it's empty rather than reading as
-  broken. `blank-reason.test.jsx` is a source-level guard that each such mount
-  keeps the call. Scoreboard additionally mirrors its reason into the panel body
+  broken (the controller's three are pinned by `tests/overlay/controller-mount.test.js`).
+  Scoreboard additionally mirrors its reason into the panel body
   (`generic.jsx` `ReadinessNote`) because its DirectStage shows no player state;
   the rest rely on the preview. A bound element previews **its own source's URL**, not the
   element's canonical one: the producer's source may carry a size/team variant

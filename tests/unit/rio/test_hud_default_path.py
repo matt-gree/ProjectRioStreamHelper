@@ -30,14 +30,12 @@ def test_windows_default_follows_appdata(as_windows, monkeypatch):
     assert str(Path.home()) not in str(p)
 
 
-def test_windows_default_falls_back_to_home_without_appdata(as_windows, monkeypatch):
-    monkeypatch.delenv("APPDATA", raising=False)
-    p = get_default_hud_file_path()
-    assert p == Path.home() / "AppData" / "Roaming" / "Project Rio" / "HudFiles" / "decoded.hud.json"
-
-
-def test_windows_empty_appdata_is_treated_as_unset(as_windows, monkeypatch):
-    monkeypatch.setenv("APPDATA", "")
+@pytest.mark.parametrize("appdata", [None, ""], ids=["unset", "empty"])
+def test_windows_default_falls_back_to_home_without_appdata(as_windows, monkeypatch, appdata):
+    if appdata is None:
+        monkeypatch.delenv("APPDATA", raising=False)
+    else:
+        monkeypatch.setenv("APPDATA", appdata)
     p = get_default_hud_file_path()
     assert p == Path.home() / "AppData" / "Roaming" / "Project Rio" / "HudFiles" / "decoded.hud.json"
 

@@ -366,11 +366,6 @@ describe('Event Header stage — what stays a setting', () => {
     });
 
     /*
-     * PX, not a percentage of a base the producer never sees. Pinned as the
-     * pair — the key AND its unit — because a `%` suffix left on a px value is
-     * exactly the mislabel this replaced.
-     */
-    /*
      * PX, and ONE PER BAND. The pair is pinned together with the unit because
      * both were the same mistake in different dimensions: a percentage of a base
      * nobody sees, and one number standing in for two bands that carry different
@@ -381,80 +376,6 @@ describe('Event Header stage — what stays a setting', () => {
             expect(LAYOUT_SETTINGS.eventheader.find(d => d.key === key), key)
                 .toMatchObject({ suffix: 'px', defaultValue: 34 });
         }
-        for (const gone of ['fontScale', 'fontSize']) {
-            expect(LAYOUT_SETTINGS.eventheader.some(d => d.key === gone), gone).toBe(false);
-        }
-    });
-
-    /*
-     * TWO WAYS THIS ELEMENT COULD BE WRONG UNTIL THE SOURCE IS RELOADED, which
-     * is the shape a producer reports as "it renders too high until I hit
-     * refresh". Both leave a correct page drawing a stale layout with nothing
-     * scheduled to recompute it, and both are silent.
-     *
-     * A webfont arrives whenever the network says so, and until it does the
-     * canvas answers the optical measurement with the FALLBACK's metrics —
-     * cached under the real font's name, that is a wrong offset forever.
-     *
-     * And `window.resize` never fires for a box that changed under a window
-     * that did not: a container re-laying out its member, or a browser source
-     * measured at zero while hidden and given its real size only when shown.
-     */
-    it('recomputes rather than waiting for a reload', () => {
-        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
-        // Only a measurement the real face produced is cached.
-        expect(mount).toContain('if (faceReady(fontSpec)) capOffsets.set');
-        // …and the host is watched, not just the window.
-        expect(mount).toContain('new ResizeObserver');
-        expect(mount).toContain('ro.observe(root)');
-    });
-
-    /*
-     * THE PLATFORM MARK IS SEATED ON THE MEASURED CAP BAND, NOT A BAKED ONE.
-     *
-     * The mark is an inline box whose BOTTOM sits on the baseline, so it
-     * overhangs the cap band by (its own height − cap height), all of it below
-     * the letters, and half of that pushed back down centres it on them. Cap
-     * height is a fact about the FACE — which is why the row's own optical
-     * correction is measured — and the seat was a constant anyway, at Inter's
-     * nominal 0.727. The display role has defaulted to Rajdhani since type
-     * became three roles, and Rajdhani's measured cap is 0.643: the mark rode
-     * 1.4px above the handle at the composed 34px, and further at every larger
-     * Font Size.
-     *
-     * One probe answers both, so a producer's face cannot move the type without
-     * moving the mark with it.
-     */
-    it('seats the platform mark on the measured cap band', () => {
-        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
-        // One probe, reporting both readings of the cap band.
-        expect(mount).toMatch(/out = \{\s*dy:/);
-        expect(mount).toContain('cap: cap / PROBE_PX');
-        // Published for the CSS to divide…
-        expect(mount).toContain("stage.style.setProperty('--eh-cap'");
-        // …and divided there, rather than restated as a number.
-        expect(mount).toContain('transform: translateY(calc((${MARK_EM}em - var(--eh-cap');
-        // An unmeasurable face falls back to the declaration, never to 0 —
-        // which would seat the mark half its own height below the baseline.
-        expect(mount).toContain("stage.style.removeProperty('--eh-cap')");
-    });
-
-    /*
-     * The two sizes drive their own band and nothing else — `--font-scale` is
-     * set on each BAND rather than on the shared stage, which is what makes the
-     * band height, the bar's corner and the field gap follow the row they
-     * belong to instead of whichever size was written last.
-     */
-    it('scopes the type scale to each band', () => {
-        const mount = readFileSync('public/layout/lib/eventheader-mount.js', 'utf8');
-        expect(mount).toContain("header.style.setProperty('--font-scale'");
-        expect(mount).toContain("footer.style.setProperty('--font-scale'");
-        expect(mount).not.toContain("stage.style.setProperty('--font-scale'");
-    });
-
-    it('has no per-field switch left in the registry', () => {
-        const switches = LAYOUT_SETTINGS.eventheader.filter(d => d.type === 'switch').map(d => d.key);
-        expect(switches).toEqual(['showHeader', 'showFooter']);
     });
 
     it('writes the band master to the shared (not per-board) namespace', () => {

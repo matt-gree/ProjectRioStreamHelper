@@ -214,7 +214,7 @@ describe('OverlayBase sample bundle', () => {
 });
 
 /*
- * Coverage guard, the same shape as blank-reason.test.jsx. Every Layout either
+ * Coverage guard. Every Layout either
  * declares a sample bundle or is on the exemption list below with a reason.
  *
  * The point is the Add picker and demo mode: a layout with no bundle previews as

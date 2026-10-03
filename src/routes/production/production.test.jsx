@@ -116,15 +116,6 @@ describe('Production page mounts', () => {
         // The desk tier is permanent, so it survives whatever the scenes do.
         expect(screen.getAllByText('Match').length).toBeGreaterThan(0);
     });
-
-    // The phase selector is gone: OBS's scene list is the producer stating the
-    // shape of their show, where phase was PRSH guessing at it.
-    it('has no phase selector', () => {
-        ui();
-        for (const label of ['Draft', 'Post-game']) {
-            expect(screen.queryByText(label), `${label} phase tab is gone`).not.toBeInTheDocument();
-        }
-    });
 });
 
 

@@ -14,9 +14,8 @@ import { join } from 'node:path';
  * strobed on air, in the state it spends most of its life in. It looked like a
  * deliberate animation, which is why it survived.
  *
- * The mounts run in the browser, outside the vitest runtime, so this is a
- * source-level guard in the same shape as blank-reason.test.jsx: cheap, and it
- * covers the whole class of the bug rather than the one line that had it.
+ * This is a source-level guard: cheap, and it covers the whole class of the
+ * bug rather than the one line that had it.
  */
 
 const ROOT = 'public/layout';

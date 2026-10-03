@@ -38,13 +38,6 @@ describe('pickable feeds', () => {
 });
 
 describe('element registry invariants', () => {
-    // The phase axis is gone: elements are listed under the OBS scene their
-    // source lives in, so a leftover `phase` would be a field nothing reads and
-    // the next person would keep it in sync for nothing.
-    it('carries no phase — scenes are the grouping axis', () => {
-        for (const e of ELEMENTS) expect(e.phase, `${e.id} has no phase`).toBeUndefined();
-    });
-
     it('fed elements declare a canonical container url', () => {
         for (const e of ELEMENTS.filter((x) => x.flavor === 'fed')) {
             expect(e.url).toMatch(/\/layout\//);

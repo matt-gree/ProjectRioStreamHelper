@@ -105,16 +105,6 @@ describe('controller-mount → gc-overlay URL', () => {
         expect(params.get('status')).toBe('0');
     });
 
-    it('keeps the chrome params out of the producer\'s reach', async () => {
-        // These four are PRSH's, not settings: the only correct value is the one
-        // PRSH already picks, so no element can move them.
-        const params = new URL((await frameSrc()).src).searchParams;
-        expect(params.get('bg')).toBe('transparent');
-        expect(params.get('gear')).toBe('0');
-        expect(params.get('portlabel')).toBe('0');
-        expect(params.get('status')).toBe('0');
-    });
-
     it('honours a fixed ?port= override, translating it the same way', async () => {
         const { src } = await frameSrc({ team: 2, portOverride: 0 });
         expect(new URL(src).searchParams.get('port')).toBe('1');

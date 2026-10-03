@@ -267,7 +267,7 @@ unless asked, which lands in OBS as a solid dark box.
 
 The mount names its three blanks via `OverlayBase.setBlank` (no reader / no port
 on this side / no game), because on a transparent source they look identical —
-pinned by `stage/blank-reason.test.jsx`.
+pinned by `tests/overlay/controller-mount.test.js`.
 
 ## Per-side follow (the part that surprises people)
 
