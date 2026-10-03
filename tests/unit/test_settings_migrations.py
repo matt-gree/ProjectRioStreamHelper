@@ -538,7 +538,7 @@ async def test_no_legacy_stats_namespace_is_a_no_op(isolate_user_data):
 async def test_the_app_wide_display_block_is_removed(isolate_user_data):
     _write_settings(isolate_user_data, {
         "controller_overlay": {
-            "port": 8069,
+            "auto_start": True,
             "display": {"labels": True, "keyline": False, "idle_fill_opacity": 0.4},
         },
     })
@@ -546,7 +546,7 @@ async def test_the_app_wide_display_block_is_removed(isolate_user_data):
     co = Settings.settings["controller_overlay"]
     assert "display" not in co
     # The reader's own settings, which this block sat beside, are untouched.
-    assert co["port"] == 8069
+    assert co["auto_start"] is True
 
 
 async def test_the_intermediate_boolean_goes_with_it(isolate_user_data):
@@ -779,3 +779,11 @@ async def test_a_fresh_install_writes_no_retired_defaults(isolate_user_data):
     s = Settings.settings
     assert "hotkeys" not in s
     assert "sources" not in s["scoreboards"]
+
+
+async def test_the_old_gc_overlay_port_is_kept_as_a_record(isolate_user_data):
+    # No longer a setting (gc-overlay is behind /gc/), but the port every
+    # pre-proxy Controller source in OBS names — so the console can find them.
+    _write_settings(isolate_user_data, {"controller_overlay": {"port": 8070, "auto_start": True}})
+    await Settings.Load()
+    assert Settings.settings["controller_overlay"] == {"legacy_port": 8070, "auto_start": True}

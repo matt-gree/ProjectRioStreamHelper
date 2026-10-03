@@ -39,13 +39,3 @@ async def controller_stop(session_id: str | None = None) -> ORJSONResponse:
     result = await ControllerOverlay.Shutdown()
     return ORJSONResponse(result)
 
-
-@method(
-    router.put, "/controller/port",
-    version="1", id="controller.port",
-    response_class=ORJSONResponse,
-)
-async def controller_set_port(port: int = 8069, session_id: str | None = None) -> ORJSONResponse:
-    """Set the port for the controller overlay (requires restart)."""
-    await ControllerOverlay.SetPort(port)
-    return ORJSONResponse({"success": True, "port": port})

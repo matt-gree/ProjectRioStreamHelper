@@ -8,6 +8,7 @@ from pathlib import Path
 
 from uvicorn import Config, Server
 from socketio import ASGIApp
+from server.origin_guard import OriginGuard
 from loguru import logger
 
 from server import server, socketio
@@ -85,10 +86,11 @@ async def main() -> int:
     Network.set_bound(host, port)
 
     uvi = Server(Config(
-        app=ASGIApp(
+        # OriginGuard is outermost so Socket.IO is behind it too (server/origin_guard.py).
+        app=OriginGuard(ASGIApp(
             socketio,
             other_asgi_app=server.app
-        ),
+        )),
         host=host,
         port=port,
         reload=Settings.Get("dev", False),

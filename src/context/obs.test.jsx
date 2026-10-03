@@ -151,7 +151,7 @@ describe('connect + scene mirror', () => {
         expect(fake.callsOf('GetInputSettings').length).toBe(2);
     });
 
-    it('recognizes the gc-overlay source by its configured port', async () => {
+    it('recognizes a pre-proxy gc-overlay source (so the address repair can move it onto /gc/)', async () => {
         await connectWith({
             GC: { url: 'http://localhost:8069/?port=2' },
         });
@@ -860,7 +860,9 @@ describe('source order and groups', () => {
         const done = useObsStore.getState().setSceneItemEnabled('Graphics', 1, false);
         await vi.runAllTimersAsync();
         await done;
-        expect(JSON.parse(fetchSpy.mock.calls[0][1].body).payload.url).toBe(LT_URL);
+        // The cue among the calls: connecting also asks PRSH for things.
+        const cue = fetchSpy.mock.calls.find(([path]) => String(path).includes('/action'));
+        expect(JSON.parse(cue[1].body).payload.url).toBe(LT_URL);
         expect(fake.callsOf('SetSceneItemEnabled').at(-1)[1])
             .toEqual({ sceneName: 'Graphics', sceneItemId: 1, sceneItemEnabled: false });
     });

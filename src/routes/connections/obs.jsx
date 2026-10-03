@@ -7,7 +7,8 @@ import { useSettingsStore } from '../../context/store';
 import { settingOn } from '../design/designConstants';
 import { useObsStore } from '../../context/obs';
 import { cn } from '../../lib/utils';
-import { CONN_BTN, ConnCard, ErrorLine, FieldLabel, Section, StatusPill, ToggleRow } from './kit';
+import { CONN_BTN, ConnCard, ErrorLine, FieldLabel, Hint, Section, StatusPill, ToggleRow } from './kit';
+import { isLoopback } from '../../lib/obs-reach';
 
 const OBS_TONE = {
     connected: 'ok',
@@ -87,6 +88,7 @@ export default function ObsConnection() {
         useSettingsStore(state => state?.obs?.ever_connected), false);
 
     const [host, setHost] = useState('127.0.0.1');
+    const lanOn = useSettingsStore(st => st?.server?.allow_lan) === true;
     const [port, setPort] = useState('4455');
     const [password, setPassword] = useState('');
 
@@ -149,6 +151,15 @@ export default function ObsConnection() {
                             onChange={e => setPort(e.currentTarget.value.replace(/[^0-9]/g, ''))} />
                     </div>
                 </div>
+                {/* ONE SETTING, READ BY EVERY BROWSER. Each console connects to
+                    OBS itself, so 127.0.0.1 means "this computer" to each of
+                    them — on a two-machine rig, a different OBS per screen.
+                    Said only when a second device is possible at all. */}
+                {lanOn && isLoopback(host.trim() || '127.0.0.1') && (
+                    <Hint>
+                        127.0.0.1 means each screen's own computer. With OBS on another computer, use its IP.
+                    </Hint>
+                )}
                 <div className="flex flex-col gap-1">
                     <FieldLabel htmlFor="obs-pass">Password</FieldLabel>
                     <PasswordInput id="obs-pass" value={password}

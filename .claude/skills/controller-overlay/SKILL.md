@@ -67,7 +67,7 @@ git submodule update --remote gc-overlay
 
 ## The URL is the whole integration — and it is silent when wrong
 
-PRSH and gc-overlay are two programs on two ports, and everything PRSH asks of
+PRSH and gc-overlay are two programs (one address, via `/gc/`), and everything PRSH asks of
 the reader it asks in a query string. Nothing fails, logs, or previews
 differently when a param is dropped; it just goes out on air wrong. So the
 broadcast string lives in ONE constant, `GC_CHROME` in `lib/controller-mount.js`,
@@ -153,13 +153,37 @@ the controller letterboxed inside it. Nothing breaks; the producer resizes it.
 
 ## Runtime + settings
 
-Runs on its own port (default **8069**), separate from PRSH's 5260.
-Settings live under `controller_overlay.{path,port,auto_start}`.
+Runs on a loopback port of its own (preferred **8069**, `DEFAULT_PORT`) and is
+reached ONLY through PRSH's proxy at **`/gc/`** (`server/gc_proxy.py`) — the
+page and API over HTTP (`httpx`), the controller stream over a WebSocket at
+`/gc/ws` (`websockets`). `GET /controller/status` reports `url: "/gc"`,
+path-only, so every reader resolves it against the address it reached PRSH at.
+
+**WHY A PROXY.** A Controller source used to iframe `http://localhost:8069`,
+which on any machine but PRSH's names THAT machine, and gc-overlay binds
+127.0.0.1 regardless — so on a dual-machine rig (Rio + PRSH on one PC, OBS on
+another) every Controller source and every Connections preview on the second
+screen drew an empty frame. Proxied, gc-overlay rides PRSH's address, port and
+`server.allow_lan` with nothing extra for the producer to set, and stays
+loopback-only itself (its settings/calibrate API is never on the LAN on its
+own). **It depends on gc-overlay ≥ 1.4.2**, whose page opens its WebSocket
+RELATIVE to itself; older ones open `location.host + '/ws'`, which behind the
+prefix reached PRSH's `/ws`. `/gc` without the slash redirects to `/gc/` for
+the same reason.
+
+**THE PORT IS PRIVATE, SO IT IS NOT A SETTING.** `Launch` reclaims a recorded
+orphan, then takes 8069 or the next free port (`_pick_port`) without asking —
+`PUT /controller/port` and the Connections card's port field + "Use port X"
+retry are gone. The old `controller_overlay.port` is migrated to
+`controller_overlay.legacy_port` — a record, not a setting: with 8069 and this
+launch's port it forms `legacy_ports` in `/controller/status`, the exact ports
+the console recognises a pre-proxy direct Controller source by (`isLegacyGcUrl`
+in `obs.jsx`), so the address repair can move it onto `/gc/`.
+Settings live under `controller_overlay.auto_start`.
 
 **The lifecycle lives on the CONNECTIONS tab, not on the element's stage panel**
-(`src/routes/connections/controller.jsx`): path, port, auto-start, Start/Stop,
-version, and the live per-port previews, over
-`/api/v1/controller/{status,start,stop,path,port}`. It moved because Start/Stop
+(`src/routes/connections/controller.jsx`): auto-start, Start/Stop, version, and
+the live per-port previews, over `/api/v1/controller/{status,start,stop}`. It moved because Start/Stop
 on the stage body could only be reached once an OBS source for the element
 existed — you built a source for a reader that wasn't running in order to reach
 the button that runs it.
@@ -219,16 +243,17 @@ PRSH's cleanup — the lifespan's `Stop`, `KillNow` before each `os._exit` — o
 runs on the exits PRSH *chooses*. SIGKILL, Force Quit, a crash and logout's
 SIGTERM run no PRSH code at all, and each one orphaned gc-overlay (measured on
 the v2.0.0 build: tray Exit cleaned up; SIGTERM and SIGKILL both orphaned). An
-orphan holds its port (the next launch could only offer `Use port 8070`) **and,
+orphan holds a port and keeps reading Dolphin where nobody can stop it **and,
 on macOS, the App Translocation mount of the `.app` it was launched from** — so
 replacing PRSH.app in `~/Downloads` with a new release made the new one fail to
 open with `-47` until the orphan was killed. The pidfile reclaim
 (`_reclaim_orphan`) stays as the second line: it only helps the *next* launch,
-and only once the app can launch at all.
+and only once the app can launch at all. It kills the recorded process on
+whichever port it holds, since the port is picked per launch now.
 
 ### The previews, and the off-by-one they exist to catch
 
-The Connections card iframes gc-overlay directly at `?port=1..4&bg=transparent`,
+The Connections card iframes gc-overlay (through `/gc/`) at `?port=1..4&bg=transparent`,
 so they need no game, no HUD frame and no PRSH layout — press a button on a pad
 and the right box moves. Each is labelled with the side currently holding that
 port (`score.1.player.{T}.port`).

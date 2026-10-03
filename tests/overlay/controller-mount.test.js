@@ -25,7 +25,8 @@ import { mountController, watchesSetting } from '../../public/layout/lib/control
 
 // The mount reaches gc-overlay through PRSH's controller status endpoint, and
 // reads state through the OverlayBase globals a Layout page would have set up.
-const GC = 'http://localhost:8069';
+// The status reports PRSH's /gc/ proxy, path-only.
+const GC = '/gc';
 
 function stubOverlayBase(state, settings = {}) {
     globalThis.OverlayBase = {
@@ -77,6 +78,15 @@ describe('controller-mount → gc-overlay URL', () => {
         delete globalThis.OverlayBase;
         delete globalThis.fetch;
         vi.restoreAllMocks();
+    });
+
+    it('loads gc-overlay through PRSH\'s own address, never a port of its own', async () => {
+        // A path resolved against the page's origin: an OBS on another machine
+        // reached PRSH at its LAN address, and `localhost:8069` named the OBS
+        // machine there.
+        const u = new URL((await frameSrc()).src);
+        expect(u.origin).toBe(window.location.origin);
+        expect(u.pathname).toBe('/gc/');
     });
 
     it('translates the HUD port into gc-overlay\'s 1-indexed convention', async () => {

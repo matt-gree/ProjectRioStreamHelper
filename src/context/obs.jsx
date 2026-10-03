@@ -8,6 +8,7 @@ import { settingOn } from '../routes/design/designConstants';
 import { renameForUrl, upgradeRetiredName } from '../routes/production/sources/sourcename';
 import { upgradeRetiredCanvas } from '../routes/production/sources/canvas-migrate';
 import { notifications } from '../lib/notify';
+import { checkObsSources, obsHostSetting, resolveUrlForObs } from '../lib/obs-reach';
 import { obsKeyNames, useStagingStore } from './staging';
 import {
     renderedSize, sizeMatchTransform, redrawPlan, rescaleForSource, reshapePatch, isCropped, stretchOf,
@@ -101,8 +102,31 @@ export function onObsRename(fn) {
     return () => renameListeners.delete(fn);
 }
 
-const gcPort = () =>
-    Number(useSettingsStore.getState()?.controller_overlay?.port) || null;
+/*
+ * A Controller source from before PRSH proxied gc-overlay (/gc/) iframed it
+ * directly on its own port. Recognised by the ports PRSH has ON RECORD — the
+ * default, the one the retired setting held, and this launch's
+ * (`legacy_ports` in /controller/status, loaded on every connect) — plus the
+ * root path and a controller `port` of 1-4. Never a guessed range: whatever
+ * this claims, the address repair rewrites, and a range would have claimed a
+ * producer's own tool on 8080.
+ */
+let gcLegacyPorts = new Set([8069]);
+
+async function loadGcLegacyPorts() {
+    try {
+        const s = await (await fetch('/api/v1/controller/status')).json();
+        if (Array.isArray(s?.legacy_ports) && s.legacy_ports.length) gcLegacyPorts = new Set(s.legacy_ports.map(Number));
+    } catch { /* keep the last answer */ }
+}
+
+// Tests only.
+export function setGcLegacyPorts(ports) { gcLegacyPorts = new Set(ports); }
+
+function isLegacyGcUrl(u) {
+    return gcLegacyPorts.has(Number(u.port)) && u.pathname === '/'
+        && /^[1-4]$/.test(u.searchParams.get('port') || '');
+}
 
 function resetMirror() {
     tracked = new Set();
@@ -181,10 +205,10 @@ const mapItem = (it) => ({
 // A browser source is "fed by PRSH" when it's one of the app's overlays:
 //   1. served from the app's /layout/ mount (host/port can be anything, so
 //      this holds in single- and dual-machine setups), OR
-//   2. the gc-overlay controller display — a PRSH-managed subprocess on its own
-//      port (controller_overlay.port). The Production controller stage hands out
-//      its direct URL (http://<host>:8069/?port=N), which has no /layout/
-//      path, so we match it by port instead.
+//   2. gc-overlay, served through PRSH's /gc/ proxy — or, from before the
+//      proxy, iframed directly on its own port (http://<host>:8069/?port=N, no
+//      /layout/ path, so matched by port). The address repair moves those
+//      onto /gc/, since that port is now picked per launch.
 // Everything else (cams, game capture, audio, third-party browser sources) is
 // ignored — the rail should only show PRSH's own overlay elements.
 // A PRSH overlay's intro animation is disabled per-source via `?intro=0` on its
@@ -262,16 +286,81 @@ async function itemsOfSource(sourceName) {
     return out;
 }
 
-function isPrshUrl(url, gcPort) {
+export function isPrshUrl(url) {
     if (!url) return false;
     try {
         const u = new URL(url);
         if (!/^https?:$/.test(u.protocol)) return false;
         if (u.pathname.startsWith('/layout/')) return true;
-        if (gcPort && u.port === String(gcPort)) return true;
-        return false;
+        if (u.pathname === '/gc' || u.pathname.startsWith('/gc/')) return true;
+        return isLegacyGcUrl(u);
     } catch {
         return false;
+    }
+}
+
+/*
+ * THE ADDRESS REPAIR — every PRSH browser source whose URL no longer reaches
+ * PRSH from where OBS is gets the address that does.
+ *
+ * A source's address goes stale with nothing to say so: made on the PRSH
+ * machine it says 127.0.0.1 and OBS is elsewhere; the router hands PRSH a new
+ * IP; LAN access goes off; PRSH moves off a busy port. The rack recognises a
+ * source by its PATH, so a dead one went on listing as healthy while the scene
+ * drew nothing. Only BROKEN sources are rewritten (the server judges, see
+ * server/source_addresses.py) — a rewrite reloads the source, and this runs on
+ * every OBS connect and every PRSH reconnect (a LAN or port change needs a
+ * restart, and the console's OBS connection survives one), mid-show included.
+ *
+ * ALL inputs, not the mirrored scenes, like the rename pass. One toast when
+ * something moved; a louder one when nothing CAN reach PRSH (OBS on another
+ * machine with LAN access off), because then the fix is the producer's.
+ */
+async function repairSourceAddresses(gen = generation) {
+    if (!obs) return;
+    let inputs;
+    try {
+        ({ inputs } = await obs.call('GetInputList', { inputKind: 'browser_source' }));
+    } catch {
+        return;
+    }
+    const byUrl = new Map();
+    for (const { inputName } of inputs || []) {
+        if (gen !== generation) return;
+        const url = (await inputSettingsFor(inputName, gen))?.url;
+        if (!url || !isPrshUrl(url)) continue;
+        if (!byUrl.has(url)) byUrl.set(url, []);
+        byUrl.get(url).push(inputName);
+    }
+    if (!byUrl.size || gen !== generation) return;
+    const { fixed, unreachable } = await checkObsSources([...byUrl.keys()], obsHostSetting(useSettingsStore.getState()));
+    if (gen !== generation) return;
+    let moved = 0;
+    for (const [from, to] of Object.entries(fixed)) {
+        for (const inputName of byUrl.get(from) || []) {
+            try {
+                await obs.call('SetInputSettings', { inputName, inputSettings: { url: to }, overlay: true });
+                moved++;
+            } catch { /* removed meanwhile */ }
+        }
+    }
+    if (moved) {
+        notifications.show({
+            id: 'source-addresses',
+            color: 'green',
+            message: `Pointed ${moved} PRSH source${moved === 1 ? '' : 's'} in OBS at PRSH's current address — `
+                + `${moved === 1 ? 'it' : 'they'} could no longer reach it.`,
+        });
+    }
+    const stranded = unreachable.reduce((n, url) => n + (byUrl.get(url)?.length || 0), 0);
+    if (stranded) {
+        notifications.show({
+            id: 'source-addresses-unreachable',
+            color: 'yellow',
+            autoClose: false,
+            title: `${stranded} PRSH source${stranded === 1 ? '' : 's'} can't reach PRSH`,
+            message: 'OBS is on another computer and LAN access is off. Turn on LAN access on the Connections tab and restart PRSH.',
+        });
     }
 }
 
@@ -615,8 +704,15 @@ export const useObsStore = create((set) => ({
     // what they placed, and there is no broadcast to protect.
     // The `true` default is a legacy of the deleted Setup layout browser; every
     // live caller states `enabled` rather than relying on it.
+    // Re-run the address repair (PRSH's socket reconnecting: a restart may
+    // have changed its LAN bind or port while OBS stayed connected).
+    repairSourceAddresses: () => (useObsStore.getState().status === 'connected' ? repairSourceAddresses() : null),
+
     addBrowserSource: async ({ inputName, url, width, height, sceneName, enabled = true }) => {
         if (!obs) throw new Error('Not connected to OBS');
+        // The URL is qualified with the host THIS browser reached PRSH at; an
+        // OBS on another machine needs PRSH's LAN address instead (obs-reach.js).
+        url = await resolveUrlForObs(url, useSettingsStore.getState());
         const scene = liveName(sceneName) || useObsStore.getState().programScene;
         if (!scene) throw new Error('No active program scene in OBS');
 
@@ -655,6 +751,7 @@ export const useObsStore = create((set) => ({
      */
     repointBrowserSource: async ({ sourceName, url }) => {
         if (!obs) throw new Error('Not connected to OBS');
+        url = await resolveUrlForObs(url, useSettingsStore.getState());
         sourceName = liveName(sourceName);
         await obs.call('SetInputSettings', {
             inputName: sourceName,
@@ -759,6 +856,7 @@ export const useObsStore = create((set) => ({
             ));
             if (myGen !== generation) return; // superseded while connecting
             reconnectAttempts = 0;
+            await loadGcLegacyPorts();
             await reconcileOnConnect(myGen);
             if (myGen !== generation) return;
             set({ status: 'connected', error: null, obsVersion: obsWebSocketVersion });
@@ -776,7 +874,11 @@ export const useObsStore = create((set) => ({
             // Background: a rename pass must never hold up the console coming up.
             // Names first, so the resize toast below counts sources under the
             // names the producer is about to see.
-            upgradeRetiredNames(myGen).then(() => upgradeRetiredCanvases(myGen));
+            // The address repair FIRST: a source that can't reach PRSH is
+            // drawing nothing, and a rename racing it would skip that source.
+            repairSourceAddresses(myGen)
+                .then(() => upgradeRetiredNames(myGen))
+                .then(() => upgradeRetiredCanvases(myGen));
         } catch (e) {
             // A timed-out handshake leaves a socket still trying: drop it so it
             // can't land later behind the store's back. Events are already
@@ -910,7 +1012,7 @@ async function refreshAll(gen) {
  */
 function reconcileShutdown(sourceName, settings) {
     const url = settings?.url || '';
-    if (!isPrshUrl(url, gcPort()) || !url.includes('/layout/')) return;
+    if (!isPrshUrl(url) || !url.includes('/layout/')) return;
     const want = desiredShutdown(url);
     if ((settings.shutdown === true) === want) return;
     obs?.call('SetInputSettings', {
@@ -977,7 +1079,7 @@ async function refreshScene(sceneName, gen) {
             if (it.inputKind === 'browser_source' && !it.isGroup) {
                 const settings = await inputSettingsFor(it.sourceName, gen);
                 base.url = settings?.url || null;
-                base.isPrsh = isPrshUrl(base.url, gcPort());
+                base.isPrsh = isPrshUrl(base.url);
             }
             return base;
         };
@@ -1162,7 +1264,7 @@ function wireEvents(client, gen) {
         inputCache.set(inputName, Promise.resolve(settings));
         reconcileShutdown(inputName, settings);
         const url = settings.url || null;
-        const isPrsh = isPrshUrl(url, gcPort());
+        const isPrsh = isPrshUrl(url);
         followUrlWithName(inputName, url);
         useObsStore.setState(state => ({
             sceneItems: Object.fromEntries(Object.entries(state.sceneItems).map(([scene, items]) => [
@@ -1446,7 +1548,7 @@ async function reconcileOnConnect(gen) {
  * second one's rename finds the old name gone and is dropped.
  */
 function followUrlWithName(inputName, url) {
-    if (!url || !isPrshUrl(url, gcPort())) return;
+    if (!url || !isPrshUrl(url)) return;
     const items = Object.values(useObsStore.getState().sceneItems).flat();
     const before = items.find(it => it.sourceName === inputName)?.url;
     const settings = useSettingsStore.getState() || {};
@@ -1490,7 +1592,7 @@ async function upgradeRetiredNames(gen) {
     for (const { inputName } of inputs || []) {
         if (gen !== generation) return;
         const url = (await inputSettingsFor(inputName, gen))?.url;
-        if (!url || !isPrshUrl(url, gcPort())) continue;
+        if (!url || !isPrshUrl(url)) continue;
         const next = upgradeRetiredName(inputName, url, ctx);
         if (!next) continue;
         try {
@@ -1566,7 +1668,7 @@ async function upgradeRetiredCanvases(gen) {
         if (gen !== generation) return;
         const settings = await inputSettingsFor(inputName, gen);
         const url = settings?.url;
-        if (!url || !isPrshUrl(url, gcPort())) continue;
+        if (!url || !isPrshUrl(url)) continue;
         const next = upgradeRetiredCanvas(url, settings.width, settings.height);
         if (!next) continue;
         const from = { width: Number(settings.width), height: Number(settings.height) };

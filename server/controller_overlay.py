@@ -1,8 +1,9 @@
 """Managed subprocess for the gc-overlay controller input display.
 
 Launches gc-overlay as a child process and monitors its health.
-The overlay runs independently on its own port and serves its own
-WebSocket + HTML overlay that OBS can capture as a browser source.
+The overlay runs on a loopback port of its own and serves its own
+WebSocket + HTML overlay; PRSH proxies it at /gc/ (server/gc_proxy.py), so
+nothing outside this module ever sees which port that is.
 """
 
 import asyncio
@@ -79,17 +80,32 @@ def _find_free_port_near(start: int, count: int = 10) -> int | None:
     return None
 
 
+# gc-overlay's PREFERRED port, not a setting. Everything reaches it through
+# PRSH's /gc/ proxy, so its port is private to this process: a taken 8069 is
+# routed around silently instead of being the producer's problem. It was a
+# Connections-tab field with a "Use port 8070" retry until the proxy existed,
+# because every Controller source in OBS used to name it.
+DEFAULT_PORT = 8069
+
+
+def _pick_port() -> int | None:
+    if _port_free(DEFAULT_PORT):
+        return DEFAULT_PORT
+    return _find_free_port_near(DEFAULT_PORT + 1, 50)
+
+
 # ── The orphan PRSH left behind ─────────────────────────────────────────────
 #
 # gc-overlay is a separate process, and nothing in the OS ties its life to
 # PRSH's: when PRSH ends without running its lifespan shutdown — Windows' exit
 # is an `os._exit`, the macOS tray gives shutdown five seconds and then does the
 # same, and a crash or Force Quit gives it nothing — the child is reparented to
-# init and keeps the configured port. The NEXT launch then found 8069 taken by
-# its own previous self and could only offer "Use port 8070", which moves every
-# Controller source in OBS off the port it was built against. A pidfile is the
-# one record that survives the parent: it names the process PRSH started, so a
-# port held by THAT process is reclaimed rather than routed around.
+# init and keeps its port. Since the /gc/ proxy a busy port no longer costs the
+# producer anything (the next launch just takes another), but the orphan is
+# still a process reading Dolphin that nobody can see or stop, and on macOS it
+# pins the translocated .app. A pidfile is the one record that survives the
+# parent: it names the process PRSH started, so THAT process is killed on the
+# next launch, whichever port it is holding.
 
 def _pidfile() -> Path:
     return user_data_dir() / "gc-overlay.pid"
@@ -150,16 +166,16 @@ def _terminate_pid(pid: int) -> None:
         pass
 
 
-async def _reclaim_orphan(port: int) -> bool:
-    """Kill a gc-overlay a previous PRSH left on `port`. True if the port is now free."""
+async def _reclaim_orphan() -> bool:
+    """Kill the gc-overlay a previous PRSH left running. True if one was reclaimed."""
     record = _read_pidfile()
     if record is None:
         return False
-    pid, recorded_port = record
-    if recorded_port != port or pid == os.getpid() or not _pid_is_gc_overlay(pid):
+    pid, port = record
+    if pid == os.getpid() or not _pid_is_gc_overlay(pid):
         _clear_pidfile()
         return False
-    logger.info("[controller_overlay] reclaiming port {} from orphaned gc-overlay (pid {})", port, pid)
+    logger.info("[controller_overlay] reclaiming orphaned gc-overlay (pid {}, port {})", pid, port)
     _terminate_pid(pid)
     for _ in range(30):
         if _port_free(port):
@@ -272,7 +288,7 @@ class ControllerOverlay:
 
     _process: asyncio.subprocess.Process | None = None
     _task: asyncio.Task | None = None
-    _port: int = 8069
+    _port: int = DEFAULT_PORT
     _gc_overlay_path: Path | None = None
     _version: str | None = None
     _running: bool = False
@@ -286,7 +302,6 @@ class ControllerOverlay:
         # path could only ever point somewhere stale.
         cls._gc_overlay_path = _find_gc_overlay()
 
-        cls._port = Settings.Get("controller_overlay.port", 8069)
         cls._auto_start = Settings.Get("controller_overlay.auto_start", False)
         cls._version = _read_gc_version(cls._gc_overlay_path)
 
@@ -327,24 +342,19 @@ class ControllerOverlay:
         # Kill any existing process
         await cls._kill_process()
 
-        # Pre-flight port check. A port held by the gc-overlay a previous PRSH
-        # orphaned is taken back first; only a port held by something ELSE gets
-        # the structured error with a suggested free port (the UI's one-click
-        # "Use port X" affordance).
-        if not _port_free(cls._port) and not await _reclaim_orphan(cls._port):
-            suggestion = _find_free_port_near(cls._port + 1)
-            logger.warning(
-                "[controller_overlay] port {} in use (suggested free: {})",
-                cls._port,
-                suggestion,
-            )
+        # The orphan a previous PRSH left goes first, so it is not what pushes
+        # this launch off the preferred port. Anything ELSE holding 8069 is
+        # simply routed around — the port is private behind the /gc/ proxy.
+        await _reclaim_orphan()
+        port = _pick_port()
+        if port is None:
             return {
                 "success": False,
-                "reason": "port_in_use",
-                "error": f"Port {cls._port} is already in use.",
-                "port": cls._port,
-                "suggested_port": suggestion,
+                "error": f"No free port for the controller reader near {DEFAULT_PORT}.",
             }
+        if port != DEFAULT_PORT:
+            logger.info("[controller_overlay] port {} in use; using {}", DEFAULT_PORT, port)
+        cls._port = port
 
         try:
             cmd = base_cmd + ["--port", str(cls._port)]
@@ -404,14 +414,29 @@ class ControllerOverlay:
             "running": running,
             "port": cls._port,
             "pid": cls._process.pid if cls._process and running else None,
-            "url": f"http://localhost:{cls._port}" if running else None,
+            # Path-only, through PRSH's own proxy (server/gc_proxy.py): it is
+            # reachable at whatever address the asker reached PRSH at, which a
+            # `http://localhost:{port}` never was from another machine.
+            "url": "/gc" if running else None,
+            # Every port a pre-proxy Controller source could name: the default,
+            # the port recorded by the retired setting, and this launch's.
+            # The console recognises those sources by them (obs.jsx).
+            "legacy_ports": cls.LegacyPorts(),
         }
 
     @classmethod
-    async def SetPort(cls, port: int):
-        """Update the port (requires restart to take effect)."""
-        cls._port = port
-        await Settings.Set("controller_overlay.port", port)
+    def LegacyPorts(cls) -> list[int]:
+        ports = {DEFAULT_PORT, cls._port}
+        recorded = Settings.Get("controller_overlay.legacy_port", None)
+        if isinstance(recorded, int):
+            ports.add(recorded)
+        return sorted(ports)
+
+    @classmethod
+    def ProxyTarget(cls) -> int | None:
+        """The loopback port the /gc/ proxy forwards to, or None when not running."""
+        running = cls._running and cls._process is not None and cls._process.returncode is None
+        return cls._port if running else None
 
     @classmethod
     def KillNow(cls) -> None:

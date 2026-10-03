@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useStateStore, useSettingsStore, useConfigStore, setSocketRef } from './store';
+import { useObsStore } from './obs';
 
 export const SocketContext = createContext({
     socket: null
@@ -280,6 +281,23 @@ export const SocketProvider = ({children}) => {
         });
 
         return () => { cancelled = true; }
+    }, [socket]);
+
+    /*
+     * PRSH came back (a RE-connect): a restart may have changed its LAN bind or
+     * port, and the console's OBS connection outlives it, so OBS's own connect
+     * hook never re-runs — ask for the source-address repair here. The first
+     * connect is skipped: OBS connects after it and runs the repair itself.
+     */
+    useEffect(() => {
+        let seen = false;
+        const onConnect = () => {
+            if (seen) useObsStore.getState().repairSourceAddresses();
+            seen = true;
+        };
+        socket.on('connect', onConnect);
+        if (socket.connected) seen = true;
+        return () => socket.off('connect', onConnect);
     }, [socket]);
 
     const socketValue = useMemo(() => ({ socket }), [socket]);

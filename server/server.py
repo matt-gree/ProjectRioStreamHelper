@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from server.api import router_v1
+from server.gc_proxy import router as gc_proxy_router
 from server.http_cache import REVALIDATE, RevalidatingStaticFiles
 from server.utils.tasks import spawn, drain
 from server.api.v1.assets import get_msb_assets_path
@@ -399,6 +400,9 @@ async def favicon():
 
 # /api/v1/* | api_v1_*
 app.include_router(router_v1)
+
+# /gc/* — gc-overlay, proxied onto PRSH's own address (server/gc_proxy.py)
+app.include_router(gc_proxy_router)
 
 # root (/index.html etc)
 @app.get("/", response_class=HTMLResponse)

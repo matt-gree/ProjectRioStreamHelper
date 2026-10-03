@@ -17,6 +17,7 @@ import { useActiveBoards, useBoardLabel, useBoardTag, useRotatingBoards } from '
 import { containerUrl, useContainerActions, useSharedContainers } from '../containers/containers';
 import { EMPTY_SET, GROUP_LABELS, MOD, addName, boardsNote, groupRank, isBoardScoped, nativeH, nativeW, offeredOn, overlayUrl, pairKeyOf, pairRows, pickKey, pickerPreviewUrl, picksBoard, rowLabel, rowRank, sceneBoard, useLayoutCatalog } from './addcatalog';
 import { NewContainerForm } from './newcontainer';
+import { useCopyableUrl } from '../../../lib/obs-reach';
 
 /*
  * The Add picker — how a source comes into being now that the rack lists only
@@ -743,6 +744,8 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         if (picks.length) return picks.map(p => overlayUrl(p.layout, p.board)).join('\n');
         return focus ? overlayUrl(focus, previewBoard) : '';
     }, [picks, focus, previewBoard]);
+    // The LAN address while PRSH listens on one: it pastes into OBS on either machine.
+    const copyable = useCopyableUrl(copyValue);
 
     /*
      * WHY ADD IS GREY, in the one place a producer looks when a button is:
@@ -1094,7 +1097,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                                 hatch for a producer whose OBS is on another
                                 machine or who wires sources by hand. No OBS
                                 needed, so it stays live even when Add can't. */}
-                            <CopyButton value={copyValue}>
+                            <CopyButton value={copyable}>
                                 {({ copied, copy }) => (
                                     <Button
                                         size="sm" variant="outline" disabled={!copyValue}

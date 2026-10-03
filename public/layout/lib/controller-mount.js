@@ -122,7 +122,7 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
 
     const key = PORT_KEY(sb, team);
     const nameKey = NAME_KEY(sb, team);
-    let gcBaseUrl = null;     // e.g. http://localhost:8069, from controller status
+    let gcBaseUrl = null;     // e.g. http://192.168.1.20:5260/gc, from controller status
     // The URL the iframe currently holds. Tracked whole rather than as a port,
     // because the appearance settings are part of it now and a producer
     // changing one has to reach a source that is already loaded — gc-overlay
@@ -135,17 +135,20 @@ export function mountController({ host, sb = 1, team = 1, portOverride = null })
     /*
      * Where the running gc-overlay is, or '' when it is not running.
      *
-     * The status endpoint is the only thing that knows: the port is a setting,
-     * PRSH hunts for a free one near it when it is taken, and nothing is serving
-     * at all until the producer starts the subprocess from the Connections
-     * tab.
+     * The status endpoint is the only thing that knows whether anything is
+     * serving — nothing is until the producer starts the subprocess from the
+     * Connections tab. Its `url` is PATH-ONLY (`/gc`, PRSH's proxy), resolved
+     * against the address THIS page was loaded from: an OBS on another
+     * machine reached PRSH at its LAN address, and `localhost:8069` — what it
+     * used to say — named the OBS machine there, where no reader runs.
      */
     async function resolveGcBaseUrl() {
         try {
             const r = await fetch(`${OverlayBase.BASE_URL}/api/v1/controller/status`);
             if (!r.ok) return '';
             const s = await r.json();
-            return s && s.running && s.url ? s.url : '';
+            if (!(s && s.running && s.url)) return '';
+            return new URL(s.url, OverlayBase.BASE_URL || location.href).toString().replace(/\/$/, '');
         } catch { return ''; }
     }
 

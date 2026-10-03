@@ -704,7 +704,6 @@ class Settings:
             "check_for_updates": True,
         },
         "controller_overlay": {
-            "port": 8069,
             "auto_start": False,
         },
         "overlays": {
@@ -880,6 +879,15 @@ class Settings:
         _co = cls.settings.get("controller_overlay")
         if isinstance(_co, dict) and "display" in _co:
             _co.pop("display", None)
+            await cls.Save()
+
+        # `controller_overlay.port` is no longer a setting (gc-overlay sits
+        # behind PRSH's /gc/ proxy and picks its own port), but it is still a
+        # RECORD: the port every pre-proxy Controller source in OBS was built
+        # against. Kept as `legacy_port` so the console can recognise exactly
+        # those sources and the address repair can move them onto /gc/.
+        if isinstance(_co, dict) and "port" in _co:
+            _co["legacy_port"] = _co.pop("port")
             await cls.Save()
 
         # The controller element's own pins, from the same 1.4.0 change.

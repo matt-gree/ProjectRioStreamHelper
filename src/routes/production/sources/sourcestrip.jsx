@@ -17,6 +17,7 @@ import { useContainerPush } from '../containers/feeds';
 import { useContainerOf, useMemberScope, useSharedContainers } from '../containers/containers';
 import { isFedPlacement } from './placements';
 import { StagedDot } from '../controls';
+import { useCopyableUrl } from '../../../lib/obs-reach';
 
 /*
  * The source strip — the OBS transport contract every stage panel wears in its
@@ -125,8 +126,10 @@ function useBindTarget(element, board, placement) {
 const CopySlot = memo(function CopySlot({ element, board, placement }) {
     const target = useBindTarget(element, board, placement);
     const url = placement?.item?.url || absoluteOverlayUrl(target.url);
+    // The LAN address while PRSH listens on one: it pastes into OBS on either machine.
+    const copyable = useCopyableUrl(url);
     return (
-        <CopyButton value={url}>
+        <CopyButton value={copyable}>
             {({ copied, copy }) => (
                 <SimpleTooltip label={
                     copied

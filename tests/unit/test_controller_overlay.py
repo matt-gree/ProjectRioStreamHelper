@@ -294,22 +294,33 @@ def test_the_child_inherits_the_rest_of_the_environment(monkeypatch):
     assert co._child_env()["PRSH_TEST_MARKER"] == "kept"
 
 
-# ── 4. the orphan a previous PRSH left on the port ──────────────────────────
+# ── 4. the orphan a previous PRSH left running ──────────────────────────────
 #
-# gc-overlay outlives a PRSH that exits without its lifespan shutdown, and then
-# holds the configured port against the next launch. A pidfile names the process
-# PRSH started, so a port held by THAT process is reclaimed, and nothing else is.
+# gc-overlay outlives a PRSH that exits without its lifespan shutdown. A pidfile
+# names the process PRSH started, so THAT process is killed on the next launch —
+# whichever port it holds, since the port is now picked per launch — and
+# nothing else is.
 
-async def test_a_port_held_by_our_own_orphan_is_reclaimed(monkeypatch):
+async def test_our_own_orphan_is_reclaimed(monkeypatch):
     co._write_pidfile(4242, 8069)
     free = {"now": False}
     killed = []
     monkeypatch.setattr(co, "_pid_is_gc_overlay", lambda pid: pid == 4242)
     monkeypatch.setattr(co, "_terminate_pid", lambda pid: (killed.append(pid), free.update(now=True)))
     monkeypatch.setattr(co, "_port_free", lambda port: free["now"])
-    assert await co._reclaim_orphan(8069) is True
+    assert await co._reclaim_orphan() is True
     assert killed == [4242]
     assert co._read_pidfile() is None
+
+
+async def test_an_orphan_on_a_fallback_port_is_reclaimed_too(monkeypatch):
+    co._write_pidfile(4242, 8070)
+    killed = []
+    monkeypatch.setattr(co, "_pid_is_gc_overlay", lambda pid: True)
+    monkeypatch.setattr(co, "_terminate_pid", killed.append)
+    monkeypatch.setattr(co, "_port_free", lambda port: port == 8070 and bool(killed))
+    assert await co._reclaim_orphan() is True
+    assert killed == [4242]
 
 
 async def test_a_recycled_pid_is_never_killed(monkeypatch):
@@ -319,22 +330,44 @@ async def test_a_recycled_pid_is_never_killed(monkeypatch):
     killed = []
     monkeypatch.setattr(co, "_pid_is_gc_overlay", lambda pid: False)
     monkeypatch.setattr(co, "_terminate_pid", killed.append)
-    assert await co._reclaim_orphan(8069) is False
+    assert await co._reclaim_orphan() is False
     assert killed == []
     assert co._read_pidfile() is None
-
-
-async def test_an_orphan_on_another_port_is_not_this_ports_holder(monkeypatch):
-    co._write_pidfile(4242, 8070)
-    killed = []
-    monkeypatch.setattr(co, "_pid_is_gc_overlay", lambda pid: True)
-    monkeypatch.setattr(co, "_terminate_pid", killed.append)
-    assert await co._reclaim_orphan(8069) is False
-    assert killed == []
 
 
 async def test_no_pidfile_means_nothing_to_reclaim(monkeypatch):
     killed = []
     monkeypatch.setattr(co, "_terminate_pid", killed.append)
-    assert await co._reclaim_orphan(8069) is False
+    assert await co._reclaim_orphan() is False
     assert killed == []
+
+
+# ── 5. the port is private ──────────────────────────────────────────────────
+#
+# Everything reaches gc-overlay through PRSH's /gc/ proxy, so a taken 8069 is
+# routed around instead of being a field the producer has to fix.
+
+def test_the_preferred_port_is_used_when_free(monkeypatch):
+    monkeypatch.setattr(co, "_port_free", lambda port: True)
+    assert co._pick_port() == co.DEFAULT_PORT
+
+
+def test_a_taken_port_is_routed_around(monkeypatch):
+    monkeypatch.setattr(co, "_port_free", lambda port: port >= co.DEFAULT_PORT + 3)
+    assert co._pick_port() == co.DEFAULT_PORT + 3
+
+
+def test_status_reports_the_proxy_not_a_port(monkeypatch):
+    class Running:
+        returncode = None
+        pid = 1
+    monkeypatch.setattr(co.ControllerOverlay, "_running", True)
+    monkeypatch.setattr(co.ControllerOverlay, "_process", Running())
+    assert co.ControllerOverlay.GetStatus()["url"] == "/gc"
+
+
+def test_the_recorded_ports_name_every_port_an_old_source_could_use(monkeypatch):
+    from server.settings import Settings
+    monkeypatch.setattr(co.ControllerOverlay, "_port", 8071)
+    Settings.settings.setdefault("controller_overlay", {})["legacy_port"] = 8070
+    assert co.ControllerOverlay.LegacyPorts() == [8069, 8070, 8071]
