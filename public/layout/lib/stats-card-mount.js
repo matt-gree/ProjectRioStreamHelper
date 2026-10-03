@@ -67,7 +67,7 @@
 
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
-import { lineTextBox, captionSpan, captionGroupX, layoutStatCells } from './mount-utils.js';
+import { lineTextBox, captionSpan, captionGroupX, layoutStatCells, injectStyle } from './mount-utils.js';
 import { styleNs, styleSetting } from './side-styles.js';
 
 const ELEMENT = 'statsbar';
@@ -102,19 +102,9 @@ const CSS = `
 .st-host svg { width: 100%; height: 100%; display: block; }
 `;
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'stats-card-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
 export function mountStatsCard({ host, sb, team, settingsType = 'statsbar',
                                  svgElement = ELEMENT, fallbackSvg = FALLBACK_SVG }) {
-  injectCss();
+  injectStyle('stats-card-css', CSS);
   host.classList.add('st-host');
   const SB = sb || 1;
   const TEAM = team === 2 ? 2 : 1;

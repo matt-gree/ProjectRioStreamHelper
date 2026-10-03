@@ -20,7 +20,8 @@
 
 import { ensureGsap } from './gsap-loader.js';
 import { HitRenderer } from '/rio-visualizer/renderer.js';
-import { RESULT_META, NON_AB_CODES, ORDINALS, escapeHtml, swingTag, contactQuality, chipMarkup } from './postgame-callout-chips.js';
+import { RESULT_META, NON_AB_CODES, ORDINALS, swingTag, contactQuality, chipMarkup } from './postgame-callout-chips.js';
+import { escapeHtml } from './mount-utils.js';
 
 const BEAT = {
   transIn: 0.28,    // band morphs into the between-AB transition card

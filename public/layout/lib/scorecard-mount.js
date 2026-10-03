@@ -23,7 +23,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, layoutBox, boxRowSides } from './mount-utils.js';
+import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, layoutBox, boxRowSides, injectStyle } from './mount-utils.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
 
 const ELEMENT = 'scorecard';
@@ -134,18 +134,8 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) { .sc-host.sc-reveal { animation: none; } }
 `;
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'scorecard-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
 export function mountScorecard({ host, sb }) {
-  injectCss();
+  injectStyle('scorecard-css', CSS);
   host.classList.add('sc-host');
   const SB = sb || 1;
 

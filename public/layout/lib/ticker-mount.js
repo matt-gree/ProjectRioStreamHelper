@@ -51,7 +51,7 @@
 // Requires overlay-base.js (OverlayBase) + rio-data.js (RioData).
 
 import { createThemeEngine } from './svg-theme-engine.js';
-import { applyPinsIn, rowOutcome } from './mount-utils.js';
+import { applyPinsIn, rowOutcome, injectStyle, fitText } from './mount-utils.js';
 
 const ELEMENT = 'ticker';
 const SETTINGS_TYPE = 'ticker';
@@ -74,33 +74,6 @@ const CSS = `
 .tk-host svg { width: 100%; height: 100%; display: block; }
 `;
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'ticker-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
-// Uniform auto-fit for cloned <text data-maxw> parts (the engine's refitText
-// only tracks top-level data-slot texts, not per-clone parts).
-function fitText(el) {
-  if (!el || el.tagName.toLowerCase() !== 'text') return;
-  const maxw = parseFloat(el.getAttribute('data-maxw'));
-  if (!maxw || !el.textContent) return;
-  let base = parseFloat(el.getAttribute('data-basefs'));
-  if (!base) {
-    base = parseFloat(el.getAttribute('font-size')) || parseFloat(getComputedStyle(el).fontSize) || 0;
-    if (base) el.setAttribute('data-basefs', String(base));
-  }
-  if (!base) return;
-  el.style.fontSize = base + 'px';
-  let len;
-  try { len = el.getComputedTextLength(); } catch { len = 0; }
-  if (len > maxw) el.style.fontSize = (base * maxw / len) + 'px';
-}
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
@@ -160,7 +133,7 @@ export function wellImage(game, role) {
 }
 
 export function mountTicker({ host, sb }) {
-  injectCss();
+  injectStyle('ticker-css', CSS);
   host.classList.add('tk-host');
   const SB = sb || 1;
 

@@ -3,7 +3,7 @@
  *
  * Each band is an ORDERED LIST of field entries (`overlays.eventheader.bands
  * .{header,footer}` = `[{id, on, text}]`, see EVENTHEADER_FIELDS in
- * server/settings.py), drawn left→right. A field's `text` overrides its source
+ * server/settings_migrations.py), drawn left→right. A field's `text` overrides its source
  * and a blank one falls back to it — which is why `message` is simply the entry
  * with no source of its own. Blank fields are dropped and the survivors
  * re-center.
@@ -24,6 +24,7 @@
  */
 
 import { socialMark } from './social-marks.js';
+import { injectStyle } from './mount-utils.js';
 
 const REF_W = 1920, REF_H = 1080;
 
@@ -32,7 +33,7 @@ const REF_W = 1920, REF_H = 1080;
  * length here is. `Font Size` is stated in px on the panel and divided by this
  * to get `--font-scale`, so the setting a producer reads is the number of
  * pixels the type actually is, and one knob still drives the band, the gap and
- * the corner. Mirrored by EVENTHEADER_BASE_FONT_PX in server/settings.py, which
+ * the corner. Mirrored by EVENTHEADER_BASE_FONT_PX in server/settings_migrations.py, which
  * is what the one-time migration off the old percentage converts against.
  */
 const BASE_FONT_PX = 34;
@@ -307,16 +308,6 @@ function faceReady(fontSpec) {
     }
 }
 
-let cssInjected = false;
-function injectCss() {
-    if (cssInjected) return;
-    const style = document.createElement('style');
-    style.id = 'eventheader-mount-css';
-    style.textContent = CSS;
-    document.head.appendChild(style);
-    cssInjected = true;
-}
-
 const div = (cls) => {
     const el = document.createElement('div');
     el.className = cls;
@@ -402,7 +393,7 @@ function renderRow(el, fields, sep) {
 }
 
 export function mountEventHeader({ host, sb = 1 }) {
-    injectCss();
+    injectStyle('eventheader-mount-css', CSS);
     const SCOREBOARD = Number(sb) || 1;
 
     const root = div('eh-root');

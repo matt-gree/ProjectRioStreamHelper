@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyCardRail, boxRowSides, linescoreColumns, prettyStadium, layoutBox, lineTextBox, captionSpan, captionGroupX, layoutStatCells, pinBesideText, applyTextPins } from '../../public/layout/lib/mount-utils.js';
+import { applyCardRail, boxRowSides, linescoreColumns, prettyStadium, layoutBox, lineTextBox, captionSpan, captionGroupX, layoutStatCells, pinBesideText, applyTextPins, injectStyle, escapeHtml, hexToRgbStr } from '../../public/layout/lib/mount-utils.js';
 
 /*
  * Two rules a scoreboard gets wrong SILENTLY — nothing throws, nothing logs, and
@@ -563,5 +563,33 @@ describe('applyCardRail', () => {
         delete engine.slots['card-rail'];
         applyCardRail(engine, false);
         expect(svg.getAttribute('viewBox')).toBe(CARDS.scorecard.vb);
+    });
+});
+
+
+describe('injectStyle — one stylesheet per document', () => {
+    it('injects once, and again into a document that lost it', () => {
+        document.head.replaceChildren();
+        injectStyle('t-css', '.a{}');
+        injectStyle('t-css', '.a{}');
+        expect(document.head.querySelectorAll('#t-css')).toHaveLength(1);
+        // A module flag could not see this — the reason the seam it needed is gone.
+        document.head.replaceChildren();
+        injectStyle('t-css', '.a{}');
+        expect(document.getElementById('t-css').textContent).toBe('.a{}');
+    });
+});
+
+describe('the post-game string helpers', () => {
+    it('escapes the five HTML metacharacters', () => {
+        expect(escapeHtml(`<a href="x">'&'</a>`)).toBe('&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;');
+        expect(escapeHtml(null)).toBe('');
+    });
+
+    it('reads only a six-digit hex as an rgb triple', () => {
+        expect(hexToRgbStr('#f93f91', 'x')).toBe('249, 63, 145');
+        expect(hexToRgbStr('C5F707', 'x')).toBe('197, 247, 7');
+        expect(hexToRgbStr('#fff', 'fb')).toBe('fb');
+        expect(hexToRgbStr('rgba(0,0,0,1)', 'fb')).toBe('fb');
     });
 });

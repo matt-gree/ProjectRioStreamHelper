@@ -63,6 +63,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensurePortPalette, portColor } from './port-colors.js';
+import { injectStyle } from './mount-utils.js';
 
 const SETTINGS_TYPE = 'lowerthird';
 const ELEMENT = 'lowerthird';
@@ -143,16 +144,6 @@ const CSS = `
 }
 `;
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'lowerthird-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
 // ── helpers ──────────────────────────────────────────────────────────────────
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -186,7 +177,7 @@ export function readSlots(state) {
 }
 
 export function mountLowerThird({ host }) {
-  injectCss();
+  injectStyle('lowerthird-css', CSS);
   host.classList.add('lt-host');
 
   const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });

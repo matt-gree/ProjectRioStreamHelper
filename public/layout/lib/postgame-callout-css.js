@@ -15,6 +15,8 @@
 
 export const REF_W = 1920, REF_H = 1080;
 
+import { injectStyle } from './mount-utils.js';
+
 const CSS = `
 /* THE ROLE SYSTEM, half-adopted on purpose.
    The root is the BODY role and every tabular value below is the NUMERAL role,
@@ -501,12 +503,4 @@ const CSS = `
   box-shadow: 0 0 0 1.5px rgba(var(--accent-rgb), 0.55), 0 0 26px rgba(var(--accent-rgb), 0.35); }
 `;
 
-let _cssInjected = false;
-export function injectCss() {
-  if (_cssInjected) return;
-  const style = document.createElement('style');
-  style.id = 'postgame-callout-css';
-  style.textContent = CSS;
-  document.head.appendChild(style);
-  _cssInjected = true;
-}
+export const injectCss = () => injectStyle('postgame-callout-css', CSS);

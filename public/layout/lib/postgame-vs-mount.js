@@ -30,12 +30,10 @@ import { ensureGsap } from './gsap-loader.js';
 import { createRevealGate } from './reveal-gate.js';
 import { captainFrame } from './captain-framing.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
-import { prettyStadium, boxRowSides } from './mount-utils.js';
+import { prettyStadium, boxRowSides, injectStyle, escapeHtml, hexToRgbStr } from './mount-utils.js';
 
 const REF_W = 1920, REF_H = 1080;
 const NEUTRAL_ACCENT = '#f59e0b';
-
-let _cssInjected = false;
 
 // Captain artwork (tall 2D poses) is the hero; the 3D character render is the
 // onerror fallback for any id the captains/ pack is missing.
@@ -43,13 +41,6 @@ function captainArtUrl(name) {
   const id = OverlayBase.charId(name);
   return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/captains/${id}.png`;
 }
-function charArtUrl(name) {
-  const id = OverlayBase.charId(name);
-  return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characters/${id}.png`;
-}
-// rio-data.js loads before this module (see container.html); the
-// window.RioData guard just matches the other mounts' defensive style.
-function teamLogoUrl(teamName) { return teamName && window.RioData ? RioData.teamLogoUrl(teamName) : ''; }
 
 // The mode the CAPTURED game was played under. The capture freezes it
 // (postgame.{N}.meta.gameMode, its TagSetID resolved at capture time), so a
@@ -403,15 +394,6 @@ const CSS = `
 .pv-line .rule.hd { height: 17px; }
 `;
 
-function injectCss() {
-  if (_cssInjected) return;
-  const style = document.createElement('style');
-  style.id = 'postgame-vs-css';
-  style.textContent = CSS;
-  document.head.appendChild(style);
-  _cssInjected = true;
-}
-
 // Same last-resort backdrop contract as the Stat Callout (see
 // postgame-callout-mount.js / public/design/README.md).
 function builtinThemeSvg() {
@@ -470,7 +452,7 @@ function fallbackTotals(sideData) {
 }
 
 export function mountPostgameVs({ host }) {
-  injectCss();
+  injectStyle('postgame-vs-css', CSS);
 
   const root = document.createElement('div');
   // Gated dark from the first frame: buildDom leaves a fully-drawn summary in
@@ -577,11 +559,11 @@ export function mountPostgameVs({ host }) {
   // captain art inside the same box, so the frame never has a hole on one side.
   function sideLogoUrl(p) {
     return (p?.leagueLogo ? `${OverlayBase.BASE_URL}${p.leagueLogo}` : '')
-      || (p?.teamName ? teamLogoUrl(p.teamName) : '');
+      || (p?.teamName ? RioData.teamLogoUrl(p.teamName) : '');
   }
   function sideCrest(side, p) {
     const cls = side === 1 ? 's1' : 's2';
-    const chain = [sideLogoUrl(p), captainArtUrl(p?.captain), charArtUrl(p?.captain)].filter(Boolean);
+    const chain = [sideLogoUrl(p), captainArtUrl(p?.captain), RioData.charArtUrl(p?.captain)].filter(Boolean);
     const [first, ...rest] = chain;
     return `
       <div class="pv-crest ${cls}">
@@ -598,7 +580,7 @@ export function mountPostgameVs({ host }) {
   function sideHero(side, p) {
     const cls = side === 1 ? 's1' : 's2';
     const art = captainArtUrl(p?.captain);
-    const fallback = charArtUrl(p?.captain);
+    const fallback = RioData.charArtUrl(p?.captain);
     const f = captainFrame(p?.captain, side);
     const edge = side === 1 ? 'left' : 'right';
     const box = `width:${f.w}px;height:${f.h}px;${edge}:${f.out}px;bottom:${f.bottom}px;`;
@@ -977,14 +959,3 @@ export function mountPostgameVs({ host }) {
 }
 
 // ── small helpers ───────────────────────────────────────────────────────────
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-}
-function hexToRgbStr(hex, fallback) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
-  if (!m) return fallback;
-  const n = parseInt(m[1], 16);
-  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
-}

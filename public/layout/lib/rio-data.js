@@ -26,6 +26,14 @@
     return `${OverlayBase.BASE_URL}/game_assets/msb/characterIcons/${id}.png`;
   }
 
+  // The full-body render (the post-game callouts' hero art), where
+  // charIconUrl is the square portrait.
+  function charArtUrl(name) {
+    const id = OverlayBase.charId(name);
+    if (id === undefined) return '';
+    return `${OverlayBase.BASE_URL}/game_assets/msb/characters/${id}.png`;
+  }
+
   function roleIconUrl(role) {
     const file = role === 'batting' ? 'bat.png' : 'glove.png';
     return `${OverlayBase.BASE_URL}/game_assets/msb/gameIcons/${file}`;
@@ -326,6 +334,7 @@
 
   window.RioData = {
     charIconUrl,
+    charArtUrl,
     roleIconUrl,
     teamLogoUrl,
     leagueLogoUrl,

@@ -45,7 +45,7 @@
 // derivation at fetch time; this mount only binds values.
 
 import { createThemeEngine } from './svg-theme-engine.js';
-import { applyTextPins, rowOutcome, LOSER_DIM } from './mount-utils.js';
+import { applyTextPins, rowOutcome, LOSER_DIM, injectStyle } from './mount-utils.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 
 const SETTINGS_TYPE = 'matchup';
@@ -88,16 +88,6 @@ const CSS = `
 @keyframes mu-rise { from { opacity: 0; transform: translateY(36px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .mu-host.mu-reveal { animation: none; } }
 `;
-
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'matchup-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
 
 /**
  * How far to slide the cards that ARE shown so they sit in the row the theme
@@ -143,7 +133,7 @@ function fmtDateFull(iso) {
 }
 
 export function mountMatchup({ host }) {
-  injectCss();
+  injectStyle('matchup-css', CSS);
   host.classList.add('mu-host');
 
   const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });

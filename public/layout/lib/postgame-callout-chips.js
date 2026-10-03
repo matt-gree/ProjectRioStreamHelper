@@ -5,13 +5,7 @@
 // it — see playAb in postgame-callout-theater.js) and its no-GSAP fallback
 // (chipSnapAll).
 
-// small HTML-escape shared by every string this element injects via
-// innerHTML (chip text, plate identity, result stamps).
-export function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-}
+import { escapeHtml } from './mount-utils.js';
 
 // Final-result code → ticker abbreviation / stamp text / flavor.
 export const RESULT_META = {

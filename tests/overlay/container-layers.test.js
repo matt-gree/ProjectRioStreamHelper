@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-    createLayers, memberBox, memberOffset, resolveFeed, _resetCssForTests,
+    createLayers, memberBox, memberOffset, resolveFeed,
 } from '../../public/layout/lib/container-layers.js';
 
 /*
@@ -53,7 +53,6 @@ const now = (fn) => fn();
 beforeEach(() => {
     document.body.replaceChildren();
     document.head.replaceChildren();
-    _resetCssForTests();
 });
 
 describe('resolveFeed — what the container is being asked to draw', () => {

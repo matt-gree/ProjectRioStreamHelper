@@ -51,20 +51,13 @@
 // postgame-callout-theater.js. CHARACTER-SPOTLIGHT.md is the design doc.
 
 import { injectCss, REF_W, REF_H } from './postgame-callout-css.js';
-import { escapeHtml } from './postgame-callout-chips.js';
 import { createTheater } from './postgame-callout-theater.js';
 import { createRevealGate } from './reveal-gate.js';
 import { ensurePortPalette, portColor as portPaletteColor } from './port-colors.js';
+import { escapeHtml, hexToRgbStr } from './mount-utils.js';
 
 const NEUTRAL_ACCENT = '#f59e0b';
 
-function charArtUrl(name) {
-  const id = OverlayBase.charId(name);
-  return id === undefined ? '' : `${OverlayBase.BASE_URL}/game_assets/msb/characters/${id}.png`;
-}
-// rio-data.js loads before this module (see container.html); the
-// window.RioData guard just matches the other mounts' defensive style.
-function teamLogoUrl(teamName) { return teamName && window.RioData ? RioData.teamLogoUrl(teamName) : ''; }
 
 // Same last-resort backdrop contract as before (public/design/README.md).
 function builtinThemeSvg() {
@@ -237,7 +230,7 @@ export function mountPostgameCallout({ host }) {
     const d = char.defense || {};
     // A league logo (frozen on the capture) outranks the MSB team's.
     const logo = (sideData.leagueLogo ? `${OverlayBase.BASE_URL}${sideData.leagueLogo}` : '')
-      || (sideData.teamName ? teamLogoUrl(sideData.teamName) : '');
+      || (sideData.teamName ? RioData.teamLogoUrl(sideData.teamName) : '');
 
     // header context: event name up top; bracket · phase · round beneath the
     // player identity (round emphasized). Empty pieces simply don't render.
@@ -339,7 +332,7 @@ export function mountPostgameCallout({ host }) {
         </div>
         <div class="cs-hero">
           <div class="bloom"></div>
-          <img src="${charArtUrl(char.name)}" onerror="this.style.opacity=0" alt="" />
+          <img src="${RioData.charArtUrl(char.name)}" onerror="this.style.opacity=0" alt="" />
         </div>
       </div>
       <div class="cs-well cs-rim cs-theater" id="cs-theater">
@@ -735,9 +728,3 @@ export function mountPostgameCallout({ host }) {
 
 // ── small helpers ───────────────────────────────────────────────────────────
 
-function hexToRgbStr(hex, fallback) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
-  if (!m) return fallback;
-  const n = parseInt(m[1], 16);
-  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
-}

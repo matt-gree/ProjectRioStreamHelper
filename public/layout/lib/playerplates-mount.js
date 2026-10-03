@@ -35,6 +35,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
 import { SUB_GLYPHS, FALLBACK_GLYPH, glyphKeyFor, setHref } from './sub-glyph.js';
+import { injectStyle } from './mount-utils.js';
 
 const ELEMENT = 'playerplates';
 const DEFAULT_PACKAGE = 'default';
@@ -107,18 +108,8 @@ const CSS = `
 .pp-host .pp-field-off * { animation: none; will-change: auto; }
 `;
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'playerplates-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
 export function mountPlayerPlates({ host }) {
-  injectCss();
+  injectStyle('playerplates-css', CSS);
   host.classList.add('pp-host');
 
   const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });

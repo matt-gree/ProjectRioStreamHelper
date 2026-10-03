@@ -17,6 +17,8 @@
  * Requires overlay-base.js (OverlayBase).
  */
 
+import { injectStyle } from './mount-utils.js';
+
 const REF = 360;
 
 const CSS = `
@@ -30,18 +32,8 @@ const CSS = `
 .tl-img { width: ${REF}px; height: ${REF}px; object-fit: contain; }
 `;
 
-let cssInjected = false;
-function injectCss() {
-    if (cssInjected) return;
-    const style = document.createElement('style');
-    style.id = 'teamlogo-mount-css';
-    style.textContent = CSS;
-    document.head.appendChild(style);
-    cssInjected = true;
-}
-
 export function mountTeamLogo({ host, sb = 1, team = 1 }) {
-    injectCss();
+    injectStyle('teamlogo-mount-css', CSS);
     const SCOREBOARD = Number(sb) || 1;
     const TEAM = Number(team) === 2 ? 2 : 1;
 

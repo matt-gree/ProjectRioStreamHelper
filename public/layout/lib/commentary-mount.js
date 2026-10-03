@@ -35,6 +35,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { ensureGsap } from './gsap-loader.js';
 import { SUB_GLYPHS, FALLBACK_GLYPH, glyphKeyFor, setHref } from './sub-glyph.js';
+import { injectStyle } from './mount-utils.js';
 
 const ELEMENT = 'commentary';
 const DEFAULT_PACKAGE = 'default';
@@ -119,16 +120,6 @@ const CSS = `
 .cm-host .cm-field-off * { animation: none; will-change: auto; }
 `;
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'commentary-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
 // Geometry/gradient targets that get tweened (or snapped) onto a plate when
 // it's laid out for the current count. Each entry: [data-part selector, JSON
 // key in the layout entry, attribute names to apply].
@@ -154,7 +145,7 @@ const TEXT_PARTS = [
 ];
 
 export function mountCommentary({ host }) {
-  injectCss();
+  injectStyle('commentary-css', CSS);
   host.classList.add('cm-host');
 
   const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });

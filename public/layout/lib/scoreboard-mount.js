@@ -88,7 +88,7 @@
 import { createThemeEngine } from './svg-theme-engine.js';
 import { createRevealGate, clearAnimClassOnEnd } from './reveal-gate.js';
 import { ensureGsap } from './gsap-loader.js';
-import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, linescoreColumns, layoutBox, boxRowSides } from './mount-utils.js';
+import { DOT_OFF, dot, applyCardRail, bindImageProbe, prettyStadium, linescoreColumns, layoutBox, boxRowSides, injectStyle } from './mount-utils.js';
 import { ensurePortPalette, inkOn, portColor as portPaletteColor } from './port-colors.js';
 
 const SETTINGS_TYPE = 'scoreboard';
@@ -151,18 +151,8 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) { .sb-host.sb-reveal { animation: none; } }
 `;
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'scoreboard-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
 export function mountScoreboard({ host, sb, size }) {
-  injectCss();
+  injectStyle('scoreboard-css', CSS);
   host.classList.add('sb-host');
   const SB = sb || 1;
   const SIZE = SIZE_DIMS[size] ? size : 'l';

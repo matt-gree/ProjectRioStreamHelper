@@ -94,6 +94,7 @@
 // size the producer asks for reaches the CSS as `nameSize / NAME_SIZE` and
 // nothing else in this block has to know the setting exists.
 import { styleNs, styleSetting } from './side-styles.js';
+import { injectStyle } from './mount-utils.js';
 
 const NAME_SIZE = 36;
 const NAME_LINE = 1.05;
@@ -284,16 +285,6 @@ const CSS = `
   white-space: nowrap;
 }
 `;
-
-let cssInjected = false;
-function injectCss() {
-    if (cssInjected) return;
-    const style = document.createElement('style');
-    style.id = 'playername-mount-css';
-    style.textContent = CSS;
-    document.head.appendChild(style);
-    cssInjected = true;
-}
 
 const ALIGNMENTS = new Set(['left', 'center', 'right']);
 const PREFIX_POSITIONS = new Set(['above', 'below', 'inline', 'off']);
@@ -645,7 +636,7 @@ export function mountPlayerName({ host, sb = 1, team = 1, sizes = null }) {
     // This source's own sizes, when it carries them (see SIZE_PARAMS). They
     // beat the shared settings for this source alone.
     const own = sizes || { nameSize: null, prefixSize: null };
-    injectCss();
+    injectStyle('playername-mount-css', CSS);
     const SCOREBOARD = Number(sb) || 1;
     const TEAM = Number(team) === 2 ? 2 : 1;
 

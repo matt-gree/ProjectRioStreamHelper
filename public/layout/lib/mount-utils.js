@@ -4,6 +4,53 @@
 // dumping ground. See rio-data.js for URL/data helpers and reveal-gate.js for
 // the show/hide + reveal-sequencing helpers.
 
+// Inject a mount's scoped stylesheet once per DOCUMENT, keyed by its id. A
+// mount also runs inside a container shell with no stylesheet of its own, which
+// is why every mount carries its CSS. Checking the document rather than a
+// module flag means a fresh document (a test, a re-built head) gets it again.
+export function injectStyle(id, css, doc = document) {
+  if (doc.getElementById(id)) return;
+  const style = doc.createElement('style');
+  style.id = id;
+  style.textContent = css;
+  doc.head.appendChild(style);
+}
+
+// Auto-fit one cloned <text data-maxw> part. The theme engine's refitText only
+// tracks top-level data-slot texts, so a mount that clones a template per row
+// (Results Ticker cards, Upcoming Schedule rows) fits each clone's parts here.
+// Uncached, so a font change is picked up by the next bind.
+export function fitText(el) {
+  if (!el || el.tagName.toLowerCase() !== 'text') return;
+  const maxw = parseFloat(el.getAttribute('data-maxw'));
+  if (!maxw || !el.textContent) return;
+  let base = parseFloat(el.getAttribute('data-basefs'));
+  if (!base) {
+    base = parseFloat(el.getAttribute('font-size')) || parseFloat(getComputedStyle(el).fontSize) || 0;
+    if (base) el.setAttribute('data-basefs', String(base));
+  }
+  if (!base) return;
+  el.style.fontSize = base + 'px';
+  let len;
+  try { len = el.getComputedTextLength(); } catch { len = 0; }
+  if (len > maxw) el.style.fontSize = (base * maxw / len) + 'px';
+}
+
+export function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+// '#rrggbb' → 'r, g, b' for an rgba(var(--x-rgb), a) seam; `fallback` for
+// anything else (a named colour, rgba(), a short hex).
+export function hexToRgbStr(hex, fallback) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return fallback;
+  const n = parseInt(m[1], 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
+
 // Count-dot / base "off" fill shared by Scoreboard and Scorecard.
 export const DOT_OFF = 'rgba(255,255,255,0.08)';
 

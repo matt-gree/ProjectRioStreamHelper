@@ -17,6 +17,7 @@
 // uniformly to fit the 452×140 frame.
 import { styleNs, styleSetting } from './side-styles.js';
 import { ROSTER_LAYOUTS, FIELD_SPOTS, rosterLayout } from './roster-layouts.js';
+import { injectStyle } from './mount-utils.js';
 
 const REF_W = 452, REF_H = 140;
 const CHAR_SIZE = 52;
@@ -77,16 +78,6 @@ export function resolvePortraitStyle(v) {
   return OverlayBase.settingOn(v, false) ? 'pixel' : 'smooth';
 }
 
-let _cssInjected = false;
-function injectCss() {
-  if (_cssInjected) return;
-  const s = document.createElement('style');
-  s.id = 'roster-mount-css';
-  s.textContent = CSS;
-  document.head.appendChild(s);
-  _cssInjected = true;
-}
-
 // Uniform fit-scale: shrink everything proportionally if the natural grid
 // overflows the frame.
 function rosterFitScale(trailingCount) {
@@ -137,7 +128,7 @@ export function applyRosterPalette(settings, team) {
  * OverlayBase.setBlank.
  */
 export function renderRoster(container, { state, settings, sb, team, layout }) {
-  injectCss();
+  injectStyle('roster-mount-css', CSS);
   if (!container) return { blank: null };
   container.classList.add('roster-container');
   container.innerHTML = '';

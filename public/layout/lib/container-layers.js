@@ -42,6 +42,8 @@
  *             than an update.
  */
 
+import { injectStyle } from './mount-utils.js';
+
 const DEFAULT_FADE_MS = 200;
 
 /*
@@ -184,20 +186,6 @@ const CSS = `
  * active layer at opacity 1 is not composited at all.
  */
 
-let _cssInjected = false;
-function injectCss(doc) {
-    if (_cssInjected) return;
-    const style = doc.createElement('style');
-    style.id = 'container-layers-css';
-    style.textContent = CSS;
-    doc.head.appendChild(style);
-    _cssInjected = true;
-}
-
-// Test seam: the injected stylesheet is module-level, and a jsdom test gets a
-// fresh document per file but not a fresh module.
-export function _resetCssForTests() { _cssInjected = false; }
-
 /*
  * The layer host for one container.
  *
@@ -225,7 +213,7 @@ export function createLayers({
     warn = (...a) => console.warn('[container-layers]', ...a),
     raf = (fn) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : fn()),
 } = {}) {
-    if (doc) injectCss(doc);
+    if (doc) injectStyle('container-layers-css', CSS, doc);
     if (host && fadeMs !== DEFAULT_FADE_MS) host.style.setProperty('--fc-fade', `${fadeMs}ms`);
 
     const layers = new Map();

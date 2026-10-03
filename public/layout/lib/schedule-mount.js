@@ -56,6 +56,7 @@
 
 import { createThemeEngine } from './svg-theme-engine.js';
 import { formatLabel, matchComplete } from './match-format.js';
+import { injectStyle, fitText } from './mount-utils.js';
 
 const ELEMENT = 'schedule';
 const SETTINGS_TYPE = 'schedule';
@@ -125,16 +126,6 @@ const CSS = `
 .sch-host.sch-off { display: none; }
 .sch-host.sch-off * { animation: none; }
 `;
-
-let _cssInjected = false;
-function injectCss() {
-    if (_cssInjected) return;
-    const s = document.createElement('style');
-    s.id = 'schedule-css';
-    s.textContent = CSS;
-    document.head.appendChild(s);
-    _cssInjected = true;
-}
 
 /*
  * A path walk of its own rather than `OverlayBase.deepGet`.
@@ -289,27 +280,9 @@ const BLANK_LABEL = {
     'schedule-all-played': 'Every match in the running order is decided — turn on Decided Matches to show them',
 };
 
-// Uniform auto-fit for cloned <text data-maxw> parts. The engine's refitText
-// only tracks top-level data-slot texts, not per-clone parts (same reason
-// ticker-mount carries this).
-function fitText(el) {
-    if (!el || el.tagName.toLowerCase() !== 'text') return;
-    const maxw = parseFloat(el.getAttribute('data-maxw'));
-    if (!maxw || !el.textContent) return;
-    let base = parseFloat(el.getAttribute('data-basefs'));
-    if (!base) {
-        base = parseFloat(el.getAttribute('font-size')) || parseFloat(getComputedStyle(el).fontSize) || 0;
-        if (base) el.setAttribute('data-basefs', String(base));
-    }
-    if (!base) return;
-    el.style.fontSize = base + 'px';
-    let len;
-    try { len = el.getComputedTextLength(); } catch { len = 0; }
-    if (len > maxw) el.style.fontSize = (base * maxw / len) + 'px';
-}
 
 export function mountSchedule({ host }) {
-    injectCss();
+    injectStyle('schedule-css', CSS);
     host.classList.add('sch-host');
 
     const engine = createThemeEngine({ host, element: ELEMENT, fallbackSvg: FALLBACK_SVG });
