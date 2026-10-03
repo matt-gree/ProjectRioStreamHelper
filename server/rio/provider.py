@@ -190,8 +190,8 @@ class RioGameDataProvider:
 
     # Cached HUD-target list — avoids re-scanning settings on every HUD event.
     # Derived transport: board 1 when project_rio.hud_enabled (see
-    # server/bindings.py); refreshed in _reset_side_preservation (called
-    # whenever the HUD toggle or active scoreboards change).
+    # server/bindings.py); refreshed by `reseat_hud` (the HUD toggle, the reset
+    # hatch) and `refresh_hud_targets` (a board removed).
     _hud_targets: list[int] = []
 
     # True when a new-game frame could not resolve its game mode because the
@@ -556,8 +556,8 @@ class RioGameDataProvider:
         cls._prev_game_id = None
         cls._sides_swapped = False
         cls._user_overridden = False
-        # Every caller of this re-seats the current frame right after (the HUD
-        # toggle, /scoreboards/reset), so a hand reset's hold is over.
+        # Its one caller, `reseat_hud`, re-seats the cached frame right after and
+        # re-derives the hold from the durable `_released_frame`.
         cls._feed_released = False
         cls._hud_targets = _read_hud_targets()
         for sb in cls._hud_targets:
@@ -566,8 +566,8 @@ class RioGameDataProvider:
     @classmethod
     def _orient_copy(cls, parsed: dict) -> dict:
         """A side-swapped shallow copy of `parsed` (entrants reversed, scores
-        flipped) — same semantics as `_swap_entrants` but non-destructive, so
-        one board's match orientation can't disturb another's."""
+        flipped). Non-destructive, so one board's match orientation can't
+        disturb another's."""
         p = dict(parsed)
         p["entrants"] = list(reversed(parsed["entrants"]))
         p["team1score"], p["team2score"] = (
@@ -757,6 +757,37 @@ class RioGameDataProvider:
         """
         async with cls._lock():
             await cls._on_hud_game_update_impl(game_json)
+
+    @classmethod
+    async def reseat_hud(cls) -> None:
+        """Start the HUD targets over and re-seat the cached frame on them.
+
+        For a change to WHICH boards the HUD feeds or what they hold — the HUD
+        toggle and `/scoreboards/reset` — not for a frame arriving. Both used to
+        hand-copy the parse → orient → apply sequence: outside `_update_lock`, so
+        it could interleave with a live frame or a swap; without the stats push or
+        the identity gate a frame gets; and ignoring the durable release, so
+        toggling the HUD off and on brought back a game the producer had cleared,
+        which a restart then held cleared again. Only an explicit re-read
+        (`ReloadHudPath`) ends that hold.
+        """
+        async with cls._lock():
+            cls._reset_side_preservation()
+            latest = cls.hud_watcher.latest_game_data if cls.hud_watcher else None
+            if not latest or not cls._hud_targets:
+                return
+            if cls._released_frame and cls._frame_sig(latest) == cls._released_frame:
+                cls._feed_released = True
+                return
+            parsed = cls._preserve_player_sides(cls.parse_game_data(latest))
+            cls.current_game = parsed
+            swaps = await cls._apply_game_to_state(parsed)
+            await cls._evaluate_match_gates(parsed)
+            for sb in cls._hud_targets:
+                swapped = swaps.get(sb, cls._sides_swapped)
+                StatsTracker.set_sides_swapped(sb, swapped)
+                await StatsTracker.push_stats_to_state(sb, swapped)
+            await State.Save()
 
     @staticmethod
     def _frame_sig(game_json: dict | None) -> str | None:
@@ -969,13 +1000,6 @@ class RioGameDataProvider:
         stale = [k for k in keys if deep_get(State.state, k, "")]
         if stale:
             await State.UnsetBatch(stale)
-
-    @classmethod
-    def _swap_entrants(cls, parsed: dict) -> dict:
-        """Swap entrants[0] and entrants[1] along with their scores."""
-        parsed["entrants"].reverse()
-        parsed["team1score"], parsed["team2score"] = parsed["team2score"], parsed["team1score"]
-        return parsed
 
     @classmethod
     async def toggle_sides_swapped(cls):

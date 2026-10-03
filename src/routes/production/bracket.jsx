@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useStateStore } from '../../context/store';
 import { Text } from '../../components/ui/primitives';
 import { notifications } from '../../lib/notify';
+import { makeReq } from '../../lib/api';
 import { SelectRow } from './kit';
 
 /*
@@ -24,14 +25,8 @@ import { SelectRow } from './kit';
  * re-pulls when start.gg moves on.
  */
 
-async function post(url) {
-    const r = await fetch(url, { method: 'POST' });
-    if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(d?.detail || `HTTP ${r.status}`);
-    }
-    return r.json().catch(() => ({}));
-}
+const req = makeReq();
+const post = (url) => req(url, { method: 'POST' });
 
 // Shared by the bracket source's stage and the lower-third's bracket slot, so
 // the two surfaces can never disagree about what's loaded.

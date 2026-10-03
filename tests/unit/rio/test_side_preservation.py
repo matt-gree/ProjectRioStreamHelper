@@ -422,11 +422,12 @@ def test_is_new_game_by_game_id(prev_id, game_id, expected):
     assert P._is_new_game(1, game_id) is expected
 
 
-# --- _swap_entrants ---
+# --- _orient_copy ---
 
-def test_swap_entrants_reverses_sides_and_scores():
+def test_orient_copy_reverses_sides_and_scores_without_touching_the_input():
     parsed = make_parsed("A", "B")
     parsed["team1score"], parsed["team2score"] = 3, 5
-    out = P._swap_entrants(parsed)
+    out = P._orient_copy(parsed)
     assert left(out) == "B" and right(out) == "A"
     assert out["team1score"] == 5 and out["team2score"] == 3
+    assert left(parsed) == "A" and parsed["team1score"] == 3

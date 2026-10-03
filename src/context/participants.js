@@ -30,14 +30,11 @@ export const logoUrl = (row) => (row?.logo
 
 const req = makeReq("/api/v1/participants");
 
-/* A file upload (multipart) with the server's `detail` as the error. */
-async function postFile(path, file) {
+/* A file upload (multipart). */
+function postFile(path, file) {
     const body = new FormData();
     body.append("file", file);
-    const resp = await fetch(`/api/v1/participants${path}`, { method: "POST", body });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(data?.detail || `Request failed: ${resp.status}`);
-    return data;
+    return req(path, { method: "POST", body });
 }
 
 export const useParticipantsStore = create((set, get) => ({

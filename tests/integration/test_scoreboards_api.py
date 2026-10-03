@@ -291,6 +291,22 @@ async def test_same_mode_write_does_not_clear_state(client, set_setting):
     assert Settings.Get("scoreboards.binding.2.playback.gameId") == 77
 
 
+async def test_mode_change_unbinds_a_bound_match_through_the_unbind_rule(
+        client, set_setting):
+    """The wipe used to drop `score.{N}.match` as a side effect, skipping
+    `note_unbound` — so an unplayed fixture stayed `live` and was stranded out
+    of Up next for good."""
+    set_setting("project_rio.hud_enabled", False)
+    set_setting("scoreboards.active", [1, 2])
+    await State.Set("match.1", {**default_match(), "stage": "live"})
+    await State.Set("score.2.match", 1)
+
+    client.put("/api/v1/scoreboards/2/binding", params={"kind": "rotate"})
+
+    assert deep_get(State.state, "score.2.match") is None
+    assert deep_get(State.state, "match.1.stage") == "draft"
+
+
 def test_set_binding_accepts_legacy_set_alias_for_rotate(client, set_setting):
     set_setting("project_rio.hud_enabled", False)
     set_setting("scoreboards.active", [1])
@@ -543,3 +559,63 @@ def test_a_cleared_hud_game_stays_cleared_through_a_restart(client, monkeypatch)
 
 def test_clear_game_404s_on_a_board_that_does_not_exist(client):
     assert client.post("/api/v1/scoreboards/99/clear-game").status_code == 404
+
+
+def test_board_1_cannot_be_removed_even_beside_others(client, set_setting):
+    """Board 1 is where a layout with no `?scoreboard=` reads and the only board
+    the HUD feeds — removing it emptied both with nothing saying why."""
+    set_setting("scoreboards.active", [1, 2])
+    assert client.delete("/api/v1/scoreboards/1").status_code == 400
+    assert Settings.Get("scoreboards.active") == [1, 2]
+
+
+def _hud_frame(name="game1_start"):
+    """A real HUD frame in the watcher's flat shape."""
+    from pathlib import Path
+
+    import orjson
+
+    from server.rio.hud_watcher import HudWatcher
+    from server.rio.pyrio.stat_file_parser import HudObj
+
+    path = Path(__file__).resolve().parents[1] / "data" / "hud" / f"{name}.json"
+    return HudWatcher._convert_hud_data_format(HudObj(orjson.loads(path.read_bytes())))
+
+
+def test_turning_the_hud_on_reseats_the_cached_frame_on_board_1(
+        client, monkeypatch, set_setting):
+    frame = _hud_frame()
+
+    class Watcher:
+        latest_game_data = frame
+
+    monkeypatch.setattr(RioGameDataProvider, "hud_watcher", Watcher())
+    set_setting("project_rio.hud_enabled", False)
+
+    client.put("/api/v1/scoreboards/hud-enabled", params={"enabled": "true"})
+
+    assert RioGameDataProvider._hud_targets == [1]
+    assert deep_get(State.state, "score.1.game_id") == frame["game_id"]
+
+
+def test_toggling_the_hud_does_not_bring_back_a_game_cleared_by_hand(
+        client, monkeypatch, set_setting):
+    """The toggle re-applied the cached frame without asking whether the producer
+    had cleared it, so off → on resurrected the game — while a restart, which
+    does ask, held it cleared. Only Re-read HUD brings a cleared game back."""
+    frame = _hud_frame()
+
+    class Watcher:
+        latest_game_data = frame
+
+    monkeypatch.setattr(RioGameDataProvider, "hud_watcher", Watcher())
+    set_setting("project_rio.hud_enabled", True)
+    asyncio.run(RioGameDataProvider.reseat_hud())
+    assert deep_get(State.state, "score.1.game_id") == frame["game_id"]
+
+    client.post("/api/v1/scoreboards/1/clear-game")
+    client.put("/api/v1/scoreboards/hud-enabled", params={"enabled": "false"})
+    client.put("/api/v1/scoreboards/hud-enabled", params={"enabled": "true"})
+
+    assert deep_get(State.state, "score.1.game_id") is None
+    assert RioGameDataProvider._feed_released is True

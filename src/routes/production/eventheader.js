@@ -18,7 +18,7 @@ import { stageSettingsSet } from './controls';
  * the stage panel's ribbons and the rack/rail subject row — and a band's
  * contents was hardcoded in both, in two different orders, before it was
  * arrangeable at all. The server owns the same census in EVENTHEADER_FIELDS
- * (server/settings.py), which migrates and heals the stored lists; the two are
+ * (server/settings_migrations.py), which migrates and heals the stored lists; the two are
  * pinned against each other in eventheader.test.jsx.
  */
 

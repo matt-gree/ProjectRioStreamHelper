@@ -120,7 +120,7 @@ async def test_metadata_resolves_with_the_freeze_script_unavailable(monkeypatch,
     behaviour, and it went green locally while failing the moment it ran
     anywhere clean.
     """
-    import server.settings as settings
+    import server.version as version
 
     frozen = tmp_path / "_version.py"
     frozen.write_text(
@@ -130,12 +130,27 @@ async def test_metadata_resolves_with_the_freeze_script_unavailable(monkeypatch,
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(settings, "_load_freeze_version_module", lambda: None)
-    monkeypatch.setattr(settings, "_frozen_version_file", lambda: frozen)
-    meta = settings._resolve_metadata()
+    monkeypatch.setattr(version, "_load_freeze_version_module", lambda: None)
+    monkeypatch.setattr(version, "_frozen_version_file", lambda: frozen)
+    meta = version.resolve_metadata()
 
     assert meta.get("authors"), (
         "with the freeze script absent, metadata must still come from the "
         "generated server/_version.py — this is the frozen build's only source"
     )
     assert meta.get("name") == "ProjectRioStreamHelper"
+
+
+def test_frozen_build_resolves_its_version_without_the_script(tmp_path, monkeypatch):
+    """The version takes the same frozen path as the metadata — the one every
+    packaged build runs, since `scripts/` is not bundled."""
+    import server.version as version
+
+    frozen = tmp_path / "_version.py"
+    frozen.write_text('VERSION = "9.9.9-test"\nMETADATA = {}\n', encoding="utf-8")
+    monkeypatch.setattr(version, "_load_freeze_version_module", lambda: None)
+    monkeypatch.setattr(version, "_frozen_version_file", lambda: frozen)
+    assert version.resolve_version() == "9.9.9-test"
+
+    frozen.unlink()
+    assert version.resolve_version() == version.FALLBACK_VERSION

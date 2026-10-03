@@ -34,7 +34,7 @@ if _freeze.is_file():
 # not shipped in a year, while this script sat two lines above resolving the
 # real one. Read it back from the file we just wrote.
 # Loaded by PATH, not by import: the file is `freeze-version.py` and a hyphen
-# is not a legal module name. server/settings.py already reaches it this way.
+# is not a legal module name. server/version.py already reaches it this way.
 def _resolve_app_version() -> str:
     import importlib.util
     try:

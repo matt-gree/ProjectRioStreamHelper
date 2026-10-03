@@ -787,3 +787,18 @@ async def test_the_old_gc_overlay_port_is_kept_as_a_record(isolate_user_data):
     _write_settings(isolate_user_data, {"controller_overlay": {"port": 8070, "auto_start": True}})
     await Settings.Load()
     assert Settings.settings["controller_overlay"] == {"legacy_port": 8070, "auto_start": True}
+
+
+async def test_an_install_that_removed_board_1_gets_it_back(isolate_user_data):
+    """Board 1 was removable before the guard; such an install is healed on load
+    rather than left with every `?scoreboard=`-less source and the HUD on nothing."""
+    _write_settings(isolate_user_data, {"scoreboards": {
+        "active": [2, 3],
+        "binding": {"2": {"playback": {"mode": "rotate"}}},
+        "binding_schema": 2,
+    }})
+    await Settings.Load()
+    sb = Settings.settings["scoreboards"]
+    assert sb["active"] == [1, 2, 3]
+    assert sb["binding"]["1"]["playback"]["mode"] == "single"
+    assert sb["binding"]["2"]["playback"]["mode"] == "rotate"

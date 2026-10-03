@@ -1,15 +1,8 @@
 import { useState, useCallback } from 'react';
+import { makeReq } from '../lib/api';
 
 const BASE = '/api/v1/startgg';
-
-async function api(path, options = {}) {
-    const resp = await fetch(`${BASE}${path}`, options);
-    const data = await resp.json();
-    if (!resp.ok && !data.error) {
-        throw new Error(`Request failed: ${resp.status}`);
-    }
-    return data;
-}
+const api = makeReq(BASE);
 
 /**
  * Tournament hook for the start.gg provider.

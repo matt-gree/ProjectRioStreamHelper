@@ -622,7 +622,7 @@ const BoardDeskRow = memo(function BoardDeskRow({
                         + `?scoreboard=${desk.board} will have nothing to draw.`}
                     onRemove={() => removeScoreboard(desk.board)}
                     disabled={!canRemove}
-                    disabledHint="The rig always keeps one board"
+                    disabledHint="Scoreboard 1 always stays — sources with no board set read it, and the HUD feeds it"
                 />
             )}
         />
@@ -683,7 +683,7 @@ const RigSection = memo(function RigSection({
                 <BoardDeskRow
                     key={desk.id} desk={desk} selection={selection}
                     onSelect={onSelect} pinned={pinned} onPinToggle={onPinToggle}
-                    canRemove={rows.length > 1}
+                    canRemove={desk.board !== 1}
                 />
             ))}
         </div>

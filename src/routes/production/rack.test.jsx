@@ -293,14 +293,16 @@ describe('Rack rig', () => {
         expect(fetchMock).toHaveBeenCalledWith('/api/v1/scoreboards/2', { method: 'DELETE' });
     });
 
-    // The rig always keeps one board, so the last row's remove is unavailable and
-    // says why, rather than being an error the producer discovers by clicking.
-    it('will not remove the last board', () => {
-        rig([1]);
+    // Board 1 always stays — a source with no ?scoreboard= reads it and the HUD
+    // feeds only it — so its remove is unavailable and says why, even with
+    // other boards beside it, while theirs stay live.
+    it('will not remove board 1, even when it is not the last board', () => {
+        rig([1, 2]);
         ui(<Rack />);
         const remove = screen.getByRole('button', { name: 'Remove Scoreboard 1' });
         expect(remove).toBeDisabled();
-        expect(remove).toHaveAttribute('title', 'The rig always keeps one board');
+        expect(remove.getAttribute('title')).toMatch(/Scoreboard 1 always stays/);
+        expect(screen.getByRole('button', { name: 'Remove Scoreboard 2' })).toBeEnabled();
     });
 
     /*

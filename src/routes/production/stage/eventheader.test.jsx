@@ -89,7 +89,7 @@ describe('overlay-settings whitelist parity', () => {
  */
 describe('the field census agrees across runtimes', () => {
     const serverFields = () => {
-        const py = readFileSync('server/settings.py', 'utf8');
+        const py = readFileSync('server/settings_migrations.py', 'utf8');
         const block = py.match(/EVENTHEADER_FIELDS = \{([\s\S]*?)\n\}/)[1];
         return [...block.matchAll(/\("(\w+)", "(\w+)"\)/g)].map(m => m[1]);
     };

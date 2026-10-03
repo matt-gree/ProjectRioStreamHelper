@@ -37,7 +37,7 @@ async def rio_swap(
     The swap is applied to all HUD-target scoreboards since they all mirror
     the same HUD-derived game.
     """
-    from server.api.v1.scoreboards import hud_target_scoreboards
+    from server.bindings import hud_target_scoreboards
     hud_targets = hud_target_scoreboards()
     if scoreboard_number is not None and scoreboard_number not in hud_targets:
         raise HTTPException(

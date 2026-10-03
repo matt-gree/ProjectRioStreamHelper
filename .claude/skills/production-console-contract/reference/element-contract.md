@@ -482,7 +482,7 @@ position, not an identity).
   of the seven fields had any text of its own. Its bands are
   `overlays.eventheader.bands.{header,footer}` now — ordered arrays of
   `{id, on, text}` (`src/routes/production/eventheader.js`,
-  `EVENTHEADER_FIELDS` in `server/settings.py`) — authored as two Lower-Third
+  `EVENTHEADER_FIELDS` in `server/settings_migrations.py`) — authored as two Lower-Third
   ribbons on the stage. Three rules came out of it:
   - **The override is the same field for every entry.** `text` beats the source,
     blank falls back to it, which is what makes `message` stop being a special

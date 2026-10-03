@@ -18,7 +18,7 @@ About panel and on the GitHub Release. Resolution order:
 Usage:
   As a library (by PATH — the filename's hyphen is not a legal module
   name, so a plain `import freeze_version` has never worked; both real
-  callers, server/settings.py and PRSH.spec, load it like this):
+  callers, server/version.py and PRSH.spec, load it like this):
       import importlib.util
       spec = importlib.util.spec_from_file_location(
           "_freeze_version", "scripts/freeze-version.py")

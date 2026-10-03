@@ -2,7 +2,6 @@ from server.utils.router import method
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from server.bindings import DEFAULT_BINDING, clear_stats_tag, get_binding, transport
-from server.bindings import hud_target_scoreboards as _hud_target_scoreboards
 from server.postgame import PostGame
 from server.rio.provider import RioGameDataProvider, release_and_clear_game
 from server.rio.rotation import PoolManager
@@ -22,16 +21,6 @@ def _lowest_available_id(active: list[int]) -> int:
     while n in used:
         n += 1
     return n
-
-
-def hud_target_scoreboards() -> list[int]:
-    """Scoreboards that mirror the local HUD game — at most board 1.
-
-    HUD is a global transport on board 1 (Settings `project_rio.hud_enabled`),
-    so this returns `[1]` when board 1 is active and enabled, else `[]`.
-    Kept as a re-export for existing importers (see server/bindings.py).
-    """
-    return _hud_target_scoreboards()
 
 
 @method(
@@ -85,10 +74,13 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     """Remove a scoreboard tab and clear its state."""
     active = Settings.Get("scoreboards.active", [1])
 
-    if len(active) <= 1:
-        raise HTTPException(status_code=400, detail="Cannot remove last scoreboard")
     if sb_id not in active:
         raise HTTPException(status_code=404, detail="Scoreboard not found")
+    # Board 1 is load-bearing: every layout without `?scoreboard=` reads it, and
+    # the HUD feeds it and nothing else. Settings.Load heals an install that
+    # lost it before this guard existed.
+    if sb_id == 1:
+        raise HTTPException(status_code=400, detail="Scoreboard 1 cannot be removed")
 
     # Clear state for this scoreboard. `score.{N}` is not all of it — the
     # post-game box score is its own top-level namespace (`postgame.{N}`) plus
@@ -97,8 +89,6 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     # id re-use then handed to the next board (see the teardown note below).
     await State.Unset(f"score.{sb_id}")
     await PostGame.clear(sb_id)
-
-    was_hud = transport(sb_id) == "hud"
 
     # Tear down any background work owned by this scoreboard before its
     # settings are removed, so resume-on-startup can't pick it back up.
@@ -132,10 +122,8 @@ async def remove_scoreboard(sb_id: int, session_id: str | None = None) -> ORJSON
     await Settings.Unset(f"scoreboards.match_queue.{sb_id}")
 
     StatsTracker.reset_scoreboard(sb_id)
-    if was_hud:
-        RioGameDataProvider._reset_side_preservation()
-    else:
-        RioGameDataProvider.refresh_hud_targets()
+    # Never a HUD board — only board 1 carries the HUD, and it cannot be removed.
+    RioGameDataProvider.refresh_hud_targets()
 
     await State.Save()
     return ORJSONResponse({"success": True, "active": active})
@@ -190,6 +178,15 @@ async def set_scoreboard_binding(
     # (the previous mode's game no longer applies). A HUD-transport board is left
     # alone — the HUD writer owns it.
     if mode_changed and transport(sb_id) != "hud":
+        # A bound fixture comes off through `_unbind_board`, never as a side
+        # effect of the wipe below: `score.{N}.match` lives under `score.{N}`, so
+        # the wipe used to drop the binding with no `note_unbound` (an unplayed
+        # fixture stayed `live` and so never came back into Up next) and no
+        # re-settle. A rotating board refuses a match anyway.
+        if deep_get(State.state, f"score.{sb_id}.match") is not None:
+            from server.api.v1.match import _unbind_board
+
+            await _unbind_board(sb_id)
         await Settings.Set(f"scoreboards.binding.{sb_id}.playback.gameId", None)
         await State.Set(f"score.{sb_id}", {})
         StatsTracker.reset_scoreboard(sb_id)
@@ -215,20 +212,9 @@ async def set_hud_enabled(
     editable again.
     """
     await Settings.Set("project_rio.hud_enabled", bool(enabled))
-
-    # Side-preservation caches the HUD-target list; reset recomputes it.
-    RioGameDataProvider._reset_side_preservation()
-
-    if enabled and RioGameDataProvider.hud_watcher \
-            and RioGameDataProvider.hud_watcher.latest_game_data:
-        parsed = RioGameDataProvider.parse_game_data(
-            RioGameDataProvider.hud_watcher.latest_game_data
-        )
-        parsed = RioGameDataProvider._preserve_player_sides(parsed)
-        RioGameDataProvider.current_game = parsed
-        await RioGameDataProvider._apply_game_to_state(parsed)
-
-    await State.Save()
+    # Recomputes the HUD targets either way; with the HUD on, board 1 is one of
+    # them and gets the cached frame (unless the producer cleared it by hand).
+    await RioGameDataProvider.reseat_hud()
     return ORJSONResponse({"success": True, "hud_enabled": bool(enabled)})
 
 
@@ -384,17 +370,7 @@ async def reset_scoreboard_state(session_id: str | None = None) -> ORJSONRespons
     await State.Save()
 
     # 5. Reset side-preservation and re-seat the current HUD frame on board 1.
-    RioGameDataProvider._reset_side_preservation()
-    if RioGameDataProvider.hud_watcher \
-            and RioGameDataProvider.hud_watcher.latest_game_data \
-            and 1 in RioGameDataProvider._hud_targets:
-        parsed = RioGameDataProvider.parse_game_data(
-            RioGameDataProvider.hud_watcher.latest_game_data
-        )
-        parsed = RioGameDataProvider._preserve_player_sides(parsed)
-        RioGameDataProvider.current_game = parsed
-        await RioGameDataProvider._apply_game_to_state(parsed)
-        await State.Save()
+    await RioGameDataProvider.reseat_hud()
 
     return ORJSONResponse({"success": True, "active": active})
 

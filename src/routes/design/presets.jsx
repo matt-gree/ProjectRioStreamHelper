@@ -9,6 +9,7 @@ import { FileButton } from '../../components/ui/file-button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { cn } from '../../lib/utils';
 import { notifications } from '../../lib/notify';
+import { makeReq } from '../../lib/api';
 import { useSettingsStore } from '../../context/store';
 import { useDesignPackages } from './designPackage';
 import {
@@ -27,12 +28,7 @@ import {
  * preset or it does not, and a flag could only disagree with that.
  */
 
-const api = async (path, init) => {
-    const r = await fetch(`/api/v1/branding/presets/${path}`, init);
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data?.detail || `Request failed (${r.status})`);
-    return data;
-};
+const api = makeReq('/api/v1/branding/presets/');
 
 const getOverlays = () => useSettingsStore.getState()?.overlays ?? {};
 

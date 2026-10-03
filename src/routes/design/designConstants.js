@@ -426,7 +426,7 @@ export const LAYOUT_SETTINGS = {
         // ordered list now (`overlays.eventheader.bands`, one entry per field
         // carrying its position, its eye and a text override), authored on the
         // band ribbons on this element's stage. See src/routes/production/
-        // eventheader.js and EVENTHEADER_FIELDS in server/settings.py.
+        // eventheader.js and EVENTHEADER_FIELDS in server/settings_migrations.py.
         //
         // What stays here is what is genuinely a setting: whether each BAND is
         // drawn at all, where it sits, and how both of them look.
@@ -458,11 +458,11 @@ export const LAYOUT_SETTINGS = {
         // found by trial, and two elements set to the same size said 100 and
         // 34. The band, the gap between fields and the bar's corner still
         // derive from it, so only the unit moved. Migrated by
-        // _eventheader_font_px in server/settings.py against the same 34.
+        // _eventheader_font_px in server/settings_migrations.py against the same 34.
         // ONE PER BAND, because the two bands are not one thing said twice:
         // the top strip names the competition and the bottom carries round and
         // phase, and sizing the heading is no reason to resize the footnote.
-        // Both moves live in _eventheader_font_px (server/settings.py), which
+        // Both moves live in _eventheader_font_px (server/settings_migrations.py), which
         // walks fontScale -> fontSize -> the pair against the same 34.
         { key: 'headerFontSize', group: 'Both bands', type: 'number-override', label: 'Top Font Size', description: 'Type size for the header row; its band grows with it', defaultValue: 34, min: 16, max: 72, step: 1, suffix: 'px' },
         { key: 'footerFontSize', group: 'Both bands', type: 'number-override', label: 'Bottom Font Size', description: 'Type size for the footer row; its band grows with it', defaultValue: 34, min: 16, max: 72, step: 1, suffix: 'px' },
