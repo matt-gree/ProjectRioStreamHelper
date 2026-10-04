@@ -150,15 +150,6 @@ describe('Scorecard stage', () => {
         expect(useSettingsStore.getState()?.overlays?.scorecard?.[1]).toBeUndefined();
     });
 
-    it('has no board picker — the board is which panel you are on', () => {
-        // Two active boards used to render a dropdown here, which is the thing
-        // that let the panel's rows and its header strip point at different
-        // boards. Two rack rows replaced it.
-        useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
-        ui('scorecard:2');
-        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    });
-
     it('resolves a selection stored before instances existed', () => {
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('scorecard');

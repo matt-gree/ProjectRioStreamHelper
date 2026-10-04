@@ -14,7 +14,7 @@ See [README.md](README.md) for end-user docs and [TESTING.md](TESTING.md) for th
 ## Agent Quickstart
 
 ```bash
-./venv/bin/python -m pytest        # backend suite (~13s)
+./venv/bin/python -m pytest        # backend suite + pyrio's (~15s)
 npm run test:run                   # frontend suite (vitest)
 npm run vite:lint                  # ESLint — src/ + public/layout/lib/ (flat config: eslint.config.js)
 npm run build                      # frontend production build

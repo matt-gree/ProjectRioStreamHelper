@@ -53,7 +53,9 @@ pytest-cov = ">=5.0"
 # Auto mode: `async def test_*` runs without per-test decorators — almost every
 # state path in this app is async.
 asyncio_mode = "auto"
-testpaths = ["tests"]
+# pyrio's own suite runs here too: the submodule has no CI of its own, and PRSH
+# puts several of its outputs (the batting line, the HUD game-over rule) on air.
+testpaths = ["tests", "server/rio/pyrio/tests"]
 # Put the repo root on sys.path so tests can `import server` when run from root.
 pythonpath = ["."]
 

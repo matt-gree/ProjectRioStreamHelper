@@ -6,8 +6,8 @@ verification recipes) lives in [`.claude/skills/run-and-verify/SKILL.md`](.claud
 this file is the design it follows.
 
 ```bash
-./venv/bin/python -m pytest          # backend  (~1,540 tests, ~13s)
-npm run test:run                     # frontend (vitest, ~1,510 tests / 76 files, ~25s)
+./venv/bin/python -m pytest          # backend  (~1,770 tests incl. pyrio's, ~15s)
+npm run test:run                     # frontend (vitest, ~1,650 tests / 86 files, ~25s)
 npm run vite:lint                    # ESLint, --max-warnings 0
 ```
 
@@ -45,8 +45,10 @@ In priority order:
 6. **Code, tests and CLAUDE.md never disagree.** A change to behavior a test
    encodes updates the test in the same commit.
 
-Non-goals: coverage targets, testing React/Radix internals, testing pyrio (it is
-a submodule with its own tests), pixel-diffing overlays.
+Non-goals: coverage targets, testing React/Radix internals, pixel-diffing
+overlays. pyrio's behaviour is tested in pyrio's own `tests/` (it is a
+submodule), which PRSH's `testpaths` collects — the submodule has no CI of its
+own, and several of its outputs go on air.
 
 ---
 

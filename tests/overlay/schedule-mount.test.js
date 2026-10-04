@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-    scheduleRows, plateFor, blankReason, DEFAULTS, RAIL_OPACITY, DONE_DIM,
+    scheduleRows, plateFor, blankReason, DEFAULTS, RAIL_OPACITY, DONE_DIM, mountSchedule,
 } from '../../public/layout/lib/schedule-mount.js';
 
 /*
@@ -36,6 +36,26 @@ const stateOf = (ids, matches) => ({
     schedule: { queue: ids, title: 'Upcoming Matches' },
     match: matches,
 });
+
+// The real mount over the shipped theme; jsdom has no SVG text measurement.
+async function mountWith(ids, matches) {
+    Object.defineProperty(globalThis.SVGElement.prototype, 'getComputedTextLength', {
+        configurable: true, writable: true, value() { return 0; },
+    });
+    globalThis.OverlayBase = {
+        BASE_URL: '', deepGet, settings: {},
+        // Keep the played row on the board, so there is one to dim.
+        readSetting: (_t, k, d) => (k === 'showDecided' ? true : d),
+        settingOn: (v, d) => (v == null ? d : !!v),
+        applyDesignSettings() {}, clearDesignSettings() {}, setBlank() {},
+    };
+    const theme = readFileSync('public/design/default/schedule.svg', 'utf8');
+    globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => theme }));
+    document.body.innerHTML = '';
+    const host = document.body.appendChild(document.createElement('div'));
+    await mountSchedule({ host }).update(stateOf(ids, matches), {});
+    return host;
+}
 
 describe('scheduleRows', () => {
     it('drops decided matches by default, and keeps them when asked', () => {
@@ -206,12 +226,17 @@ describe('the rail', () => {
      * which reads as a rendering fault rather than as a result (the same trap
      * `rowOutcome` documents for the matchup cards).
      */
-    it('dims a played row on the group and nowhere else', () => {
-        const src = readFileSync('public/layout/lib/schedule-mount.js', 'utf8');
-        const bind = src.slice(src.indexOf('function bindRow'), src.indexOf('function placeCard'));
-        expect(DONE_DIM).toBe('0.45');
-        expect(bind).toContain('clone.setAttribute(\'opacity\'');
-        expect(bind.match(/DONE_DIM/g)).toHaveLength(1);
+    it('dims a played row on the group and nowhere else', async () => {
+        const host = await mountWith(['1', '2'], {
+            1: match({ decided: 1 }),
+            2: match({ label: 'Losers Final' }),
+        });
+        const row = (id) => host.querySelector(`[data-row="${id}"]`);
+        const rail = row(1).querySelector('[data-part="rail"]');
+        expect(row(1).getAttribute('opacity')).toBe(DONE_DIM);
+        expect(rail.style.fillOpacity).toBe(RAIL_OPACITY.done);
+        expect(rail.getAttribute('opacity')).not.toBe(DONE_DIM);   // no second, multiplying dim
+        expect(row(2).getAttribute('opacity')).toBe('1');
     });
 });
 

@@ -8,9 +8,9 @@ description: How to run PRSH's test suites, boot the app for verification, and s
 ## The commands
 
 ```bash
-./venv/bin/python -m pytest                  # backend suite (~1,540 tests, ~13s)
+./venv/bin/python -m pytest                  # backend suite (~1,770 tests incl. pyrio's, ~15s)
 ./venv/bin/python -m pytest tests/unit/rio/test_side_preservation.py -k match   # one test
-npm run test:run                             # frontend suite (vitest, ~1,510 tests / 76 files, ~25s)
+npm run test:run                             # frontend suite (vitest, ~1,650 tests / 86 files, ~25s)
 npx vitest run src/routes/production/rack.test.jsx   # one frontend file
 npm run vite:lint                            # ESLint, --max-warnings 0 (CI fails on any)
 npm run build                                # frontend production build (also a type/import check)

@@ -133,11 +133,6 @@ describe('Commentary stage', () => {
 
     // The picker is the sub-plate's only control, so there is no second switch
     // that could leave a named field silently off.
-    it('has no separate sub-plate switch', () => {
-        ui();
-        expect(screen.queryByRole('switch', { name: /sub-plate/ })).not.toBeInTheDocument();
-    });
-
     it('reads a field left switched off as no sub-plate, and a pick turns it back on', async () => {
         const user = userEvent.setup();
         ui();

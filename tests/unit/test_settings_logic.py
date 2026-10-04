@@ -1,7 +1,6 @@
 """Settings pure helpers: defaults merge + secret-key redaction.
 
-Settings.Load migrations (host→allow_lan, overlay schema v2) are Tier 2 and live
-in a separate file once the async/tmp_path harness for them lands.
+Settings.Load migrations live in test_settings_migrations.py.
 
 SECRET_KEYS is currently empty (the Challonge API key was its only member), so
 the redaction tests patch in a fake secret key to keep the mechanism covered.

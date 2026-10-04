@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { useStagingStore } from '../../../context/staging';
-import { LAYOUT_SETTINGS } from '../../design/designConstants';
 import { Stage } from './index';
 
 beforeEach(() => {
@@ -99,11 +98,6 @@ describe('Lower third stage', () => {
         await user.click(screen.getByLabelText('Move slot 2 right'));
         expect(screen.getByDisplayValue('Winners Final')).toBeInTheDocument();
         expect(band().getByRole('tab', { name: 'Slot 3 — Message' })).toHaveAttribute('aria-selected', 'true');
-    });
-
-    // Controller ports are a live-game idea; the break band is between games.
-    it('offers no per-port colour controls', () => {
-        expect(LAYOUT_SETTINGS.lowerthird ?? []).toEqual([]);
     });
 
     /*

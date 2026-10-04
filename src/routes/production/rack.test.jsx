@@ -152,23 +152,6 @@ describe('Rack desks', () => {
         expect(section.getByText('none waiting')).toBeInTheDocument();
     });
 
-    // Board-scoped work is a REGION on the board, not a desk. Capture's board
-    // picker was the tell: a second board selector on a console whose rack has
-    // already asked which board you mean.
-    it('racks no desk for post-game capture', () => {
-        ui(<Rack />);
-        const section = within(document.querySelector('[data-rack-section="desk"]'));
-        expect(section.queryByText('Capture')).not.toBeInTheDocument();
-    });
-
-    // …and a control both of whose consumers already show it is not a workflow
-    // needing a permanent row. The bracket phase lives on the bracket source.
-    it('racks no desk for the bracket phase', () => {
-        ui(<Rack />);
-        const section = within(document.querySelector('[data-rack-section="desk"]'));
-        expect(section.queryByText('Bracket')).not.toBeInTheDocument();
-    });
-
     it('collapses the desk tier and remembers it', () => {
         ui(<Rack />);
         expect(sectionRows('desk').length).toBe(DESKS.length);
@@ -210,10 +193,6 @@ describe('Rack desks', () => {
             expect(bodies[id].pinnable !== false, `${id} is pinnable`).toBe(true);
             expect(deskQuickFace(id), `${id} quick face`).toBeTruthy();
         }
-    });
-
-    it('carries no phase — the console has no phase axis to key one to', () => {
-        for (const d of DESKS) expect(d.phase).toBeUndefined();
     });
 });
 

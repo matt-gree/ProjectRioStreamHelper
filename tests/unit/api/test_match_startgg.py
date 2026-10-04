@@ -99,33 +99,20 @@ async def test_apply_never_stomps_existing_decided():
 
 
 @pytest.mark.asyncio
-async def test_apply_missing_bestof_keeps_existing_format():
+@pytest.mark.parametrize("total_games", [None, 0])
+async def test_apply_with_no_totalgames_keeps_existing_format(total_games):
     m = await make_match()
     await State.Set(f"match.{m}.format.bestOf", 5)
-    await apply_startgg_set(m, sgg_set(totalGames=None), 555)
+    await apply_startgg_set(m, sgg_set(totalGames=total_games), 555)
     assert Match.get(m)["format"]["bestOf"] == 5
 
 
 @pytest.mark.asyncio
-async def test_apply_zero_totalgames_keeps_existing_format():
-    m = await make_match()
-    await State.Set(f"match.{m}.format.bestOf", 5)
-    await apply_startgg_set(m, sgg_set(totalGames=0), 555)
-    assert Match.get(m)["format"]["bestOf"] == 5
-
-
-@pytest.mark.asyncio
-async def test_apply_even_totalgames_bumped_to_next_odd():
+@pytest.mark.parametrize("total_games, best_of", [(4, 5), (3, 3)])
+async def test_apply_bumps_an_even_totalgames_to_the_next_odd(total_games, best_of):
     # _need() (server/match.py) decides a series by majority (bestOf//2+1);
     # an even bestOf has no majority and can end all-square. Normalize to
     # the next odd number so the series is always decidable.
     m = await make_match()
-    await apply_startgg_set(m, sgg_set(totalGames=4), 555)
-    assert Match.get(m)["format"]["bestOf"] == 5
-
-
-@pytest.mark.asyncio
-async def test_apply_odd_totalgames_unchanged():
-    m = await make_match()
-    await apply_startgg_set(m, sgg_set(totalGames=3), 555)
-    assert Match.get(m)["format"]["bestOf"] == 3
+    await apply_startgg_set(m, sgg_set(totalGames=total_games), 555)
+    assert Match.get(m)["format"]["bestOf"] == best_of

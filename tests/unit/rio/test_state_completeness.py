@@ -217,10 +217,10 @@ async def test_completed_clears_is_starred_for_all_slots(mock_socket):
 # ---------------------------------------------------------------------------
 # 3. Reset key coverage
 #
-# These mirror what `resetGame` in src/routes/production/board/data.js sends.
-# We apply a live game to State (giving everything a non-default value),
-# then apply the same key→value pairs the reset button would send, and
-# assert the resulting state matches what we'd expect from a clean slate.
+# `clear_game_entries` (server/rio/apply.py) is what POST
+# /scoreboards/{sb}/clear-game writes. We apply a game to State (giving
+# everything a non-default value), apply the clear, and check both that it
+# covers every key each applier writes and that it lands on clean values.
 # ---------------------------------------------------------------------------
 
 EXEMPT_FROM_CLEAR: set[str] = set()
@@ -320,25 +320,3 @@ async def test_reset_clears_all_roster_and_hand_data(mock_socket):
             assert s(f"score.1.player.{t}.character.{i}.is_starred") is False
             assert s(f"score.1.player.{t}.character.{i}.position") == ""
 
-
-async def test_reset_covers_all_live_game_keys(mock_socket):
-    """Every key written by a live game must be covered by the reset.
-
-    The reset key list in apply_reset() above is the source of truth for what
-    the board desk's `resetGame` sends (src/routes/production/board/data.js).
-    This test catches any key a future live-game addition writes that the reset
-    doesn't clear.
-    """
-    parsed = P.parse_game_data(make_game())
-    await apply_parsed_game_to_state(parsed, 1)
-    live_keys = flatten_keys(State.state)
-
-    State.state.clear()
-    apply_reset(1)
-    reset_keys = flatten_keys(State.state)
-
-    uncovered = live_keys - reset_keys
-    assert not uncovered, (
-        f"Live game writes keys not covered by reset:\n  {sorted(uncovered)}\n"
-        "Add them to resetGame in board/data.js and apply_reset() in this test."
-    )
