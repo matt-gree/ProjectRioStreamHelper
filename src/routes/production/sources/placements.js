@@ -1,15 +1,15 @@
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useObsStore } from '../../../context/obs';
-import { useStateStore } from '../../../context/store';
+import { useSettingsStore, useStateStore } from '../../../context/store';
 import { boardOfUrl } from '../../../lib/obs-binding';
-import { ELEMENTS, readsBoard } from '../elements';
+import { ELEMENTS, readsBoard, settingsTypeOf } from '../elements';
 import {
     CONTAINER_MEMBERS, containerOfSource, fedTargets, useContainerDefs,
 } from '../containers/containers';
 import {
     flipSideVariant, instanceId, parseInstanceId, sidePairVariant, slotInstanceId,
-    variantLabelFor, variantOf,
+    variantLabelFor, variantOf, variantParams,
     variantTagFor, withVariant,
 } from './instances';
 import { useActiveBoards, useBoardTag } from '../board/boards';
@@ -560,11 +560,21 @@ export function useConsolePlacements(consoleScenes) {
  * a ~278px row, and the half that repeated the element carried nothing. An
  * aliased board keeps its alias, because the producer chose it to mean something.
  */
+// The name of the look a placement's source wears, or null for Main (and for
+// an id no look answers to any more, which draws Main).
+function lookNameOf(overlays, p) {
+    const id = variantParams(p.variant).find(([k]) => k === 'look')?.[1];
+    return id ? overlays?.[settingsTypeOf(p.element)]?.looks?.[id]?.name ?? null : null;
+}
+
 export function usePlacementLabel(placements) {
     const boardTag = useBoardTag();
     // The `?team=` variant reads in the producer's side vocabulary, so the row
     // and the panel it opens name the same source the same way (../sides).
     const { mode } = useSideLabels();
+    // A source's LOOK is named by the producer, so its label lives in settings
+    // (`overlays.{type}.looks.{id}.name`) rather than in the variant table.
+    const overlays = useSettingsStore(s => s?.overlays);
     return useMemo(() => {
         const axes = new Map();
         for (const p of placements) {
@@ -595,10 +605,11 @@ export function usePlacementLabel(placements) {
                 a?.boards.size > 1 && p.board != null ? boardTag(p.board) : null,
                 (a?.variants.size > 1 || p.element.perSide)
                     ? variantLabelFor(p.element, p.variant, mode) : null,
+                lookNameOf(overlays, p),
             ].filter(Boolean).join(' · ');
             return { name: p.element.name, detail: detail || null };
         };
-    }, [placements, boardTag, mode]);
+    }, [placements, boardTag, mode, overlays]);
 }
 
 /*

@@ -221,10 +221,10 @@ export const ELEMENTS = [
          * had no panel, no preview and (with OBS closed) no row. The fed bar is
          * DELETED — mount and shell both — rather than shelved: shelving means
          * "not offered, still works", and its member entry was already gone
-         * from container-members.js, so no surface could stand it up. What
-         * survives of "a card inside a container" is `statscard`, which is the
-         * same data in the themed 2x2 art and was always the better half of the
-         * pair.
+         * from container-members.js, so no surface could stand it up. This bar
+         * is a container member in its own right (since 2026-10-04 — it had
+         * been left off the roster when the fed bar went), beside `statscard`,
+         * the same data in the themed 2x2 art.
          *
          * No `scope: 'board'` — settings are global (`overlays.statsbar.*`) and
          * its two sources differ by ?team=, which the instance grammar reads
@@ -252,6 +252,10 @@ export const ELEMENTS = [
          */
         quickFace: { rows: ['subject', 'setting'] },
         quickSettings: ['subLine'],
+        // On a container's roster it draws the CONTAINER's side, like the Stat
+        // Card — so a mirrored pair can hold it, and a Push takes the scope
+        // from the definition. Its own ?team= source still draws its own side.
+        containerScoped: true,
     },
     {
         id: 'statscard',

@@ -172,6 +172,10 @@
 
   const state = {};
   const settings = {};
+  // What the server holds. `settings` above is what this PAGE reads: the same
+  // keys with its LOOK laid over them (see projectLooks). Every write lands
+  // here and is re-projected; nothing outside this file ever sees it.
+  const rawSettings = {};
 
   let sampleState = null;     // null until a bundle is loaded — "no sample"
   let sampleSettings = null;  // flat key→value seeds, or null
@@ -203,15 +207,90 @@
    */
   function applySeeds() {
     seededKeys = [];
-    if (!sampleSettings) return;
+    if (!sampleSettings) { reproject(); return; }
     for (const [k, v] of Object.entries(sampleSettings)) {
-      if (deepGet(settings, k, null) == null) { deepSet(settings, k, v); seededKeys.push(k); }
+      if (deepGet(rawSettings, k, null) == null) { deepSet(rawSettings, k, v); seededKeys.push(k); }
     }
+    reproject();
   }
 
   function clearSeeds() {
-    for (const k of seededKeys) deepUnset(settings, k);
+    for (const k of seededKeys) deepUnset(rawSettings, k);
     seededKeys = [];
+    reproject();
+  }
+
+  /*
+   * ── Looks ───────────────────────────────────────────────────────────────
+   *
+   * A LOOK is a named variation of one element's settings —
+   * `overlays.{type}.looks.{id}` = `{ name, values }` — that a SOURCE picks
+   * with `?look={id}` (a container picks one per member, on its definition).
+   * It stores only what differs from Main, so anything it leaves alone follows
+   * Main as Main changes.
+   *
+   * It is applied HERE, to the settings object every mount reads, rather than
+   * at each mount's read sites: there are dozens of those across fifteen mounts
+   * (`overlays.{type}.{key}`, per-board `overlays.{type}.{N}.{key}`, per-side
+   * `overlays.{type}.side{T}.{key}`), and a look that every one of them had to
+   * learn would be a look that some of them forgot. Projected, a look's values
+   * simply ARE the element's settings on this page.
+   *
+   * A look outranks every scope under it — the per-board and per-side copies
+   * too — because it is the most specific thing there is: one source's choice.
+   * So its values are laid over the shared bag AND over each scope bag inside
+   * it. Look ids are unique across every element, so a page can name several
+   * (a container, one per member) and each lands only on the type that owns it.
+   * An id nothing owns any more — a deleted look — is simply Main.
+   */
+  const LOOK_SCOPE = /^(side[12]|\d+)$/;
+  const isBag = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+  const urlLooks = (previewParams.get('look') || '').split(',').map((v) => v.trim()).filter(Boolean);
+  let lookResolver = null;
+
+  function projectLooks(overlays, ids) {
+    if (!isBag(overlays) || !ids.length) return overlays;
+    let out = null;
+    for (const [type, bag] of Object.entries(overlays)) {
+      if (!isBag(bag) || !isBag(bag.looks)) continue;
+      const id = ids.find((i) => isBag(bag.looks[i]) && isBag(bag.looks[i].values));
+      if (!id) continue;
+      // A value cleared back to Main is stored as null, and must not mask Main.
+      const values = {};
+      for (const [k, v] of Object.entries(bag.looks[id].values)) if (v != null) values[k] = v;
+      const next = { ...bag };
+      for (const [k, v] of Object.entries(bag)) {
+        if (LOOK_SCOPE.test(k) && isBag(v)) next[k] = { ...v, ...values };
+      }
+      Object.assign(next, values);
+      if (!out) out = { ...overlays };
+      out[type] = next;
+    }
+    return out || overlays;
+  }
+
+  function activeLooks() {
+    const extra = lookResolver ? (lookResolver(rawSettings) || []) : [];
+    return [...urlLooks, ...extra].filter(Boolean);
+  }
+
+  // Rebuild what the page reads from what the server holds. Shallow: only the
+  // element bags a look touches are copied, the rest are the same objects.
+  function reproject() {
+    refill(settings, rawSettings);
+    const ids = activeLooks();
+    if (ids.length && rawSettings.overlays) settings.overlays = projectLooks(rawSettings.overlays, ids);
+  }
+
+  /*
+   * A page that picks its looks from SETTINGS rather than its URL — the
+   * container shell, whose members' looks live on its definition — hands in a
+   * function of the raw settings, so a change to the definition reaches the page
+   * with no reload.
+   */
+  function setLookResolver(fn) {
+    lookResolver = typeof fn === 'function' ? fn : null;
+    reproject();
   }
 
   // The producer just set a key we had seeded — it's theirs now, so leaving demo
@@ -394,7 +473,7 @@
 
       const responses = await Promise.all(fetches);
       if (responses[0]?.ok) Object.assign(liveTarget(), await responses[0].json());
-      if (fetchSettings && responses[1]?.ok) Object.assign(settings, await responses[1].json());
+      if (fetchSettings && responses[1]?.ok) { Object.assign(rawSettings, await responses[1].json()); reproject(); }
     } catch (e) {
       console.warn('[OverlayBase] Initial fetch failed:', e.message);
     }
@@ -455,9 +534,10 @@
     }
 
     function applySettingsOp(op) {
-      if (op.kind === 'set') deepSet(settings, op.key, op.value);
-      else deepUnset(settings, op.key);
+      if (op.kind === 'set') deepSet(rawSettings, op.key, op.value);
+      else deepUnset(rawSettings, op.key);
       forgetSeed(op.key);
+      reproject();
     }
 
     socket.on('connect', () => {
@@ -486,7 +566,7 @@
           const buffered = settingsBuffer;
           settingsBuffer = [];
           if (fullSettings && !fullSettings.error) {
-            refill(settings, fullSettings);
+            refill(rawSettings, fullSettings);
             applySeeds();
             for (const op of buffered) applySettingsOp(op);
             render();
@@ -1152,6 +1232,8 @@
     BASE_URL,
     state,
     settings,
+    setLookResolver,
+    projectLooks,
     get sampleActive() { return demoOn; },
     get fontGeneration() { return fontGeneration; },
     deepGet,

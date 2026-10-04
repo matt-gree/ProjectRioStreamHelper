@@ -257,13 +257,18 @@ any of them.
 - **The catalog reports containers from the definitions** (`_container_layouts`
   in `server/api/v1/layouts.py`), which is also the only place a container's
   name and native size live. The `shared/` folder is skipped entirely.
-- **The container's stage panel owns name + roster + scope + rules**
-  (`stage/container.jsx`, dispatched on `element.container`, not by id). The
-  name is the PANEL TITLE (`useContainerRename`, the board desk's idiom); the
-  roster rows carry each smaller member's anchor and nudge inline; Scope draws
-  only when a container-scoped member or a side-reading rule needs it. Deleting a definition clears
-  its feed but **never deletes the OBS source** — the console does not remove a
-  source the producer watched appear.
+- **The Containers tab owns name + roster + scope + rules + delete**
+  (`src/routes/containers/containers.jsx` over `ContainerEditor` in `containers/editor.jsx`, built around a preview of the container; members are picked in `containers/picker.jsx`, shared with the Add picker's + New), for
+  every container whether or not a scene holds a source for it — a definition
+  outlives its sources, which is why it has a home that is not a scene row. Position (anchor +
+  nudge) shows for the SELECTED member only; Scope draws only when a
+  container-scoped member or a side-reading rule needs it. **A container's
+  SOURCE panel** (`ContainerStage`, dispatched on `element.container`, not by
+  id) only flies it: Show / Hold / Hand back per member, a summary line, and
+  `Edit in Containers`, which opens the tab with it selected
+  (`useOpenOnContainersTab`). Its title is derived — the name has one home.
+  Deleting a definition clears its feed but **never deletes the OBS source** —
+  the console does not remove a source the producer watched appear.
 - **A member leaving a roster takes its dependents with it** (`detach` in
   `containers.js`): the feed if it is what the container carries, the `resting`
   state if that named it, and any automation rule that drove it. A member leaves
@@ -528,3 +533,22 @@ so a legacy pin stays removable) but **rendered from what they resolve to**.
 `togglePin` compares by resolved target, so a legacy `scoreboard` and a new
 `scoreboard:1@Game` can never sit on the rail as two cards for one source. New
 pins are written canonical, so a rail converges as it is used.
+
+## Looks — a source's own variation of its element's settings
+
+- **`?look={id}` is a variant axis (`k`)**, so a source wearing a look has its
+  own row id and two looks of one element in one scene are two rows. Main is
+  the absent param, so a source with no look keeps the id it always had. The
+  axis has no label in the variant table — the name is the producer's, in
+  settings — so `usePlacementLabel` appends it (`lookNameOf`). It is a per-half
+  axis (`PER_HALF_PARAMS`): two halves of a side pair may wear different looks.
+- **Wearing a look is a source fact, edited on the panel** (`stage/look.jsx`
+  `LookRow`, on one line with Board and Layout): a real source is re-pointed in OBS
+  (staged, like the board switch) and the panel follows its new id; a catalog
+  row keeps the pick browser-local (`prsh.ui.production.looks`) and
+  `useLookPlacement` dresses the placement in it; a container slot writes the
+  definition (`setMemberLook`).
+- **Every settings control on the panel edits the worn look** through
+  `LookContext` → `useOverlaySettings` — the body's headline controls and the
+  Style section alike, and the rail card for that placement. Never thread a
+  look prop through a body; read the context.

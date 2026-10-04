@@ -51,7 +51,7 @@ export function urlForBoard(url, board) {
 
 const pendingKey = (placement) => obsStageKey('board', [placement.item.sourceName]);
 
-const BoardSwitchRow = memo(function BoardSwitchRow({ placement, placements, onSelect }) {
+const BoardSwitchRow = memo(function BoardSwitchRow({ placement, placements, onSelect, className }) {
     const boards = useActiveBoards();
     const boardLabel = useBoardLabel();
     const pending = usePending(placement?.item ? pendingKey(placement) : '∅');
@@ -110,7 +110,7 @@ const BoardSwitchRow = memo(function BoardSwitchRow({ placement, placements, onS
     const shown = pending ? pending.value : current;
     return (
         <SelectRow
-            label="Board" staged={!!pending}
+            label="Board" staged={!!pending} className={className}
             value={shown != null ? String(shown) : ''}
             onChange={switchTo}
             options={boards.map(b => ({

@@ -29,13 +29,13 @@ TRIGGER = "score.1.batter"
 
 @pytest.fixture
 def container(set_setting):
-    """A stats container scoped to board 1 / side 1, resting on the roster."""
+    """A stat-bar container scoped to board 1 / side 1, resting on the roster."""
     set_setting("production.container_defs", {
         CONTAINER: {
             "name": "Stats Left",
             "width": 452,
             "height": 240,
-            "members": ["roster", "stats"],
+            "members": ["roster", "statsbar"],
             "resting": "roster",
             "scope": {"scoreboard": 1, "team": 1},
         },
@@ -51,7 +51,7 @@ def rule(container, set_setting):
             "name": "Batter change → stat card",
             "container": CONTAINER,
             "kind": "when", "event": "batter_up",
-            "member": "stats",
+            "member": "statsbar",
             "guard": "content",
             "until": 7,
         },
@@ -99,10 +99,7 @@ async def test_a_new_batter_fires_the_rule(rule):
     await _hud(_game(batter="Mario"))
     await _hud(_game(batter="Peach", idx=5))
 
-    assert _feed() == {
-        "element": "stats", "scoreboard": 1, "team": 1,
-        "charIndex": 5, "role": "batting",
-    }
+    assert _feed() == {"element": "statsbar", "scoreboard": 1, "team": 1}
     assert _reason() == RULE
 
 
@@ -128,13 +125,15 @@ async def test_the_feed_lands_in_the_same_batch_as_its_trigger(rule, mock_socket
 async def test_the_mirrored_side_shows_the_pitcher(container, set_setting):
     """One trigger, two containers: the side in the field flashes its pitcher.
 
+    It fires on the fielding side too — its guard reads the PITCHER there.
+
     This is what makes the old Roster + Stats mirror expressible as two
     containers — the rule is identical, the container's scope is not.
     """
     set_setting("production.container_defs", {
         CONTAINER: {
             "name": "Stats Right", "width": 452, "height": 240,
-            "members": ["roster", "stats"], "resting": "roster",
+            "members": ["roster", "statsbar"], "resting": "roster",
             # Side 2 is the HOME team here (home_team=2), and on a Top half the
             # away side bats — so side 2 is fielding.
             "scope": {"scoreboard": 1, "team": 2},
@@ -142,25 +141,23 @@ async def test_the_mirrored_side_shows_the_pitcher(container, set_setting):
     })
     set_setting("production.automations", {
         "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
-              "member": "stats", "until": 7},
+              "member": "statsbar", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
     await _hud(_game(batter="Peach", idx=5))
 
-    assert _feed() == {
-        "element": "stats", "scoreboard": 1, "team": 2,
-        "charIndex": 1, "role": "pitching",
-    }
+    # The side's own frame of reference; the mount reads it as the pitcher,
+    # because side 2 is fielding.
+    assert _feed() == {"element": "statsbar", "scoreboard": 1, "team": 2}
 
 
 async def test_the_themed_card_is_fed_a_scope_and_nothing_else(container, set_setting):
     """`statscard` resolves its own line, so the payload is only WHOSE side.
 
-    The fed `stats` bar is addressed (board, side, roster index, role) because
-    the producer can also pick a character for it. The themed card always draws
-    whoever this side has on the field — the same resolution the mount runs — so
-    there is nothing to address but the frame of reference.
+    The card always draws whoever this side has on the field — the same
+    resolution the mount runs — so there is nothing to address but the frame of
+    reference. (The Stat Bar is the same mount and is fed the same way.)
     """
     set_setting("production.container_defs", {
         CONTAINER: {
@@ -211,23 +208,6 @@ async def test_the_themed_card_still_carries_a_guard(container, set_setting):
     assert _feed() == {"element": "statscard", "scoreboard": 1, "team": 2}
 
 
-async def test_guard_failure_retries_on_the_next_tick(rule):
-    """A batter whose card cannot resolve yet is not skipped.
-
-    The HUD can carry a new batter a tick before its roster index. The in-mount
-    cycle handled that by not advancing its baseline; so does this.
-    """
-    await Automations.Start()
-    await _hud(_game(batter="Mario"))
-    # New batter, no resolvable roster slot (index -1 and no character names).
-    await _hud(_game(batter="Peach", idx=-1))
-    assert _reason() == RESTING
-
-    await _hud(_game(batter="Peach", idx=5))
-    assert _reason() == RULE
-    assert _feed()["charIndex"] == 5
-
-
 async def test_an_empty_trigger_only_resets_the_baseline(rule):
     """Between innings there is no batter — that is not a fire, but the next
     real batter after it is, even if it is the same name."""
@@ -254,7 +234,7 @@ async def test_an_unchanged_trigger_does_not_re_fire(rule):
 async def test_a_disabled_rule_never_fires(container, set_setting):
     set_setting("production.automations", {
         "r": {"enabled": False, "container": CONTAINER,
-              "kind": "when", "event": "batter_up", "member": "stats", "until": 7},
+              "kind": "when", "event": "batter_up", "member": "statsbar", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -271,7 +251,7 @@ async def test_a_rule_whose_member_left_the_roster_is_inert(container, set_setti
     })
     set_setting("production.automations", {
         "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
-              "member": "stats", "until": 7},
+              "member": "statsbar", "until": 7},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -286,7 +266,7 @@ async def test_a_rule_whose_member_left_the_roster_is_inert(container, set_setti
 async def test_dwell_returns_to_the_resting_occupant(container, set_setting):
     set_setting("production.automations", {
         "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
-              "member": "stats", "until": 0.01},
+              "member": "statsbar", "until": 0.01},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
@@ -303,16 +283,16 @@ async def test_a_container_with_no_resting_member_empties(set_setting):
     """Resting is allowed to be nothing: an empty container is transparent."""
     set_setting("production.container_defs", {
         CONTAINER: {"name": "Bar", "width": 325, "height": 120,
-                    "members": ["stats"]},
+                    "members": ["statsbar"]},
     })
     set_setting("production.automations", {
         "r": {"container": CONTAINER, "kind": "when", "event": "batter_up",
-              "member": "stats", "until": 0.01},
+              "member": "statsbar", "until": 0.01},
     })
     await Automations.Start()
     await _hud(_game(batter="Mario"))
     await _hud(_game(batter="Peach", idx=5))
-    assert _feed()["element"] == "stats"
+    assert _feed()["element"] == "statsbar"
 
     await Automations.pending(CONTAINER)
 
@@ -327,7 +307,7 @@ async def test_a_producer_push_suspends_the_rules(rule):
     await Automations.Start()
     await _hud(_game(batter="Mario"))
 
-    pushed = {"element": "stats", "scoreboard": 1, "team": 1,
+    pushed = {"element": "statsbar", "scoreboard": 1, "team": 1,
               "charIndex": 8, "role": "batting"}
     await State.SetBatch([(FEED, pushed)])
     await State.Save()
@@ -345,7 +325,7 @@ async def test_a_push_cancels_a_running_dwell(rule):
     await _hud(_game(batter="Peach", idx=5))
     assert Automations.pending(CONTAINER)
 
-    await State.SetBatch([(FEED, {"element": "stats", "scoreboard": 1})])
+    await State.SetBatch([(FEED, {"element": "statsbar", "scoreboard": 1})])
     await State.Save()
     # Left running, the dwell would have yanked the producer's own pick off air.
     assert Automations.pending(CONTAINER) is None
@@ -354,7 +334,7 @@ async def test_a_push_cancels_a_running_dwell(rule):
 async def test_clearing_the_feed_hands_the_container_back(rule):
     await Automations.Start()
     await _hud(_game(batter="Mario"))
-    await State.SetBatch([(FEED, {"element": "stats", "scoreboard": 1})])
+    await State.SetBatch([(FEED, {"element": "statsbar", "scoreboard": 1})])
     await State.Save()
     assert Automations.is_manual(CONTAINER)
 
@@ -375,7 +355,7 @@ async def test_a_push_in_the_same_batch_as_a_trigger_wins(rule):
     await Automations.Start()
     await _hud(_game(batter="Mario"))
 
-    pushed = {"element": "stats", "scoreboard": 1, "charIndex": 8}
+    pushed = {"element": "statsbar", "scoreboard": 1, "charIndex": 8}
     await State.SetBatch(_game(batter="Peach", idx=5) + [(FEED, pushed)])
     await State.Save()
 
@@ -396,7 +376,7 @@ async def test_startup_settles_a_dwell_that_died_with_the_process(container):
     """state.json persists, so last run's stat card is still on air. Its dwell
     is not — so it settles back to resting."""
     State.state = {}
-    await State.SetBatch([(FEED, {"element": "stats", "scoreboard": 1}),
+    await State.SetBatch([(FEED, {"element": "statsbar", "scoreboard": 1}),
                           (REASON, RULE)])
     await Automations.Start()
     assert _feed() == {"element": "roster", "scoreboard": 1, "team": 1}
@@ -405,7 +385,7 @@ async def test_startup_settles_a_dwell_that_died_with_the_process(container):
 
 async def test_startup_restores_a_producers_suspension(rule):
     """The mirrored reason is what remembers a Push across a restart."""
-    pushed = {"element": "stats", "scoreboard": 1, "charIndex": 8}
+    pushed = {"element": "statsbar", "scoreboard": 1, "charIndex": 8}
     await State.SetBatch([(FEED, pushed), (REASON, MANUAL)])
     await Automations.Start()
 

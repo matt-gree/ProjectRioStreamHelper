@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { stageOrRun } from '../../../context/staging';
 import { useObsStore } from '../../../context/obs';
+import { usePersistentState } from '../../../hooks/usePersistentState';
 import { containerId, ELEMENTS } from '../elements';
 import { dropRules } from './automations';
 import { MEMBERS } from '../../../../public/layout/lib/container-members.js';
@@ -34,6 +35,34 @@ import { MEMBERS } from '../../../../public/layout/lib/container-members.js';
 
 export const CONTAINER_DEFS_KEY = 'production.container_defs';
 
+/*
+ * The Containers tab — the one workbench every container is built on, placed
+ * or not (src/routes/containers). Its path, and the browser-local key naming
+ * the container it has open, shared by the tab and the source panel that sends
+ * a producer there with that container already selected.
+ */
+export const CONTAINERS_PATH = '/containers';
+export const CONTAINER_TAB_KEY = 'prsh.ui.containers.selected';
+export function useContainerTabSelection() {
+    return usePersistentState(CONTAINER_TAB_KEY, null, v => v === null || typeof v === 'string');
+}
+
+// What a container is carrying right now, off its feed key.
+export function useCarrying(id) {
+    return useStateStore(s => (id ? s?.production?.feed?.container?.[id]?.element ?? null : null));
+}
+
+// The scenes holding a source for this container, off the scene mirror.
+export function useContainerScenes(id) {
+    return useObsStore(useShallow((s) => {
+        const out = [];
+        for (const [scene, items] of Object.entries(s.sceneItems || {})) {
+            if ((items || []).some(it => it?.url && containerOfSource(it.url) === id)) out.push(scene);
+        }
+        return out;
+    }));
+}
+
 // The generic shell, told which definition to be. One builder, so the catalog
 // row, the Add picker and any preview all name a container the same way.
 export const containerUrl = (id) => `/layout/shared/container.html?container=${encodeURIComponent(id)}`;
@@ -63,6 +92,41 @@ export const containerOfSource = (url) => (SHARED_PATH.test(url || '') ? contain
 export const CONTAINER_MEMBERS = ELEMENTS.filter(
     el => el.flavor === 'fed' || !!MEMBERS[el.id],
 );
+
+/*
+ * The member pickers' headings — what each member is ABOUT, in the order a
+ * producer reaches for them. The members that follow the container's side lead,
+ * because they are what rules most often flash (batter up → stat card); the
+ * show-wide bars close. Registry order (`ELEMENTS`) was the order things were
+ * built, which read as no order at all.
+ *
+ * Every member belongs to exactly one group — `containers.test.jsx` fails the
+ * day one is added without a place here, rather than letting it fall into an
+ * `Other` heading nobody chose.
+ */
+export const MEMBER_GROUPS = [
+    { label: 'A side', ids: ['statsbar', 'statscard', 'roster', 'playername', 'teamlogo', 'controller'] },
+    { label: 'The game', ids: ['scoreboard', 'scorecard'] },
+    { label: 'Post-game', ids: ['postgamecallout', 'postgamevs', 'hitvisualizer'] },
+    { label: 'Talent', ids: ['commentary', 'playerplates', 'matchuphistory'] },
+    { label: 'The show', ids: ['lowerthird', 'schedule', 'ticker', 'eventheader'] },
+];
+
+// `elements` sorted under MEMBER_GROUPS, empty groups dropped. Anything not
+// listed lands in a trailing `Other`, so a member is never silently hidden.
+export function groupMembers(elements) {
+    const byId = new Map(elements.map(el => [el.id, el]));
+    const placed = new Set();
+    const out = [];
+    for (const { label, ids } of MEMBER_GROUPS) {
+        const members = ids.map(id => byId.get(id)).filter(Boolean);
+        members.forEach(el => placed.add(el.id));
+        if (members.length) out.push({ label, members });
+    }
+    const rest = elements.filter(el => !placed.has(el.id));
+    if (rest.length) out.push({ label: 'Other', members: rest });
+    return out;
+}
 
 /*
  * Can this member sit on more than one roster?
@@ -206,6 +270,16 @@ function normalizeDef(id, raw) {
                     x: Number(v.x) || 0,
                     y: Number(v.y) || 0,
                 }]),
+        ),
+        /*
+         * Which LOOK each member wears in here — `{ [memberId]: lookId }`
+         * (public/layout/lib/looks.js), absent = Main. On the container because
+         * a member has no URL of its own to carry `?look=`. Dropped for members
+         * that left the roster, like `offsets`.
+         */
+        looks: Object.fromEntries(
+            Object.entries(raw.looks && typeof raw.looks === 'object' ? raw.looks : {})
+                .filter(([m, v]) => members.includes(m) && typeof v === 'string' && v),
         ),
         url: containerUrl(id),
     };
@@ -382,6 +456,10 @@ export function containerIdFor(name, taken = {}) {
 function detach(def, elementId, containerId) {
     const next = { ...def, members: (def?.members || []).filter(m => m !== elementId) };
     if (next.resting === elementId) delete next.resting;
+    if (next.looks?.[elementId]) {
+        next.looks = { ...next.looks };
+        delete next.looks[elementId];
+    }
     releaseFeed(containerId, elementId);
     dropRules({ container: containerId, member: elementId });
     return next;
@@ -553,5 +631,15 @@ export function useContainerActions() {
         writeDefs({ ...defs, [id]: { ...defs[id], offsets } });
     }, []);
 
-    return { create, rename, remove, setMember, setResting, setScope, setOffset };
+    // The look a member wears in this container (null = Main).
+    const setMemberLook = useCallback((id, elementId, look) => {
+        const defs = rawDefs();
+        if (!defs[id] || !(defs[id].members || []).includes(elementId)) return;
+        const looks = { ...(defs[id].looks || {}) };
+        if (look) looks[elementId] = look;
+        else delete looks[elementId];
+        writeDefs({ ...defs, [id]: { ...defs[id], looks } });
+    }, []);
+
+    return { create, rename, remove, setMember, setResting, setScope, setOffset, setMemberLook };
 }

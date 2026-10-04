@@ -320,8 +320,7 @@ const StagePreview = memo(function StagePreview({ element, board, binding: maybe
                       * NO CAPTION. "LIVE" was a word that never varied under a
                       * picture that is visibly live, and the only part of the
                       * old line that carried information — which source this
-                      * stands for — is stated once by `BindingNote` in the body
-                      * and again by the header. The region's own PREVIEW rule
+                      * stands for — is stated once, by the header's meta. The region's own PREVIEW rule
                       * above already labels it, with the size and scale, which
                       * is the fact about a preview a producer actually checks.
                       */}

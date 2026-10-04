@@ -6,7 +6,6 @@ import { useSettingsStore, useStateStore } from '../../../context/store';
 import { notifications } from '../../../lib/notify';
 import { ActionRow, NumberRow, SelectRow, ToggleRow, KIT_SECTION } from '../kit';
 import { runObs } from '../controls';
-import { BindingNote } from './generic';
 
 /*
  * Hit Visualizer stage body — live actions (Replay / Spotlight) over the full
@@ -119,7 +118,7 @@ export const HitVizQuickActions = memo(function HitVizQuickActions({ board }) {
  * is the whole question. Four bodies had each invented that line separately;
  * this was one of them.
  */
-export default function HitVisualizerStage({ board, placement, scoreboard = board ?? 1 }) {
+export default function HitVisualizerStage({ board, scoreboard = board ?? 1 }) {
     // One hook instance for the whole panel: the actions and the config below
     // are the same decision surface and must not drift apart.
     const v = useHitViz(scoreboard);
@@ -136,7 +135,6 @@ export default function HitVisualizerStage({ board, placement, scoreboard = boar
             ]} />
 
             <div className={KIT_SECTION}>
-                <BindingNote binding={placement} />
 
                 <ToggleRow
                     label="Spotlight auto-cut" checked={!!v.spotlight.enabled}

@@ -94,6 +94,7 @@ export function useOverrideDefs(type) {
  */
 function useOverrideBag(ns) {
     return useSettingsStore(useShallow((s) => {
+        if (!ns) return {};
         let cur = s?.overlays;
         for (const seg of ns.split('.')) cur = cur?.[seg];
         const out = {};
@@ -155,7 +156,7 @@ export function seedValue(def, globals) {
 }
 
 const OverrideRow = memo(function OverrideRow({
-    os, def, pinned, pinnedColor, globalValue, disabled, note, onRemove,
+    os, def, pinned, pinnedColor, globalValue, disabled, note, onRemove, look = null,
 }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const value = pending ? pending.value : pinned;
@@ -276,16 +277,24 @@ const OverrideRow = memo(function OverrideRow({
     return (
         <div className="flex min-w-0 items-center gap-1" title={disabled ? note : undefined}>
             <div className="min-w-0 flex-1">{control}</div>
-            <button
-                type="button" onClick={onRemove}
-                aria-label={`Remove ${def.label} override`}
-                title={disabled
-                    ? 'Remove override — it does nothing under this package, but it is still stored'
-                    : "Remove override — back to the Design tab's value"}
-                className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40"
-            >
-                <X size={12} />
-            </button>
+            {/* On a look, the × of a row the look set is "back to Main", and
+                says so with the look's own dot beside it. */}
+            {look && <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-violet-400" />}
+            {onRemove ? (
+                <button
+                    type="button" onClick={onRemove}
+                    aria-label={look ? `Use Main for ${def.label}` : `Remove ${def.label} override`}
+                    title={look ? 'Set by this look — remove to follow Main'
+                        : disabled
+                            ? 'Remove override — it does nothing under this package, but it is still stored'
+                            : "Remove override — back to the Design tab's value"}
+                    className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                    <X size={12} />
+                </button>
+            ) : (
+                <span className="w-4 shrink-0" title="Set on Main" />
+            )}
         </div>
     );
 });
@@ -397,10 +406,20 @@ function removePair(os, def) {
 export const ElementStyleOverrides = memo(function ElementStyleOverrides({
     type, board, label, size, leading,
 }) {
-    const ns = board != null ? `${type}.${board}` : type;
-    const os = useOverlaySettings(type, ns, label ?? type, board ?? null);
+    const mainNs = board != null ? `${type}.${board}` : type;
+    const os = useOverlaySettings(type, mainNs, label ?? type, board ?? null);
     const defs = useOverrideDefs(type);
-    const pinned = useOverrideBag(ns);
+    /*
+     * Under a LOOK (./look) the list is Main's pins plus the look's own, the
+     * look's value winning — the same "follows Main unless it says otherwise"
+     * as every other setting. A row the look sets itself carries the look's dot
+     * and its × hands it back to Main; a row only Main pins is Main's to remove,
+     * so on a look it has no ×. Edits and adds go to the look (`os.ns`).
+     */
+    const mainPinned = useOverrideBag(mainNs);
+    const lookPinned = useOverrideBag(os.look ? os.ns : null);
+    const pinned = useMemo(() => ({ ...mainPinned, ...lookPinned }), [mainPinned, lookPinned]);
+    const ns = os.ns;
     const globals = useGlobalValues();
     // The stem is a function of the SIZE for the scoreboard, whose three theme
     // files a package may tier differently.
@@ -485,7 +504,9 @@ export const ElementStyleOverrides = memo(function ElementStyleOverrides({
                     pinnedColor={def.colorKey ? (pinned[def.colorKey] ?? null) : null}
                     globalValue={globals[def.key]}
                     disabled={!live(def)} note={deadNote(def)}
-                    onRemove={() => removePair(os, def)}
+                    look={os.look ? (def.key in lookPinned || (def.colorKey && def.colorKey in lookPinned)) : null}
+                    onRemove={!os.look || def.key in lookPinned || (def.colorKey && def.colorKey in lookPinned)
+                        ? () => removePair(os, def) : null}
                 />
             ))}
             {/* THE FOOTER ROW TAKES A GUEST. `leading` is the stage's intro

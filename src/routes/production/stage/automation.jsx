@@ -290,9 +290,12 @@ export default memo(function AutomationSection({ def }) {
     return (
         <div className={KIT_SECTION}>
             <div className="flex items-center gap-2">
-                <Text size="xs" span className="label-display tracking-wider text-muted-foreground">Rules</Text>
-                <Text size="xs" span dimmed className="min-w-0 flex-1 truncate">
-                    moments interrupt and hand back · the top state that holds wins · your push beats both
+                {/* Precedence is a tooltip, not a sentence on the panel. */}
+                <Text
+                    size="xs" span className="label-display flex-1 text-[10px] tracking-wider text-muted-foreground"
+                    title="When rules interrupt and hand back · the first While that holds wins · a push beats both"
+                >
+                    Rules
                 </Text>
                 <Button size="xs" variant="ghost" disabled={!canAdd} onClick={() => actions.add('when', def.id)}>
                     <Plus /> When

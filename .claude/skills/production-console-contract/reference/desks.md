@@ -5,9 +5,18 @@
 ## Desks — non-element workflows
 
 Things that **feed the broadcast but aren't on it** (no OBS source, no air
-state). Today: a **board** desk per active scoreboard, and the **Match** desk
+state). Today: a **board** desk per active scoreboard, the **Match** desk
 (fixture authoring — sides, format, series, board binding, start.gg load, and the
 series lifecycle: flip · decide · reopen).
+
+**Containers were a desk and became a TAB** (`src/routes/containers`). A
+container's definition outlives every source of it, so it needed a home that
+was not a scene row — and it passed the desk test below. What it failed was the
+DEPTH rule: a roster, a preview, positions and full-sentence rules are heavy
+authoring, and the stage column could hold one container at a time around a
+thumbnail. A desk is for a workflow that fits the stage; one that needs the
+page is a tab. Each container source is still an ordinary placement row, where
+it is flown.
 
 **WHAT EARNS A DESK — a GLOBAL workflow with no other home.** Stated as a test
 because the tier grew two rows that failed it, and "feeds the broadcast but isn't
@@ -35,7 +44,7 @@ Rules:
   (`quickface.jsx`). All three are checked against each other in
   `rack.test.jsx`; adding a desk means adding all three.
 - They live in the rack's **two permanent tiers above the scenes** — `BOARDS`
-  (the rig) then `DESK` (Match, the only one left once Capture and Bracket went
+  (the rig) then `DESK` (Match and Containers, once Capture and Bracket went
   to the surfaces above), both a faint red wash with the `DESK` chip — a row with
   live meta (`M1 · 1–0`), dimmed when idle, selectable like any row. Never in the
   state sections. Rack meta must read from state only: the rack draws every frame

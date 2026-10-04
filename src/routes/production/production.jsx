@@ -281,9 +281,8 @@ export const PendingBar = memo(function PendingBar() {
  * (quickface.jsx) — can be checked against each other rather than drifting
  * apart silently.
  *
- * Match has no quick face that fits the rail's two-row cap (dense fixture
- * authoring), so it is deliberately not pinnable — and it is the only fixed
- * desk left, the boards below being the rest of the tier.
+ * The Match desk is not pinnable: fixture authoring is dense, with nothing that
+ * fits the rail's two-row cap. The boards below are the rest of the tier.
  */
 export const DESK_BODIES = {
     'desk:match': { title: 'Match', body: <MatchDesk />, pinnable: false },

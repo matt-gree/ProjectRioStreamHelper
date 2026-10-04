@@ -104,6 +104,29 @@ const boardScoped = (mod, fn, extra = {}) => async (box, ctx, sel) => {
 
 const boardIdentity = (id) => (sel) => `${id}:${Number(sel.scoreboard) || 1}`;
 
+// A stat element as a member: the card and the bar are one mount wearing two
+// themes (`stats-card-mount.js`), told which by the element id.
+const statLine = (id, size) => ({
+    size,
+    mount: async (box, ctx, sel) => {
+        const { mountStatsCard } = await load('stats-card-mount');
+        const card = mountStatsCard({
+            host: hostIn(box),
+            sb: Number(sel?.scoreboard) || 1,
+            team: Number(sel?.team) === 2 ? 2 : 1,
+            settingsType: id,
+            svgElement: id,
+        });
+        return {
+            update: (state) => card.update(state, OverlayBase.settings),
+            dispose: () => card.dispose(),
+            replay: () => {},
+        };
+    },
+    identity: (sel) => `${id}:${Number(sel.scoreboard) || 1}:${Number(sel.team) === 2 ? 2 : 1}`,
+    sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
+});
+
 export const MEMBERS = {
     hitvisualizer: {
         size: [1280, 720],
@@ -135,38 +158,21 @@ export const MEMBERS = {
         },
         sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
     },
-    // The themed 2x2 stat card, as a container member — and it owns a dedicated
-    // ?team= source too (/layout/scoreboard1/statscard.html), which passes this
-    // same settingsType/svgElement pair, so the card is one element configured
-    // once wherever the producer puts it. The Stat Bar renders the same data in
-    // the wide `statsbar.svg` under its own namespace, so the two cards are
-    // configured independently. Two elements rather than a mode on one because a
-    // container's roster is a list of things that can be on screen, and these are
-    // different pictures at different sizes; a container holds whichever one its
-    // look calls for.
-    statscard: {
-        size: [380, 294],
-        // Binds its side at MOUNT time (mountStatsCard closes over sb/team and
-        // resolves the line itself), so it takes `sel` here and declares an
-        // identity below — a scope change is a new layer, not an update.
-        mount: async (box, ctx, sel) => {
-            const { mountStatsCard } = await load('stats-card-mount');
-            const card = mountStatsCard({
-                host: hostIn(box),
-                sb: Number(sel?.scoreboard) || 1,
-                team: Number(sel?.team) === 2 ? 2 : 1,
-                settingsType: 'statscard',
-                svgElement: 'statscard',
-            });
-            return {
-                update: (state) => card.update(state, OverlayBase.settings),
-                dispose: () => card.dispose(),
-                replay: () => {},
-            };
-        },
-        identity: (sel) => `statscard:${Number(sel.scoreboard) || 1}:${Number(sel.team) === 2 ? 2 : 1}`,
-        sample: { file: 'scoreboard', content: { scoreboard: 1, team: 1 } },
-    },
+    // The two stat elements, the 2x2 card and the wide bar — both container
+    // members, and both own a dedicated ?team= source too
+    // (/layout/scoreboard1/statscard.html, statsbar.html) passing this same
+    // settingsType/svgElement pair, so each is one element configured once
+    // wherever the producer puts it. One mount draws both; the pair names the
+    // art and the settings namespace, so the two are configured independently.
+    // Two elements rather than a mode on one because a container's roster is a
+    // list of things that can be on screen, and these are different pictures
+    // at different sizes.
+    //
+    // Each binds its side at MOUNT time (mountStatsCard closes over sb/team and
+    // resolves the line itself), so it takes `sel` and declares an identity —
+    // a scope change is a new layer, not an update.
+    statscard: statLine('statscard', [380, 294]),
+    statsbar: statLine('statsbar', [452, 174]),
     postgamecallout: {
         size: [1920, 1080],
         mount: async (box) => {

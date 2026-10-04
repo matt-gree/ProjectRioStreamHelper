@@ -74,7 +74,7 @@ export function useRosterPlacement(placement) {
     );
 }
 
-const RosterLayoutRow = memo(function RosterLayoutRow({ placement, onSelect }) {
+const RosterLayoutRow = memo(function RosterLayoutRow({ placement, onSelect, className }) {
     const pending = usePending(placement?.item ? pendingKey(placement) : '∅');
     const [layouts, setLayouts] = useOfflineLayouts();
     const offline = isCatalogRow(placement);
@@ -130,7 +130,7 @@ const RosterLayoutRow = memo(function RosterLayoutRow({ placement, onSelect }) {
     if (!eligible) return null;
     return (
         <SegmentedRow
-            label="Layout" fill={false}
+            label="Layout" fill={false} className={className}
             value={pending ? pending.value : current}
             onChange={switchTo}
             data={OPTIONS}

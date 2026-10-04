@@ -4,10 +4,8 @@ import { useStateStore } from '../../../context/store';
 import { Text } from '../../../components/ui/primitives';
 import { StatusLine, ToggleRow, KIT_SECTION } from '../kit';
 import { setSourceVisibility, useDisplayedEnabled } from '../board/bindings';
-import { useContainerBinding } from '../containers/feeds';
-import { useContainerDefs, useContainerOf, useMemberScope } from '../containers/containers';
+import { useContainerOf, useMemberScope } from '../containers/containers';
 import { boardOfUrl } from '../../../lib/obs-binding';
-import { useConsoleOffline } from '../sources/placements';
 import { PostgameCalloutPicker, PostgameVsPicker } from '../containers/feed-pickers';
 
 /*
@@ -26,50 +24,6 @@ export const SourceToggleRow = memo(function SourceToggleRow({ label, item, scen
             label={label} checked={enabled} staged={staged} spread
             onChange={(v) => setSourceVisibility(sceneName, item, v)}
         />
-    );
-});
-
-// Where an element's source stands, for the body of a panel whose only
-// transport control is now the header strip. Replaces the old dead-end prose
-// ("add its browser source in OBS") — the strip's Bind slot does that, so what
-// is left to say here is WHICH source answers to this panel.
-export const BindingNote = memo(function BindingNote({ binding, what = 'This overlay' }) {
-    const offline = useConsoleOffline();
-    // A sourceless placement is truthy but drives nothing — "has an item" is
-    // what makes something a binding, here and in the preview column.
-    if (!binding?.item) {
-        /*
-         * WITH OBS CLOSED THIS ROW SAYS NOTHING, because the app already said
-         * it once, at the top left, for the whole page. Every panel is unbound
-         * then — that is what being disconnected MEANS — so a per-panel notice
-         * is the same fact repeated once per panel, and an indicator that is lit
-         * on every surface at once is not telling anyone anything.
-         *
-         * Connected and unbound is the opposite: it is true of THIS source and
-         * not of its neighbours, which is what makes it worth a row.
-         */
-        if (offline) return null;
-        return (
-            <StatusLine
-                label="NO SOURCE"
-                title={`${what} isn’t in any scene we can see. Add it from the header, or with the + beside a scene in the rack.`}
-            />
-        );
-    }
-    // Name the scene rather than its role. With scenes as the grouping axis
-    // "the program scene" is a fact the producer already has from the section
-    // header, and the scene's own name is what they need when the same overlay
-    // sits in three of them.
-    //
-    // Which scene ROLE it is — program vs studio preview — is the header
-    // strip's AIR/PVW chip and was a trailing clause here as well; the chip is
-    // the console's one status language, so this row states identity only.
-    return (
-        <StatusLine label="SOURCE" title="The OBS source this panel drives, and the scene it sits in.">
-            <span className="text-foreground">{binding.item.sourceName}</span>
-            <span className="mx-1.5 text-muted-foreground/50">·</span>
-            {binding.scene}
-        </StatusLine>
     );
 });
 
@@ -153,16 +107,13 @@ export const FeedContentPicker = memo(function FeedContentPicker({
 
 /*
  * Plain direct element (e.g. scoreboard): its one control — show/hide — lives
- * in the header strip, so the body is left saying what the panel is wired to.
- * An element that draws a PICK carries that pick here, because on its own
- * source the pick is the content.
+ * in the header strip, and WHICH source the panel drives is the header's too
+ * (its meta slot), so the body carries only what the header cannot: an
+ * element's PICK, because on its own source the pick is the content, and a
+ * readiness warning.
  *
- * A BODY THAT WRAPS THIS MUST FORWARD `placement`. `stage/index.jsx` hands every
- * body `element`, `board` and `placement`, and for a while all nine bodies
- * destructured only `element` — so `BindingNote` read undefined and told every
- * bound overlay in the console it "isn't in any scene we can see", pointing at a
- * Bind that had already happened. Nothing caught it because the note renders
- * either way; it just says the wrong thing. Take the prop.
+ * A BODY THAT WRAPS THIS STILL FORWARDS `placement` — the pick reads the board
+ * off the source's own URL.
  */
 export const DirectStage = memo(function DirectStage({ element, board, placement }) {
     // The element's OWN source draws the board its URL names. A feed element
@@ -175,7 +126,6 @@ export const DirectStage = memo(function DirectStage({ element, board, placement
             {element.feed && (
                 <FeedContentPicker element={element} fed={false} scoreboard={own} />
             )}
-            <BindingNote binding={placement} />
             <ReadinessNote element={element} board={board} />
             {element.generic && (
                 <Text size="xs" className="text-muted-foreground">
@@ -189,44 +139,18 @@ export const DirectStage = memo(function DirectStage({ element, board, placement
 });
 
 /*
- * Which container hosts this element — stated, not chosen.
- *
- * Membership lives on the CONTAINER now (its roster is the relationship), so
- * this is a read of it rather than the old per-element "Feed into" select. Two
- * places storing one relationship is how these drift; the edit belongs where
- * the data does, which is the container's own panel, and the link goes there.
- *
- * An element on no roster is a real state, not an error — it just has nowhere
- * to be pushed, which the Push slot also reports by disabling. Say what to do
- * about it rather than leaving a blank row.
+ * A fed element with NO container to be pushed into — the one state a slot's
+ * header cannot show, because there is no slot. Under a container the header
+ * already names the container's source, so this says nothing there.
  */
 export const ContainerHostNote = memo(function ContainerHostNote({ element, container: on }) {
-    const defs = useContainerDefs();
     const own = useContainerOf(element);
-    // The ROW's container when it has one — a container-scoped member sits on
-    // several rosters, and the element→container lookup answers with whichever
-    // it finds first, which on a mirrored pair is a coin flip between sides.
-    const container = on ?? own.container;
-    const def = on ? defs[on] : own.def;
-    const binding = useContainerBinding(container);
-    if (!container) {
-        return (
-            <Text size="xs" className="text-amber-500/90">
-                No container holds {element.name} yet, so there is nowhere to push
-                it. Add it to a container’s members from that container’s panel —
-                or make one with the + in the rack.
-            </Text>
-        );
-    }
+    if (on ?? own.container) return null;
     return (
-        <>
-            <Text size="xs" className="text-muted-foreground">
-                Fed into <span className="text-foreground">{def?.name || container}</span>
-                {def?.width && def?.height ? ` · ${def.width} × ${def.height}` : ''} — edit
-                its members on that container’s panel.
-            </Text>
-            <BindingNote binding={binding} what="That container" />
-        </>
+        <Text size="xs" className="text-amber-500/90">
+            No container holds {element.name} yet, so there is nowhere to push it.
+            Add it to one on the Containers tab.
+        </Text>
     );
 });
 

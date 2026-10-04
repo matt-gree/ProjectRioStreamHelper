@@ -50,7 +50,7 @@ export default function AppHeader({ tabs = [] }) {
                     `ProjectRioStreamHelper` set as one run-together 22-character
                     all-caps word is a string, not a wordmark — nothing in it
                     tells the eye where the words break, and it was the widest
-                    thing in a header whose middle column has to hold five tabs.
+                    thing in a header whose middle column has to hold six tabs.
                     PRSH is what this app is called in every file of its own
                     source; the expansion rides beneath so the name is still
                     stated, at a size that suits a thing you read once.

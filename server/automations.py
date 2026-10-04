@@ -102,51 +102,20 @@ def _team_role(sb: int, team: int) -> str:
     return "batting" if batting == team else "pitching"
 
 
-def _find_char_index(sb: int, team: int, name: str) -> int:
-    for i in range(9):
-        if deep_get(State.state, f"score.{sb}.player.{team}.character.{i}.name") == name:
-            return i
-    return -1
-
-
-def _resolve_stats(member: str, sb: int, team: int):
-    """The stat card for whoever this side has on the field right now.
-
-    Mirrors RioData.getStatsLine: the role decides batter vs pitcher, and the
-    roster index comes from the HUD's own index with a name scan as the fallback
-    (an API game carries no index).
-    """
-    role = _team_role(sb, team)
-    field = "batter" if role == "batting" else "pitcher"
-    name = deep_get(State.state, f"score.{sb}.{field}", "") or ""
-    if not name:
-        return None
-    try:
-        idx = int(deep_get(State.state, f"score.{sb}.{field}_roster_index", -1))
-    except (TypeError, ValueError):
-        idx = -1
-    if idx < 0:
-        idx = _find_char_index(sb, team, name)
-    if idx < 0:
-        return None
-    return {"element": member, "scoreboard": sb, "team": team,
-            "charIndex": idx, "role": role}
-
-
 def _resolve_scoped(member: str, sb: int, team: int):
     """A member that only needs to know whose frame of reference it is in."""
     return {"element": member, "scoreboard": sb, "team": team}
 
 
-def _resolve_statscard(member: str, sb: int, team: int):
-    """The themed stat card: a scope, plus the guard the fed bar gets for free.
+def _resolve_stat_line(member: str, sb: int, team: int):
+    """A stat element — the Stat Card or the Stat Bar: a scope, plus a guard.
 
-    Unlike `stats`, this card resolves its own line inside the mount
-    (RioData.getStatsLine), so the payload is only the frame of reference. What
-    it still needs from here is the GUARD — without one, every batter change
-    would fire whether or not this side has anyone on the field, and the
-    guard-fail retry that keeps a batter from being skipped a frame early would
-    never engage.
+    Both resolve their own line inside the mount (RioData.getStatsLine — the
+    side's batter or pitcher by its role), so the payload is only the frame of
+    reference. What they still need from here is the GUARD — without one, every
+    batter change would fire whether or not this side has anyone on the field,
+    and the guard-fail retry that keeps a batter from being skipped a frame
+    early would never engage.
     """
     role = _team_role(sb, team)
     field = "batter" if role == "batting" else "pitcher"
@@ -156,8 +125,8 @@ def _resolve_statscard(member: str, sb: int, team: int):
 
 
 RESOLVERS = {
-    "stats": _resolve_stats,
-    "statscard": _resolve_statscard,
+    "statscard": _resolve_stat_line,
+    "statsbar": _resolve_stat_line,
 }
 
 

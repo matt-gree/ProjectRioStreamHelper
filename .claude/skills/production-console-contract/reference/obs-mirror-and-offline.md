@@ -53,8 +53,9 @@ claims (top-level, because *being unreachable* is the problem its stage solves).
   why, holding its place rather than vanishing (same rule as the Push slot).
   Gating the whole picker on a scene is what made the container builder
   unreachable for anyone whose OBS wasn't up.
-- **Offline, a per-panel binding notice says NOTHING AT ALL.** `BindingNote` and
-  the rail's quick faces branch on `useConsoleOffline` and render `null`: every
+- **Offline, a per-panel binding notice says NOTHING AT ALL.** The panel header's
+  source slot (`SourceMeta`, stage/index.jsx — the body has no source line; it
+  only repeated the header) and the rail's quick faces branch on `useConsoleOffline` and render `null`: every
   panel and every card is unbound with OBS closed — that is what disconnected
   MEANS — so a notice there is one fact repeated once per surface, restating the
   app's own banner at the top left. On the rail it was printed once per pinned

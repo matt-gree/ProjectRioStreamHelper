@@ -2,7 +2,8 @@ import { memo, useMemo, useState } from 'react';
 import { Group, Text } from '../../../components/ui/primitives';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { CONTAINER_MEMBERS, hostOf, isSharedMember, sizeForMembers, useContainerDefs } from '../containers/containers';
+import { sizeForMembers, useContainerDefs } from '../containers/containers';
+import { MemberPicker } from '../containers/picker';
 
 // The Add picker's + New form: name a container, pick what goes on it, and add
 // its source to the scene.
@@ -23,10 +24,24 @@ import { CONTAINER_MEMBERS, hostOf, isSharedMember, sizeForMembers, useContainer
  * filtered to what fit, which made the decision that matters (what goes on it)
  * answer to the one that follows from it.
  */
-export const NewContainerForm = memo(function NewContainerForm({ onCreate, onCancel }) {
-    const [name, setName] = useState('');
-    const [members, setMembers] = useState([]);
+/*
+ * The name a new container starts with: `Container {n}`, the lowest n no
+ * existing container is already called. Prefilled and selected, so typing
+ * replaces it and Create works without touching it — a required field the
+ * producer has to notice is a step the screen has to explain.
+ */
+export function defaultContainerName(defs) {
+    const taken = new Set(Object.values(defs || {}).map(d => String(d?.name ?? '').trim().toLowerCase()));
+    for (let n = 1; ; n += 1) {
+        if (!taken.has(`container ${n}`) && !(`container-${n}` in (defs || {}))) return `Container ${n}`;
+    }
+}
+
+export const NewContainerForm = memo(function NewContainerForm({ onCreate, onCancel, onPreview, height }) {
     const defs = useContainerDefs();
+    const [fallback] = useState(() => defaultContainerName(defs));
+    const [name, setName] = useState(fallback);
+    const [members, setMembers] = useState([]);
     const size = useMemo(() => sizeForMembers(members), [members]);
 
     const toggle = (id) => setMembers(prev => (
@@ -34,67 +49,33 @@ export const NewContainerForm = memo(function NewContainerForm({ onCreate, onCan
     ));
 
     return (
-        <div className="flex flex-col gap-2 pr-2">
-            <Text size="xs" span className="label-display px-1 tracking-wider text-muted-foreground">
-                New container
-            </Text>
-
+        <div className="flex flex-col gap-3">
             <Input
                 autoFocus
+                onFocus={(e) => e.target.select()}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Lower Bar"
+                placeholder={fallback}
                 aria-label="Container name"
-                className="h-8"
+                className="h-8 max-w-72"
             />
 
-            <div className="flex flex-col gap-0.5">
-                <Text size="xs" dimmed className="px-1">
-                    Members — one on screen at a time
-                </Text>
-                {CONTAINER_MEMBERS.map(el => {
-                    // Ticking a member another container holds MOVES it here on
-                    // Create (unless it is shared), so say so before the tick.
-                    const held = isSharedMember(el) ? null : hostOf(defs, el.id);
-                    return (
-                        <label
-                            key={el.id}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/50"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={members.includes(el.id)}
-                                onChange={() => toggle(el.id)}
-                                className="size-3 shrink-0 accent-current"
-                            />
-                            <Text size="xs" span truncate className="min-w-0 flex-1">{el.name}</Text>
-                            {held && (
-                                <Text size="xs" span dimmed className="truncate">
-                                    moves from {defs[held]?.name ?? held}
-                                </Text>
-                            )}
-                            <Text size="xs" span dimmed className="tabular-nums">
-                                {el.width} × {el.height}
-                            </Text>
-                        </label>
-                    );
-                })}
-            </div>
+            <MemberPicker selected={members} onToggle={toggle} onPreview={onPreview} height={height} />
 
-            {/* Pinned to the pane's foot: the member list is every hostable element
-                and runs past the pane, and Create sat below the fold. */}
-            <Group gap="xs" className="sticky bottom-0 items-center border-t border-border/60 bg-background px-1 py-2">
+            <Group gap="xs" className="sticky bottom-0 items-center border-t border-border/60 bg-background pt-2">
                 <Button
                     size="sm"
-                    disabled={!name.trim() || members.length === 0}
-                    onClick={() => onCreate(name.trim(), members)}
+                    disabled={members.length === 0}
+                    onClick={() => onCreate(name.trim() || fallback, members)}
                 >
                     Create
                 </Button>
-                <Button size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
-                <Text size="xs" span dimmed className="ml-auto tabular-nums">
-                    {members.length ? `${size.width} × ${size.height}` : 'Pick at least one member'}
-                </Text>
+                <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+                {members.length > 0 && (
+                    <Text size="xs" span dimmed className="ml-auto tabular-nums">
+                        {size.width} × {size.height}
+                    </Text>
+                )}
             </Group>
         </div>
     );

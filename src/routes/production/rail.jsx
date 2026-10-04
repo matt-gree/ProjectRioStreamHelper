@@ -12,6 +12,7 @@ import {
 } from './sources/placements';
 import { EyeAction } from './rack';
 import { deskQuickFace, QuickFace } from './quickface';
+import { LookContext, useLookPlacement, usePlacementLook } from './stage/look';
 import { boardOfDeskId, useActiveBoards, useBoardLabel } from './board/boards';
 import { useContainerDefs } from './containers/containers';
 
@@ -74,17 +75,27 @@ const CardAction = memo(function CardAction({ placement }) {
 });
 
 const ElementRailCard = memo(function ElementRailCard({
-    placement, title, onOpen, onUnpin, move,
+    placement: pinnedPlacement, title, onOpen, onUnpin, move,
 }) {
+    // A card flies the same source its panel edits, so it wears the same LOOK
+    // (./stage/look): a quick-face toggle on a Break source changes Break.
+    const placement = useLookPlacement(pinnedPlacement);
     const { element, board } = placement;
+    const { type, look } = usePlacementLook(element, placement);
+    const lookScope = useMemo(
+        () => (look ? { type, look: look.id, name: look.name } : null),
+        [type, look],
+    );
     return (
-        <QuickCard
-            state={chipFor(placement)} title={title}
-            onOpen={onOpen} onUnpin={onUnpin} move={move}
-            action={<CardAction placement={placement} />}
-        >
-            <QuickFace element={element} placement={placement} board={board} />
-        </QuickCard>
+        <LookContext.Provider value={lookScope}>
+            <QuickCard
+                state={chipFor(placement)} title={title}
+                onOpen={onOpen} onUnpin={onUnpin} move={move}
+                action={<CardAction placement={placement} />}
+            >
+                <QuickFace element={element} placement={placement} board={board} />
+            </QuickCard>
+        </LookContext.Provider>
     );
 });
 

@@ -183,6 +183,20 @@ export async function initFedContainer({
     OverlayBase.setBlank(null, CONTAINER_ID);
   }
 
+  /*
+   * Each member's LOOK lives on the definition (`looks.{member}`), read from
+   * the live settings rather than the copy fetched above, so choosing one on
+   * the Containers tab reaches an on-air container without a reload. Look ids
+   * are unique across elements, so naming all of them at once lands each on
+   * the member that owns it (overlay-base.js `projectLooks`).
+   */
+  if (CONTAINER_ID) {
+    OverlayBase.setLookResolver((raw) => Object.values(
+      raw?.production?.container_defs?.[CONTAINER_ID]?.looks || {},
+    ));
+  }
+  const DEF_LOOKS_KEY = `production.container_defs.${CONTAINER_ID}`;
+
   OverlayBase.init({
     render,
     fetchSettings: true, // stats themes off overlays.* design settings; hit ignores them
@@ -195,7 +209,8 @@ export async function initFedContainer({
     shouldRender: (key) => key.startsWith(FEED_KEY) || /^score\.\d+\./.test(key)
       || /^postgame\.\d+\./.test(key) || key.startsWith('tournamentInfo.')
       || memberWatches(key),
-    shouldRenderSettings: (key) => key.startsWith('overlays.') || key === 'project_rio.hud_enabled',
+    shouldRenderSettings: (key) => key.startsWith('overlays.') || key === 'project_rio.hud_enabled'
+      || (!!CONTAINER_ID && (key === 'production.container_defs' || key.startsWith(DEF_LOOKS_KEY))),
   });
 
   /*

@@ -49,13 +49,13 @@ const CONDITIONS = byId(VOCAB.conditions);
 /*
  * Whose content a member is handed — and whether the question applies at all.
  *
- * Only a CONTAINER-SCOPED member (Roster, Stat Card, Controller) draws "whoever"
- * from a frame of reference, so only those get an "of". A Stat Card is about a
- * PLAYER (the batter, the pitcher); a Roster or a Controller is about a SIDE.
+ * Only a CONTAINER-SCOPED member (Roster, Stat Card, Stat Bar, Controller) draws
+ * "whoever" from a frame of reference, so only those get an "of". A Stat Card or
+ * Stat Bar is about a PLAYER (the batter, the pitcher); a Roster or a Controller is about a SIDE.
  * Same four subjects underneath — they all pick a side — read in the word that
  * member's content is.
  */
-const PLAYER_MEMBERS = new Set(['statscard']);
+const PLAYER_MEMBERS = new Set(['statscard', 'statsbar']);
 export function subjectKind(memberId) {
     if (PLAYER_MEMBERS.has(memberId)) return 'player';
     return ELEMENTS.find(el => el.id === memberId)?.containerScoped ? 'side' : null;

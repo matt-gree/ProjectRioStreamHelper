@@ -105,8 +105,8 @@ function useDrawnIds() {
     const defs = LAYOUT_SETTINGS.schedule;
     const def = (key) => defs.find(d => d.key === key);
     const result = scheduleRows(state, {
-        maxRows: resolveSetting(os.bag, def('maxRows'), null),
-        showDecided: settingOn(resolveSetting(os.bag, def('showDecided'), null), DEFAULTS.showDecided),
+        maxRows: resolveSetting(os.bag, def('maxRows'), null, os.look),
+        showDecided: settingOn(resolveSetting(os.bag, def('showDecided'), null, os.look), DEFAULTS.showDecided),
     });
     const drawn = new Map(result.rows.map((r, i) => [String(r.id), i + 1]));
     return {

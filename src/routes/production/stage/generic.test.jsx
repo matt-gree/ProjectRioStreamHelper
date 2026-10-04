@@ -69,32 +69,27 @@ describe('ReadinessNote', () => {
 });
 
 /*
- * EVERY STAGE BODY MUST FORWARD `placement`.
+ * THE HEADER NAMES THE SOURCE, AND NO BODY REPEATS IT.
  *
- * `stage/index.jsx` hands each body `element`, `board` and `placement`, and for
- * a while all nine destructured only `element` — so `BindingNote` read undefined
- * and told every bound overlay in the console it "isn't in any scene we can
- * see", pointing at a Bind that had already happened. Nothing caught it because
- * the note renders either way; it just says the wrong thing.
- *
- * Rendering all nine is what makes this a guard rather than nine assertions: a
- * tenth body is covered the day it joins the map.
+ * Most bodies used to open with a `SOURCE  {name} · {scene}` line that said
+ * again what the panel header's meta slot already said. Rendering every body
+ * is what makes this a guard: a body added later is covered the day it joins
+ * the map.
  */
-describe('a stage body names the source it is driving', () => {
+describe('a stage body leaves the source name to the header', () => {
     const bound = {
         item: { sourceName: 'obs-scoreboard', url: '' },
         scene: 'Game', where: 'program', board: 1,
     };
 
     for (const [id, Body] of Object.entries(STAGE_BODIES)) {
-        it(`${id} forwards the placement to its binding note`, () => {
+        it(`${id} does not restate it`, () => {
             render(
                 <TooltipProvider>
                     <Body element={el(id) ?? { id, name: id }} board={1} placement={bound} />
                 </TooltipProvider>
             );
-            expect(screen.getByText('obs-scoreboard'), id).toBeInTheDocument();
-            expect(screen.queryByText(/isn’t in any scene/), id).not.toBeInTheDocument();
+            expect(screen.queryByText('obs-scoreboard'), id).not.toBeInTheDocument();
         });
     }
 });

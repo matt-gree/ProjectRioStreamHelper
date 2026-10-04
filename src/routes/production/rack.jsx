@@ -526,6 +526,13 @@ function useMatchDeskMeta() {
  * (../postgame). Bracket failed the second: both its consumers already carried
  * its picker, so it moved onto the source that draws it (../stage/bracket).
  * Match is what's left, and Match is the shape.
+ *
+ * CONTAINERS was a desk here for a while and outgrew it: building one is a
+ * roster, a preview, positions and full-sentence rules, which is heavy
+ * authoring — the depth rule's TAB — and the stage column between rack and rail
+ * could only fit it one container at a time. It is its own top-level tab now
+ * (src/routes/containers); each OBS source of a container is still an ordinary
+ * row here, which is where it is flown.
  */
 export const DESKS = [
     { id: 'desk:match', name: 'Match', useMeta: useMatchDeskMeta, pinnable: false },

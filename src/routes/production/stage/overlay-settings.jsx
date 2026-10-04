@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useContext } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsStore } from '../../../context/store';
 import { usePending } from '../../../context/staging';
@@ -10,6 +10,7 @@ import {
 } from '../kit';
 import { cn } from '../../../lib/utils';
 import { stageSettingsSet } from '../controls';
+import { LookContext, LookDot } from './look';
 
 
 
@@ -67,11 +68,16 @@ export function useLiveDefs(type, defs) {
  * merges underneath as a non-destructive fallback — the same resolution the
  * Setup panel uses.
  */
-export function resolveSetting(bag, def, board) {
+export function resolveSetting(bag, def, board, look = null) {
+    const own = look ? bag?.looks?.[look]?.values?.[def.key] : undefined;
+    if (own != null) return own;
     const scoped = board == null ? {} : (bag?.[board] ?? bag?.[String(board)] ?? {});
     const v = scoped[def.key] ?? bag?.[def.key];
     return v ?? def.defaultValue;
 }
+
+// Does the look this panel edits set `key` itself (rather than follow Main)?
+export const lookOwns = (os, key) => !!os.look && os.bag?.looks?.[os.look]?.values?.[key] != null;
 
 /**
  * @param type  LAYOUT_SETTINGS key (also the settings namespace root)
@@ -79,13 +85,25 @@ export function resolveSetting(bag, def, board) {
  * @param label prefix for the pending bar ("Scorecard 1", "Event header")
  * @param board board id for per-board resolution, or null
  */
-export function useOverlaySettings(type, ns, label, board = null) {
+/*
+ * Under a LOOK (./look — the panel's source wears one), every write goes to
+ * that look's values and every read takes the look's value first, then Main's.
+ * Read off context rather than threaded through every caller, so a stage
+ * body's own headline controls edit the same look as the Style section under
+ * them; a look belongs to one element type, so a call for another type on the
+ * same panel is untouched.
+ */
+export function useOverlaySettings(type, mainNs, label, board = null) {
+    const scope = useContext(LookContext);
+    const look = scope?.type === type ? scope.look : null;
+    const ns = look ? `${type}.looks.${look}.values` : mainNs;
+    const tag = look ? `${label} (${scope.name})` : label;
     const bag = useSettingsStore(useShallow(s => s?.overlays?.[type] ?? {}));
     const set = useCallback(
-        (def, value) => stageSettingsSet(settingKey(ns, def.key), value, `${label}: ${def.label}`),
-        [ns, label],
+        (def, value) => stageSettingsSet(settingKey(ns, def.key), value, `${tag}: ${def.label}`),
+        [ns, tag],
     );
-    return { bag, ns, board, type, set };
+    return { bag, ns, board, type, set, look, mainNs };
 }
 
 /*
@@ -106,7 +124,7 @@ function useShowWhen(os, def) {
     const masterDef = (LAYOUT_SETTINGS[os.type] ?? []).find(d => d.key === gate.key) ?? gate;
     // Read the STAGED value too, so choosing the mode reveals the field now
     // rather than after Go Live.
-    const v = staged ? staged.value : resolveSetting(os.bag, masterDef, os.board);
+    const v = staged ? staged.value : resolveSetting(os.bag, masterDef, os.board, os.look);
     if ('is' in gate) return v === gate.is;
     if ('isNot' in gate) return v !== gate.isNot;
     return !!v;
@@ -131,7 +149,7 @@ function useForcedOn(os, def) {
     const staged = usePending(force ? `settings:${settingKey(os.ns, force.key)}` : undefined);
     if (!force) return null;
     const masterDef = (LAYOUT_SETTINGS[os.type] ?? []).find(d => d.key === force.key) ?? force;
-    const v = staged ? staged.value : resolveSetting(os.bag, masterDef, os.board);
+    const v = staged ? staged.value : resolveSetting(os.bag, masterDef, os.board, os.look);
     return v ? force : null;
 }
 
@@ -148,11 +166,28 @@ function useForcedOn(os, def) {
  */
 const railOptions = (options) => options.map(o => (o.railLabel ? { value: o.value, label: o.railLabel } : o));
 
-export const OverlaySettingRow = memo(function OverlaySettingRow({ os, def, compact = false }) {
+/*
+ * A setting the panel's LOOK sets itself wears a dot beside it (./look); the
+ * dot hands it back to Main. Off a look, or on a setting the look follows Main
+ * for, the row is exactly what it always was.
+ */
+export const OverlaySettingRow = memo(function OverlaySettingRow(props) {
+    const { os, def } = props;
+    const row = <SettingRowControl {...props} />;
+    if (!lookOwns(os, def.key)) return row;
+    return (
+        <div className="flex min-w-0 items-center gap-1.5">
+            <div className="min-w-0 flex-1">{row}</div>
+            <LookDot os={os} def={def} />
+        </div>
+    );
+});
+
+const SettingRowControl = memo(function SettingRowControl({ os, def, compact = false }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const shown = useShowWhen(os, def);
     const forced = useForcedOn(os, def);
-    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
+    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board, os.look);
 
     if (!shown) return null;
 
@@ -221,12 +256,12 @@ export const OverlaySettingChip = memo(function OverlaySettingChip({ os, def, cl
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const shown = useShowWhen(os, def);
     const forced = useForcedOn(os, def);
-    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
+    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board, os.look);
 
     if (!shown) return null;
     // `locked`, not `disabled` — see ToggleChip. A held-on chip stays at full
     // weight (it IS on) and takes a dashed edge, and its title stays hoverable.
-    return (
+    const chip = (
         <ToggleChip
             label={(compact && def.railLabel) || def.label}
             ariaLabel={compact && def.railLabel ? def.label : undefined}
@@ -235,6 +270,13 @@ export const OverlaySettingChip = memo(function OverlaySettingChip({ os, def, cl
             title={forced ? forced.note : def.description} className={className}
             onChange={(v) => os.set(def, v)}
         />
+    );
+    if (!lookOwns(os, def.key)) return chip;
+    return (
+        <span className="relative inline-flex">
+            {chip}
+            <LookDot os={os} def={def} className="absolute -top-0.5 -right-0.5 size-1.5" />
+        </span>
     );
 });
 
@@ -315,15 +357,18 @@ export function chunkDefs(defs) {
 const PairedField = memo(function PairedField({ os, def }) {
     const pending = usePending(`settings:${settingKey(os.ns, def.key)}`);
     const shown = useShowWhen(os, def);
-    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board);
+    const value = pending ? pending.value : resolveSetting(os.bag, def, os.board, os.look);
 
     if (!shown) return null;
     return (
-        <TextRow
-            label={null} ariaLabel={def.label} value={value} placeholder={def.placeholder}
-            staged={!!pending} className="min-w-0 flex-1"
-            onChange={(v) => os.set(def, v)}
-        />
+        <>
+            <TextRow
+                label={null} ariaLabel={def.label} value={value} placeholder={def.placeholder}
+                staged={!!pending} className="min-w-0 flex-1"
+                onChange={(v) => os.set(def, v)}
+            />
+            {lookOwns(os, def.key) && <LookDot os={os} def={def} />}
+        </>
     );
 });
 

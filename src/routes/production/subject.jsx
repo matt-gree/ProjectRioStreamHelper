@@ -17,7 +17,7 @@ import { boardLifecycle } from './board/boards';
  * THE SUBJECT — what an element is currently drawing.
  *
  * Every console surface answered "what can I do to this" and none answered
- * "what is this showing". `BindingNote` names the OBS source, the chip names
+ * "what is this showing". The header's meta names the OBS source, the chip names
  * the scene role, the strip gives you Bind · Air · Push — all of it wiring. A
  * producer looking at a panel titled "Roster · Team 2" could not tell from the
  * console whether team 2 was the player they meant, and Rio reassigns
@@ -26,7 +26,7 @@ import { boardLifecycle } from './board/boards';
  * This module is the other half. One line per placement, resolved from live
  * state, rendered in three places that must agree:
  *
- *   - the STAGE, above the binding note: the panel's subject before its knobs.
+ *   - the STAGE, in its header beside the title: the panel's subject before its knobs.
  *   - the RAIL, as row one of the direct flavor's quick face: what turns a
  *     pinned card from a duplicate of the rack row's eye into something worth
  *     the space. (A fed card has no room — its content picker IS its subject.)
@@ -446,14 +446,34 @@ const EventHeaderSubject = memo(function EventHeaderSubject({ board }) {
     const top = bandLine(bands.header, values).join(' · ');
     const bottom = bandLine(bands.footer, values).join(' · ');
     if (!top && !bottom) {
-        return <SubjectRow text="No competition loaded — both bands render empty" tone="warn" />;
+        return <SubjectRow text="No competition loaded" tone="warn" />;
     }
     // The top band is the subject; the bottom band trails as its qualifier —
     // one row, two strips, in the order they sit on the canvas.
     return <SubjectRow text={top || 'Nothing for the header band'} meta={bottom || null} />;
 });
 
+/*
+ * The Results Ticker draws its board's rotation pool — the cached games, in the
+ * pool's order (ticker-mount.js) — so its subject is how many cards are on the
+ * strip. It was the one element whose header said nothing at all.
+ */
+const TickerSubject = memo(function TickerSubject({ board }) {
+    const n = useStateStore((s) => {
+        const r = s?.scoreboards?.rotation?.[board] ?? s?.scoreboards?.rotation?.[String(board)];
+        // The mount's own count: the pool's order when it has one, each id
+        // drawn only if a snapshot of it is cached.
+        const cached = new Set((Array.isArray(r?.cached_games) ? r.cached_games : [])
+            .filter(g => g && g.game_id != null).map(g => g.game_id));
+        const ids = Array.isArray(r?.game_ids) && r.game_ids.length ? r.game_ids : [...cached];
+        return ids.filter(id => cached.has(id)).length;
+    });
+    if (!n) return <SubjectRow text="No games in this board's pool" />;
+    return <SubjectRow text={`${n} ${n === 1 ? 'game' : 'games'}`} />;
+});
+
 const SUBJECTS = {
+    ticker: TickerSubject,
     hitvisualizer: HitSubject,
     matchuphistory: MatchupSubject,
     bracket: BracketSubject,

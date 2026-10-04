@@ -123,3 +123,27 @@ describe('parseImport', () => {
         expect(parseImport(JSON.parse(JSON.stringify(preset)), 'file').pins).toEqual(preset.pins);
     });
 });
+
+// A look's style pins belong to the preset like the element's own: loading B
+// must not leave A's colours on every source wearing a look.
+describe('looks', () => {
+    const withLook = (values) => ({
+        statsbar: { accentColor: '#111', looks: { kb: { name: 'Break', values } } },
+    });
+
+    it('captures a look\'s style pins but not its content settings', () => {
+        const pins = elementPins(withLook({ accentColor: '#222', showRoster: true }));
+        expect(pins).toMatchObject({ 'statsbar.accentColor': '#111', 'statsbar.looks.kb.values.accentColor': '#222' });
+        expect(Object.keys(pins)).not.toContain('statsbar.looks.kb.values.showRoster');
+    });
+
+    it('replaces a look\'s pins on apply, and never invents a look', () => {
+        const { sets, unsets } = planApply(withLook({ accentColor: '#222' }), {
+            global: {},
+            pins: { 'statsbar.looks.kb.values.cardBg': '#333', 'statsbar.looks.kgone.values.cardBg': '#444' },
+        });
+        expect(unsets).toContain('overlays.statsbar.looks.kb.values.accentColor');
+        expect(sets).toContainEqual({ key: 'overlays.statsbar.looks.kb.values.cardBg', value: '#333' });
+        expect(sets.map(s => s.key)).not.toContain('overlays.statsbar.looks.kgone.values.cardBg');
+    });
+});

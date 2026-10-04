@@ -94,6 +94,14 @@ const VARIANT_PARAMS = [
     // The Roster's shape (public/layout/lib/roster-layouts.js). Grid is the
     // absent param, so it earns no tag and a grid source keeps the id it had.
     ['layout', 'y', (v) => ({ vgrid: 'Vertical Grid', row: 'Row', column: 'Column', field: 'Field' }[v] ?? v)],
+    /*
+     * The source's LOOK (public/layout/lib/looks.js). An axis so two looks of
+     * one element in one scene are two rows rather than one id. Its label is a
+     * NAME the producer typed, which lives in settings, so this table cannot
+     * say it — the rack adds it (`useLookNames`, ./placements). Main is the
+     * absent param, so a source with no look keeps the id it always had.
+     */
+    ['look', 'k', () => null],
 ];
 
 /*
@@ -224,7 +232,9 @@ export function flipSideVariant(variant) {
  * anything, so the Controller was the one per-side element whose panel offered
  * no "Match the other side" — the axis it alone has was the axis that broke it.
  */
-const PER_HALF_PARAMS = new Set(['port']);
+// A look is per-half too: the two halves of a pair may wear different looks and
+// are still the same pair.
+const PER_HALF_PARAMS = new Set(['port', 'look']);
 
 /*
  * A variant reduced to what its PAIR shares — the key two halves are matched on.
@@ -256,8 +266,10 @@ export function sidePairVariant(variant) {
  * this is what the row SAYS, not what it is.
  */
 export function variantLabelFor(element, variant, mode) {
-    if (variant) return variantLabel(variant, mode);
-    return element?.sizes?.find(s => s.default)?.label ?? null;
+    // A variant that names nothing the table can label (only a look) still
+    // gets the default size's name, like a bare one.
+    return (variant ? variantLabel(variant, mode) : null)
+        ?? element?.sizes?.find(s => s.default)?.label ?? null;
 }
 
 // How a variant reads in the rack ('t2' → "Side 2", or "Right"). Null when there is
@@ -267,7 +279,8 @@ export function variantLabel(variant, mode) {
     const out = [];
     for (const part of String(variant).split('.')) {
         const entry = VARIANT_PARAMS.find(([, tag]) => part.startsWith(tag));
-        if (entry) out.push(entry[2](part.slice(entry[1].length), mode));
+        const label = entry ? entry[2](part.slice(entry[1].length), mode) : null;
+        if (label) out.push(label);
     }
     return out.length ? out.join(' · ') : null;
 }

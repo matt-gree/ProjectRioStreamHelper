@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { useStateStore } from '../../context/store';
 import { Subject, battingSide } from './subject';
 import { ELEMENTS } from './elements';
@@ -137,7 +137,10 @@ describe('Subject', () => {
     });
 
     it('renders nothing for an element with no live content of its own', () => {
-        const { container } = render(<Subject placement={placementFor('ticker')} />);
+        // An unregistered PRSH layout: nothing is known about what it draws.
+        const { container } = render(<Subject placement={{
+            element: { id: 'mystery', name: 'Mystery', generic: true }, board: null,
+        }} />);
         expect(container).toBeEmptyDOMElement();
     });
 
@@ -272,7 +275,26 @@ describe('the event header', () => {
 
     it('warns when there is no competition behind either band', () => {
         render(<Subject placement={placementFor('eventheader')} />);
-        expect(screen.getByText(/both bands render empty/)).toBeInTheDocument();
+        expect(screen.getByText('No competition loaded')).toBeInTheDocument();
+    });
+});
+
+// The Results Ticker draws its board's rotation pool, so it counts the cards
+// the mount will draw: pool order, cached snapshots only.
+describe('ticker', () => {
+    it('counts the games on its board\'s strip, and says when there are none', () => {
+        render(<Subject placement={placementFor('ticker', {
+            item: { sourceName: 's', url: '/layout/rotator/ticker.html?scoreboard=2' },
+        })} />);
+        expect(screen.getByText("No games in this board's pool")).toBeInTheDocument();
+        cleanup();
+        setState({ scoreboards: { rotation: { 2: {
+            game_ids: [7, 8, 9], cached_games: [{ game_id: 7 }, { game_id: 9 }],
+        } } } });
+        render(<Subject placement={placementFor('ticker', {
+            item: { sourceName: 's', url: '/layout/rotator/ticker.html?scoreboard=2' },
+        })} />);
+        expect(screen.getByText('2 games')).toBeInTheDocument();
     });
 });
 
@@ -288,7 +310,8 @@ describe('what does and does not get a subject', () => {
             ['hit visualizer', placementFor('hitvisualizer', { board: 1 }), true],
             ['roster (team variant)', placementFor('roster', { variant: 't1' }), true],
             ['commentary', placementFor('commentary'), true],
-            ['ticker', placementFor('ticker'), false],
+            // Its board's rotation pool — "No games in this board's pool" when empty.
+            ['ticker', placementFor('ticker'), true],
             // It draws even with nothing loaded — an event header over an empty
             // tournamentInfo renders two blank strips, which is the case worth
             // warning about rather than the case worth staying quiet for.

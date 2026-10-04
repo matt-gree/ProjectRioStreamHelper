@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { TooltipProvider } from '../../components/ui/tooltip';
 import { useSettingsStore } from '../../context/store';
+import { useObsStore } from '../../context/obs';
 import { ELEMENTS, isPinnable } from './elements';
 import { Stage, stageBodyComponent } from './stage';
 import { DirectStage, FedStage } from './stage/generic';
@@ -19,6 +20,22 @@ const ui = (node) => render(<TooltipProvider>{node}</TooltipProvider>);
  * STATE, not OBS: authoring a lower third the night before is a real workflow
  * that has nothing to do with whether a browser source exists yet.
  */
+/*
+ * WHICH SOURCE A PANEL DRIVES IS THE HEADER'S, said once in its meta slot: the
+ * source's name when it has one, and — with OBS connected — "No source" when it
+ * has none. The body used to repeat the name on a `SOURCE` line of its own.
+ */
+describe('the panel header names its source', () => {
+    afterEach(() => useObsStore.setState({ status: 'disconnected', scenes: [], sceneItems: {} }));
+
+    it('says No source for an unbound panel while OBS is connected', () => {
+        useObsStore.setState({ status: 'connected', scenes: ['Game'], sceneItems: { Game: [] } });
+        ui(<Stage selection="lowerthird@Game" />);
+        expect(screen.getByText('No source')).toBeInTheDocument();
+        expect(screen.queryByText('SOURCE')).not.toBeInTheDocument();
+    });
+});
+
 describe('Stage without OBS', () => {
     /*
      * "Scoreboard · Large" not "Scoreboard": with OBS closed the catalog offers
@@ -145,25 +162,3 @@ describe('stageBodyComponent', () => {
     });
 });
 
-/*
- * Deleting a container definition takes its feed, its resting occupant and every
- * automation rule driving one of its members with it (`detach`/`dropRules` in
- * ./containers/containers) — a larger blast radius than the match delete one page over,
- * which has always confirmed. It must not be reachable in one click.
- */
-describe('Container delete', () => {
-    it('confirms before it deletes, and the first click deletes nothing', () => {
-        ui(<Stage selection="container:callout-stage" />);
-        fireEvent.click(screen.getByRole('button', { name: /Delete container/ }));
-        // Still defined — the first click only opened the confirm.
-        expect(useSettingsStore.getState().production.container_defs['callout-stage']).toBeTruthy();
-        expect(screen.getByText(/deletes its rules/)).toBeInTheDocument();
-    });
-
-    it('deletes on the second click', () => {
-        ui(<Stage selection="container:callout-stage" />);
-        fireEvent.click(screen.getByRole('button', { name: /Delete container/ }));
-        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-        expect(useSettingsStore.getState().production.container_defs['callout-stage']).toBeFalsy();
-    });
-});

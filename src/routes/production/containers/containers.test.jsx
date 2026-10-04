@@ -5,7 +5,7 @@ import { useStagingStore } from '../../../context/staging';
 import { containerId } from '../elements';
 import { parseInstanceId } from '../sources/instances';
 import {
-    CONTAINER_MEMBERS, containerIdFor, containerOfSource, sizeForMembers,
+    CONTAINER_MEMBERS, MEMBER_GROUPS, containerIdFor, containerOfSource, groupMembers, sizeForMembers,
     containerUrl, fedTargets, fitsContainer, hostOf, useContainerActions,
 } from './containers';
 import { MEMBERS, memberWatches } from '../../../../public/layout/lib/container-members.js';
@@ -169,6 +169,29 @@ describe('members the engine can actually mount', () => {
                 `fed-container.js cannot mount "${el.id}", but the console offers it as a member`,
             ).toBeTruthy();
         }
+    });
+
+    // The Stat Bar was left off when the old fed bar was deleted; both stat
+    // elements are members, and both draw the container's side, so a mirrored
+    // pair can hold either.
+    it('offers both stat elements, each drawing the container\'s side', () => {
+        for (const id of ['statscard', 'statsbar']) {
+            const el = CONTAINER_MEMBERS.find(e => e.id === id);
+            expect(el, `${id} is not offered as a member`).toBeTruthy();
+            expect(el.containerScoped, `${id} should draw the container's side`).toBe(true);
+        }
+    });
+
+    // The pickers group members by what they are about; a member added with no
+    // group would fall into an `Other` heading nobody chose.
+    it('puts every member in exactly one picker group', () => {
+        const listed = MEMBER_GROUPS.flatMap(g => g.ids);
+        expect(new Set(listed).size, 'a member is in two groups').toBe(listed.length);
+        for (const el of CONTAINER_MEMBERS) {
+            expect(listed, `"${el.id}" has no group in MEMBER_GROUPS`).toContain(el.id);
+        }
+        expect(groupMembers(CONTAINER_MEMBERS).map(g => g.label)).not.toContain('Other');
+        expect(groupMembers(CONTAINER_MEMBERS)[0].label).toBe('A side');
     });
 
     /*

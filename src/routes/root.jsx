@@ -9,7 +9,7 @@ import { Loader } from '../components/ui/primitives';
 import Production from './production/production';
 
 /*
- * THE CONSOLE IS EAGER; THE OTHER FOUR TABS ARE NOT.
+ * THE CONSOLE IS EAGER; THE OTHER TABS ARE NOT.
  *
  * Everything shipped as one ~1MB chunk, so a producer paid for the Design
  * tab's colour pickers and the Competition tab's bracket views before the
@@ -29,6 +29,7 @@ const Competition = lazy(() => import('./competition/competition'));
 const AddressBook = lazy(() => import('./address_book/address_book'));
 const DesignTab = lazy(() => import('./design/tab'));
 const Connections = lazy(() => import('./connections/connections'));
+const Containers = lazy(() => import('./containers/containers'));
 
 /*
  * The fallback is deliberately quiet and CENTRED IN THE CONTENT AREA, not the
@@ -47,6 +48,9 @@ function TabFallback() {
 // Nav tabs. Rendered in the header row by AppHeader; routes wired below.
 const allTabs = [
   { name: "Production", path: "/" },
+  // Where containers are BUILT. Beside Production because a container is flown
+  // there: its source panel links here with the container selected.
+  { name: "Containers", path: "/containers" },
   { name: "Competition", path: "/competition" },
   { name: "Address Book", path: "/player_list" },
   { name: "Design", path: "/layouts" },
@@ -80,6 +84,7 @@ export default function Root() {
           <Route path="/commentary" element={<Production />} />
           <Route path="/player_list" element={<AddressBook />} />
           <Route path="/layouts" element={<DesignTab />} />
+          <Route path="/containers" element={<Containers />} />
           <Route path="/connections" element={<Connections />} />
         </Routes>
         </Suspense>

@@ -8,7 +8,8 @@
 //   in    the design package · every global design key (palette, type, text
 //         effects, card chrome, the three display toggles, the port palette) ·
 //         every per-element STYLE pin, at every namespace depth
-//         (`overlays.lowerthird.accentColor`, `overlays.scorecard.2.bodyFont`) ·
+//         (`overlays.lowerthird.accentColor`, `overlays.scorecard.2.bodyFont`,
+//         and a LOOK's own: `overlays.statsbar.looks.{id}.values.accentColor`) ·
 //         each element's own palette settings (Stat Value Color, …) · the logo
 //   out   element CONTENT and layout — which bands a card draws, the Event
 //         Header's fields, a name size, a ticker's speed. Those are flipped
@@ -59,6 +60,15 @@ export function elementPins(overlays) {
         for (const [key, value] of Object.entries(bag)) {
             if (PRESET_ELEMENT_KEYS.has(key)) {
                 if (value != null) out[`${ns}.${key}`] = value;
+            } else if (key === 'looks' && isBag(value)) {
+                // A look's style pins are the preset's like any other — a
+                // preset that left them would leave tournament A's colours on
+                // every Break source after loading B.
+                for (const [id, look] of Object.entries(value)) {
+                    for (const [sub, v] of Object.entries(isBag(look?.values) ? look.values : {})) {
+                        if (PRESET_ELEMENT_KEYS.has(sub) && v != null) out[`${ns}.looks.${id}.values.${sub}`] = v;
+                    }
+                }
             } else if (isBag(value)) {
                 for (const [sub, v] of Object.entries(value)) {
                     if (PRESET_ELEMENT_KEYS.has(sub) && v != null) out[`${ns}.${key}.${sub}`] = v;
@@ -148,6 +158,11 @@ export function planApply(overlays, preset) {
         if (!(path in want)) unsets.push(`overlays.${path}`);
     }
     for (const [path, value] of Object.entries(want)) {
+        // A pin for a look this install does not have (a preset saved
+        // elsewhere, or a look since deleted) has nothing to land on; writing
+        // it would conjure a nameless look.
+        const look = /^([^.]+)\.looks\.([^.]+)\./.exec(path);
+        if (look && !isBag(overlays?.[look[1]]?.looks?.[look[2]])) continue;
         if (!same(have[path], value)) sets.push({ key: `overlays.${path}`, value });
     }
     return { sets, unsets };

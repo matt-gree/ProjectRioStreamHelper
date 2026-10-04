@@ -554,6 +554,13 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
         setFocus(row);
     }, [create]);
 
+    // While building, the pane on the right previews the member being pointed
+    // at — the form's own preview would be a second one beside it.
+    const previewMember = useCallback((el) => {
+        if (!el) return;
+        setFocus({ name: el.name, type: el.id, url: `${window.location.origin}${el.url}`, width: el.width, height: el.height });
+    }, []);
+
     const { items: sceneItems } = useMirrorScene(scene);
 
     /*
@@ -1017,6 +1024,7 @@ export const AddSourceDialog = memo(function AddSourceDialog({ scene, open: open
                                     <NewContainerForm
                                         onCreate={createContainer}
                                         onCancel={() => setBuilding(false)}
+                                        onPreview={previewMember}
                                     />
                                 ) : (
                                 <div className="flex flex-col gap-2 pr-2">

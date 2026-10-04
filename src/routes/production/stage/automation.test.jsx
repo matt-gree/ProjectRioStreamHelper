@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { TooltipProvider } from '../../../components/ui/tooltip';
 import { useSettingsStore, useStateStore } from '../../../context/store';
 import { useObsStore } from '../../../context/obs';
 import ContainerStage from './container';
+import { ContainerEditor } from '../containers/editor';
+import { useContainerDefs } from '../containers/containers';
 
 /*
  * The container panel's rules, as a producer reads and edits them: each rule is
@@ -40,11 +43,21 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const ui = () => render(
-    <TooltipProvider>
-        <ContainerStage element={{ id: `container:${C}`, container: C }} placement={{ container: C }} />
-    </TooltipProvider>,
+// The rules and the scope are AUTHORING, so they are on the Containers tab's
+// editor; the manual pick is OPERATING, so it is on the source's panel.
+function Editor() {
+    const def = useContainerDefs()[C];
+    return def ? <ContainerEditor def={def} /> : null;
+}
+const ui = () => render(<TooltipProvider><Editor /></TooltipProvider>);
+const source = () => render(
+    <MemoryRouter>
+        <TooltipProvider>
+            <ContainerStage element={{ id: `container:${C}`, container: C }} placement={{ container: C }} />
+        </TooltipProvider>
+    </MemoryRouter>,
 );
+const memberRow = name => screen.getByText(name).closest('[data-member]');
 
 describe('the rule list', () => {
     it('reads each rule as one sentence', () => {
@@ -108,8 +121,8 @@ describe('scope', () => {
 
 describe('the manual pick', () => {
     it('Show puts a member on the container, and Hand back clears it', () => {
-        ui();
-        const row = screen.getAllByText('Stat Card').find(n => n.closest('.group'))?.closest('.group');
+        source();
+        const row = memberRow('Stat Card');
         fireEvent.click(within(row).getByRole('button', { name: 'Show' }));
         expect(useStateStore.getState().production.feed.container[C])
             .toMatchObject({ element: 'statscard', scoreboard: 1, team: 1 });
@@ -118,8 +131,8 @@ describe('the manual pick', () => {
         useStateStore.setState({ production: {
             feed: { container: { [C]: { element: 'statscard', scoreboard: 1, team: 1 } }, reason: { [C]: 'manual' } },
         } });
-        ui();
-        const held = screen.getAllByText('Stat Card').find(n => n.closest('.group'))?.closest('.group');
+        source();
+        const held = memberRow('Stat Card');
         fireEvent.click(within(held).getByRole('button', { name: 'Hand back' }));
         expect(useStateStore.getState().production.feed.container?.[C]).toBeUndefined();
     });
@@ -128,7 +141,7 @@ describe('the manual pick', () => {
         useStateStore.setState({ production: {
             feed: { container: { [C]: { element: 'statscard', scoreboard: 1, team: 1 } }, reason: { [C]: 'rule' } },
         } });
-        ui();
+        source();
         expect(screen.getByRole('button', { name: 'Hold' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Hand back' })).not.toBeInTheDocument();
     });

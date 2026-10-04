@@ -156,7 +156,7 @@ describe('Scorecard stage', () => {
         // boards. Two rack rows replaced it.
         useSettingsStore.setState({ scoreboards: { active: [1, 2] } });
         ui('scorecard:2');
-        expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: /board/i })).not.toBeInTheDocument();
     });
 
     it('resolves a selection stored before instances existed', () => {

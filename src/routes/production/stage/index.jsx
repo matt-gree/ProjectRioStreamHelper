@@ -6,8 +6,8 @@ import { DESK_PREFIX, variantParams } from '../sources/instances';
 import { placementDims } from '../board/bindings';
 import { useContainerDefs } from '../containers/containers';
 import {
-    isFedPlacement, placementTarget, resolvePlacement, useConsolePlacements, useConsoleScenes,
-    usePlacementLabel,
+    isFedPlacement, placementTarget, resolvePlacement, useConsoleOffline, useConsolePlacements,
+    useConsoleScenes, usePlacementLabel,
 } from '../sources/placements';
 import { SourceStrip } from '../sources/sourcestrip';
 import { Subject } from '../subject';
@@ -19,6 +19,7 @@ import SizeMatchRow from './sizematch';
 import RedrawRow from './resolution';
 import BoardSwitchRow from './boardswitch';
 import RosterLayoutRow, { useRosterPlacement } from './rosterlayout';
+import { LookContext, LookRow, useLookPlacement, usePlacementLook } from './look';
 import { PlayerNameStage } from './playername';
 import { useStyleSide } from './side-scope';
 import { useSideLabels } from '../sides';
@@ -33,7 +34,7 @@ import ScorecardStage from './scorecard';
 import EventHeaderStage from './eventheader';
 import BracketStage from './bracket';
 import ControllerStage from './controller';
-import ContainerStage, { useContainerRename } from './container';
+import ContainerStage from './container';
 
 /*
  * The stage — the console's center surface: ONE selected item's full controls,
@@ -113,13 +114,40 @@ function useContainerDims(placement) {
     );
 }
 
+/*
+ * WHICH SOURCE THIS PANEL DRIVES — in the header, once, for every element.
+ *
+ * It was also a `SOURCE  Stat Card — Side 2 (Board 1) · Game` line at the top
+ * of most bodies (`BindingNote`), repeating the header's own source name with
+ * the scene the producer had just clicked in. The header carries it now and the
+ * line is gone, so every panel says this in the same place.
+ *
+ * Connected and unbound is the one state worth words: it is true of THIS
+ * source and not of its neighbours. With OBS closed every panel is unbound —
+ * that is what disconnected means, and the page says so once at its top left —
+ * so the slot stays empty.
+ */
+const SourceMeta = memo(function SourceMeta({ placement }) {
+    const offline = useConsoleOffline();
+    if (placement.item?.sourceName) return placement.item.sourceName;
+    if (offline) return null;
+    return (
+        <span
+            className="label-display text-[10px] tracking-wider text-amber-400/90"
+            title="Not in any scene we can see. Add it with the + beside a scene in the rack."
+        >
+            No source
+        </span>
+    );
+});
+
 const ElementStage = memo(function ElementStage({
     placement: selected, placements, title, pinned, onPinToggle, onSelect,
 }) {
     /* A Roster catalog row wears the layout picked for it with OBS closed, so
        the preview, its size readout and Copy URL all follow (rosterlayout.jsx).
        Every other placement comes back as it went in. */
-    const placement = useRosterPlacement(selected);
+    const placement = useLookPlacement(useRosterPlacement(selected));
     const { element, board } = placement;
     /* The settings NAMESPACE, never the element id — Matchup History is
        `matchuphistory` here and `overlays.matchup.*` in its mount, and a panel
@@ -136,11 +164,6 @@ const ElementStage = memo(function ElementStage({
         : styleSide.segment ? `${element.name} ${sides.label(styleSide.side)}` : element.name;
     const Body = stageBodyComponent(element, placement);
     const dims = useContainerDims(placement);
-    /* A container is RENAMED IN ITS TITLE, the board desk's idiom: its name is
-       the producer's, and a Name row in the body was a second home for the
-       value printed at the top of the same panel. Every other element's title
-       is derived, so only a container gets the field. */
-    const containerRename = useContainerRename(element);
     /* The source's ?size=, read once: it picks the theme file an override has
        to reach AND drops the element settings that size doesn't draw. */
     const size = sizeOptionFor(element, placement.variant)?.value;
@@ -148,14 +171,23 @@ const ElementStage = memo(function ElementStage({
        its shape does not draw — read off the variant, so a catalog row's
        offline pick counts too. */
     const layout = variantParams(placement.variant).find(([p]) => p === 'layout')?.[1];
+    /* The LOOK this source wears (./look): every settings control under it —
+       the body's and the Style section's — edits that look rather than Main. */
+    const { look } = usePlacementLook(element, placement);
+    const lookScope = useMemo(
+        () => (look ? { type: settingsType, look: look.id, name: look.name } : null),
+        [settingsType, look],
+    );
     return (
+        <LookContext.Provider value={lookScope}>
         <PanelShell
             state={chipFor(placement)}
-            title={containerRename ? containerRename.value : title}
-            titlePlaceholder={containerRename?.placeholder}
-            onRename={containerRename?.onChange}
+            /* Derived for every source, a container's included: its name is
+               authored on the Containers tab with the rest of its definition,
+               so a typeable title here would be a second home for it. */
+            title={title}
             subject={<Subject placement={placement} />}
-            meta={placement.item?.sourceName}
+            meta={<SourceMeta placement={placement} />}
             primaryAction={<SourceStrip element={element} board={board} placement={placement} />}
             pinnable={isPinnable(element)} pinned={pinned} onPinToggle={onPinToggle}
         >
@@ -165,16 +197,20 @@ const ElementStage = memo(function ElementStage({
                 the stage's own column is the widest space on the page. Width is
                 what a preview is worth; a side-by-side split spends it. */}
             <div className="flex min-w-0 flex-col gap-1.5">
-                {/* Which board this source reads — its `?scoreboard=`, rewritten
-                    on the OBS source in place. First, because it decides what
-                    every row under it is describing. Renders nothing unless the
-                    element is board-scoped, has a real source, and the rig has
-                    more than one board (see boardswitch.jsx). */}
-                <BoardSwitchRow placement={placement} placements={placements} onSelect={onSelect} />
-                {/* A Roster's shape — Grid / Row / Column — which is also its
-                    canvas, so switching resizes the OBS source with it
-                    (rosterlayout.jsx). Nothing on any other element. */}
-                <RosterLayoutRow placement={placement} onSelect={onSelect} />
+                {/* THE SOURCE'S OWN FACTS, ON ONE LINE: which board it reads
+                    (its `?scoreboard=`, rewritten on the OBS source in place —
+                    boardswitch.jsx), a Roster's shape, which is also its canvas
+                    (rosterlayout.jsx), and which LOOK it wears (look.jsx).
+                    First, because they decide what every row under them is
+                    describing. Each renders nothing where it does not apply, and
+                    the line takes no space when all three are absent. The first
+                    item keeps the label column so it lines up with the rows
+                    below; the ones after it label themselves at their own width. */}
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 empty:hidden [&>*:not(:first-child)>span:first-child]:w-auto">
+                    <BoardSwitchRow placement={placement} placements={placements} onSelect={onSelect} className="w-72" />
+                    <RosterLayoutRow placement={placement} onSelect={onSelect} />
+                    <LookRow element={element} placement={placement} onSelect={onSelect} />
+                </div>
                 <Body element={element} board={board} placement={placement} />
                 {/* An OBS ACTION on this source, so it sits with the body's
                     controls rather than under two sections of settings — and
@@ -238,6 +274,7 @@ const ElementStage = memo(function ElementStage({
                 />
             )}
         </PanelShell>
+        </LookContext.Provider>
     );
 });
 
@@ -259,7 +296,8 @@ export const Stage = memo(function Stage({
 
     /*
      * A stored selection naming a desk that no longer exists — a board since
-     * removed — must not fall through to placement resolution: no source has a
+     * removed, or the Containers desk that became its own tab — must not
+     * fall through to placement resolution: no source has a
      * `desk:` id, so it would resolve to a sourceless placement and offer to bind
      * an OBS source for a board that is gone. A desk id answers here or not at
      * all.
@@ -269,8 +307,7 @@ export const Stage = memo(function Stage({
         return (
             <PanelShell state="unbound" title="Stage" pinnable={false}>
                 <Text size="xs" className="text-muted-foreground">
-                    That desk is gone — the board it belonged to was removed. Pick
-                    another row in the rack.
+                    That desk is gone. Pick another row in the rack.
                 </Text>
             </PanelShell>
         );
