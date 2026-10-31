@@ -6,7 +6,7 @@ file has no aggregate for (stars won, star swings, wall jumps, runs crossed),
 the reconstructed per-inning linescore, and the full per-side block the
 projector broadcasts. No State/Settings access here.
 """
-from server.rio.pyrio.stat_file_parser import StatObj
+from server.rio.pyrio.stat_file_parser import RENAMED_RESULT_OF_AB, StatObj
 from server.rio.pyrio.stat_formatters import (
     derive_batting,
     derive_pitching,
@@ -21,8 +21,11 @@ from server.rio.pyrio.team_name_algo import team_name
 from server.rio.stats_tracker import _HUD_BATTING_MAP, _HUD_PITCHING_MAP
 
 # Decoded "Result of AB" label → numeric final-result code. Captures read
-# the decoded stat file, where the code has been replaced by its label.
+# the decoded stat file, where the code has been replaced by its label. Files
+# keep the labels they were written with, so older labels are included: an
+# unknown label would read as an unresolved at-bat.
 _FINAL_RESULT_CODES = {v: k for k, v in LookupDicts.FINAL_RESULT.items()}
+_FINAL_RESULT_CODES.update({old: _FINAL_RESULT_CODES[new] for old, new in RENAMED_RESULT_OF_AB.items()})
 
 # Final-result codes that put a hit in the box score (Single..HR).
 HIT_CODES = frozenset((7, 8, 9, 10))

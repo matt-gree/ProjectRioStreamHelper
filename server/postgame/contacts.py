@@ -86,12 +86,11 @@ def fallback_flight(contact: dict) -> dict | None:
 
     ``simulate_game_contacts`` re-derives every contact's exact trajectory by
     replaying its recorded RNG through pyrio's swing model
-    (``hit_simulator.hit_simulation.simulate_hit_from_event``), which only
-    supports Slap/Charge/Star swings — a small slice of real contacts
-    (e.g. a recorded ``Type of Swing`` of "None", seen on weakly-fielded
-    come-backers) fall outside that model and the resimulator silently
-    skips them (``hit_analysis.simulate_contacts``) or raises
-    ``ValueError``. But the stat file already recorded the game's own
+    (``hit_simulator.hit_simulation.simulate_hit_from_event``), bunts
+    included — but a small slice of real contacts can't be reproduced
+    (e.g. inputs the model says wouldn't reach the ball), and the
+    resimulator raises ``ValueError`` and ``hit_analysis.simulate_contacts``
+    skips them. But the stat file already recorded the game's own
     contact point, landing point, apex height and hang time for every
     contact regardless of swing type — this draws one smooth parabola
     through those recorded points instead of re-deriving physics. Not a
@@ -311,8 +310,8 @@ def character_abs(payload: dict, contacts: dict, sb: int, side: int,
                 "fiveStar": bool((pitch.get("Contact") or {}).get("Star Swing Five-Star")),
             }
         elif pitch.get("Contact"):
-            # pyrio's resimulator has nothing for this event (unsupported
-            # swing type, or it raised) — draw an honest approximate
+            # pyrio's resimulator has nothing for this event (it raised)
+            # — draw an honest approximate
             # flight from the game's own recorded contact fields instead
             # of leaving the play with no animation. See fallback_flight.
             rec["contact"] = fallback_flight(pitch["Contact"])
