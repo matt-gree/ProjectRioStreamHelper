@@ -6,4 +6,4 @@
 	url = https://github.com/matt-gree/gc-overlay.git
 [submodule "rio-visualizer"]
 	path = rio-visualizer
-	url = https://github.com/matt-gree/RioVisualizer
+	url = https://github.com/nuche17/Mssb3DBattingVisualizer.git
