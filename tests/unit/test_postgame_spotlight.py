@@ -1,6 +1,8 @@
 """Character Spotlight server layer: the event-derived per-character counters
 (star hits, wall jumps, sliding catches — no aggregated stat-file fields exist
 for these) and the per-AB walkthrough payload (``PostGame.character_abs``)."""
+import pytest
+
 from server.postgame import contacts as postgame_contacts, stats as postgame_stats
 from server.postgame import PostGame
 
@@ -216,6 +218,27 @@ def test_contact_with_swing_none_reads_as_bunt():
     assert res["abs"][0]["swing"] == "Bunt"
     assert res["abs"][0]["swingInfo"]["type"] == "Bunt"
     assert res["abs"][1]["swing"] == "None"
+
+
+# --- five-star flags ---
+
+@pytest.mark.parametrize("value, five_star, failed", [
+    (0, False, False), (1, True, False), (2, False, True),
+    ("None", False, False), ("Moonshot", True, False), ("Failed Moonshot", False, True),
+    (None, False, False),
+])
+def test_five_star_flags_read_numbers_and_labels(value, five_star, failed):
+    assert postgame_contacts.five_star_flags({"Star Swing Five-Star": value}) == {
+        "fiveStar": five_star, "fiveStarFailed": failed}
+
+
+def test_approximate_flight_marks_a_failed_moonshot():
+    contact = {"Star Swing Five-Star": "Failed Moonshot", "Ball Contact Pos - X": 0.1,
+               "Ball Contact Pos - Z": 1.4, "Ball Landing Position - X": 21.6,
+               "Ball Landing Position - Z": 38.0, "Ball Max Height": 14.2,
+               "Ball Hang Time": "153"}
+    flight = postgame_contacts.fallback_flight(contact)
+    assert flight["fiveStarFailed"] and not flight["fiveStar"]
 
 
 def test_stars_used_resets_across_half_inning_and_batter_boundaries():

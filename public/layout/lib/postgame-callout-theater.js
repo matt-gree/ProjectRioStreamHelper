@@ -270,7 +270,8 @@ export function createTheater({ stage }) {
     if (quality) subs.push([quality[0] === 'perf' ? 'perf' : '', `${quality[1]} CONTACT`]);
     if (ab.contact && meta.hit) subs.push(['', `${Math.round(ab.contact.distance * 3.28084)}ft`]);
     if (ab.swing === 'Star') {
-      subs.push(['rob', ab.contact && ab.contact.fiveStar ? '5★ STAR SWING' : 'STAR SWING']);
+      const contact = ab.contact || {};
+      subs.push(['rob', contact.fiveStarFailed ? 'FAILED 5★' : contact.fiveStar ? '5★ STAR SWING' : 'STAR SWING']);
     } else {
       const tag = swingTag(ab);
       if (tag) subs.push(['', tag]);
