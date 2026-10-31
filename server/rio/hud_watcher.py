@@ -170,6 +170,8 @@ class HudWatcher:
             "batter_roster_loc": rb.get("Runner Roster Loc"),
             "batter_char": rb.get("Runner Char Id"),
             "type_of_swing": pitch.get("Type of Swing"),
+            "five_star": con.get("Star Swing Five-Star"),
+            "batter_x": pitch.get("Bat Contact Pos - X"),
             "ball_x": con.get("Ball Contact Pos - X"),
             "ball_z": con.get("Ball Contact Pos - Z"),
             "charge_up": con.get("Charge Power Up"),

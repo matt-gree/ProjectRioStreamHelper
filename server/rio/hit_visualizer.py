@@ -17,6 +17,7 @@ from loguru import logger
 
 from server.rio.pyrio.lookup import LookupDicts
 from rio_visualizer.api import simulate
+from rio_visualizer.data.constants import BUNT
 
 # pyrio name -> id, for resolving HUD roster/pitcher names (HUD stores names).
 _NAME_TO_ID = {
@@ -31,10 +32,14 @@ _TOL_LANDING_M = 3.0
 _TOL_MAXHEIGHT_M = 3.0
 _TOL_HANGTIME_FRAMES = 20
 
+# Type of Swing -> simulate() hit_type; anything else swings as a slap. A contact
+# with swing "None" is a bunt from before Project Rio 2.3.0.
+_HIT_TYPES = {"Charge": 1, "Bunt": BUNT, "None": BUNT}
+
 
 def _i(v):
     try:
-        return int(float(v))
+        return int(float(str(v).replace(",", "")))  # the HUD writes "31,256"
     except (TypeError, ValueError):
         return None
 
@@ -86,10 +91,12 @@ def build_hit(game: dict) -> dict | None:
     pitcher_id = _cid(c.get("pitcher_char")) or 0
 
     rng = c.get("rng") or [None, None, None]
+    swing = c.get("type_of_swing")
     kwargs = {
         "batter_id": batter_id if batter_id is not None else 0,
         "pitcher_id": pitcher_id,
         "handedness": handedness,
+        "batter_x": _f(c.get("batter_x")) or 0.0,
         "ball_x": _f(c.get("ball_x")) or 0.0,
         "ball_z": _f(c.get("ball_z")) or 0.0,
         "charge_up": _f(c.get("charge_up")) or 0.0,
@@ -98,7 +105,10 @@ def build_hit(game: dict) -> dict | None:
         "rand_1": _i(rng[0]) or 0,
         "rand_2": _i(rng[1]) or 0,
         "rand_3": _i(rng[2]) or 0,
-        "hit_type": 1 if c.get("type_of_swing") == "Charge" else 0,
+        "is_starred": bool(game.get(f"{team}_roster_{slot}_is_starred")),
+        "hit_type": _HIT_TYPES.get(swing, 0),
+        "is_star_hit": swing == "Star",
+        "five_star_attempt": c.get("five_star") not in (None, 0, "None"),
         # Pin the actual flight: the HUD's recorded angles/power are applied
         # after the calc's RNG step, so the arc reproduces what happened.
         # override_vertical_range forces simulate() to return exactly one path.
