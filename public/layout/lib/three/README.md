@@ -8,6 +8,7 @@ overlay) run without a network connection — PRSH ships fully offline.
   - `three.module.js`           ← `build/three.module.js`
   - `addons/controls/OrbitControls.js`     ← `examples/jsm/controls/OrbitControls.js`
   - `addons/renderers/CSS2DRenderer.js`    ← `examples/jsm/renderers/CSS2DRenderer.js`
+  - `addons/utils/BufferGeometryUtils.js`  ← `examples/jsm/utils/BufferGeometryUtils.js`
 
 The addons import three via the bare `'three'` specifier, so consumers must
 declare an importmap, e.g.:
@@ -23,6 +24,7 @@ declare an importmap, e.g.:
 
 ## Updating
 
-To bump the version, re-download the three files from jsDelivr at the new
-version and update this note. Keep the addon set in sync with what the
-overlay/renderer actually imports.
+To bump the version, re-download the files from jsDelivr at the new version
+and update this note. Keep the addon set in sync with what the overlay/renderer
+actually imports: `tests/unit/test_rio_visualizer_imports.py` fails if a
+rio-visualizer bump needs one that isn't here.
