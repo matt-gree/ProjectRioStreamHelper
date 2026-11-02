@@ -28,7 +28,7 @@ export const RESULT_META = {
   9: { abbr: '3B',  stamp: 'TRIPLE',      hit: true },
   10: { abbr: 'HR', stamp: 'HOME RUN',    hit: true },
   11: { abbr: 'E',  stamp: 'ERROR' },
-  12: { abbr: 'E',  stamp: 'CHEM ERROR' },
+  12: { abbr: 'FC', stamp: "FIELDER'S CHOICE" },
   13: { abbr: 'BNT', stamp: 'BUNT' },
   14: { abbr: 'SF', stamp: 'SAC FLY' },
   15: { abbr: 'DP', stamp: 'DOUBLE PLAY', neg: true },

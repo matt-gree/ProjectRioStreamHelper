@@ -3,10 +3,15 @@
 ``StatFileWatcher._on_file`` is the whole decision, so that is what these pin:
 which board a file captures to, what makes it fire once and not per write, and
 what stops it firing at all. The awatch plumbing around it is not tested — it is
-the same ``watchfiles`` loop HudWatcher already runs.
+the same ``watchfiles`` loop HudWatcher already runs — apart from the filter that
+decides which files reach ``_on_file``.
 """
+import asyncio
+from pathlib import Path
+
 import orjson
 import pytest
+from watchfiles import Change
 
 from server.postgame.watch import StatFileWatcher
 from server.settings import Settings
@@ -21,8 +26,8 @@ def stat_dir(tmp_path, set_setting):
     return d
 
 
-def write_stat(d, gid, *, loaded_from_hud=0):
-    p = d / f"decoded.Game_{gid}.json"
+def write_stat(d, gid, *, loaded_from_hud=0, prefix="decoded."):
+    p = d / f"{prefix}Game_{gid}.json"
     p.write_bytes(orjson.dumps({"GameID": str(gid), "Loaded from HUD": loaded_from_hud}))
     return p
 
@@ -62,8 +67,17 @@ async def test_captures_to_the_board_carrying_that_game(stat_dir, captures, boar
 @pytest.mark.asyncio
 async def test_normalizes_the_id_across_feeds(stat_dir, captures, boards):
     """The HUD feed writes game_id as a string, the API path as an int. Both
-    have to match a stat file's decimal GameID."""
+    have to match a stat file's GameID."""
     await StatFileWatcher._on_file(write_stat(stat_dir, 100))
+    assert captures == [(1, "auto")]
+
+
+@pytest.mark.asyncio
+async def test_matches_a_hex_game_id(stat_dir, captures, boards):
+    from server.state import State
+
+    State.state["score"]["1"]["game_id"] = "b9ac74dcdeacc"
+    await StatFileWatcher._on_file(write_stat(stat_dir, "b9ac74dcdeacc"))
     assert captures == [(1, "auto")]
 
 
@@ -75,6 +89,45 @@ async def test_ignores_a_game_no_board_is_carrying(stat_dir, captures, boards):
     assert captures == []
 
 
+# --- which files it sees ---
+
+@pytest.mark.asyncio
+async def test_the_filter_passes_decoded_files_only(tmp_path, monkeypatch, set_setting):
+    """`quit.` starts both the decoded quit file and the encoded one, and only
+    the first can be read."""
+    set_setting("project_rio.hud_path",
+                str(tmp_path / "HudFiles" / "decoded.hud.json"))
+    (tmp_path / "StatFiles" / "MarioSuperstarBaseball").mkdir(parents=True)
+    seen = {}
+
+    async def fake_awatch(d, *, watch_filter, stop_event, **kwargs):
+        seen["filter"] = watch_filter
+        stop_event.set()
+        return
+        yield
+
+    monkeypatch.setattr("server.postgame.watch.awatch", fake_awatch)
+    monkeypatch.setattr(StatFileWatcher, "_stop", asyncio.Event())
+    await StatFileWatcher._loop()
+
+    def passes(name):
+        return seen["filter"](Change.added, str(Path("StatFiles") / name))
+
+    rest = "20261031T130630_Alice-Vs-Bob_b9ac74dcdeacc.json"
+    assert passes(f"decoded.{rest}")
+    assert passes(f"quit.decode.{rest}")
+    assert not passes(f"quit.{rest}")
+    assert not passes(f"crash.{rest}")
+    assert not passes(f"crash.decode.{rest}")
+    assert not passes(rest)
+
+
+@pytest.mark.asyncio
+async def test_a_quit_file_on_its_own_captures(stat_dir, captures, boards):
+    await StatFileWatcher._on_file(write_stat(stat_dir, 100, prefix="quit.decode."))
+    assert captures == [(1, "auto")]
+
+
 # --- firing once ---
 
 @pytest.mark.asyncio
@@ -84,6 +137,15 @@ async def test_fires_once_per_game_not_once_per_write(stat_dir, captures, boards
     p = write_stat(stat_dir, 100)
     await StatFileWatcher._on_file(p)
     await StatFileWatcher._on_file(p)
+    assert captures == [(1, "auto")]
+
+
+@pytest.mark.asyncio
+async def test_fires_once_for_a_game_with_two_files(stat_dir, captures, boards):
+    """Earlier Project Rio writes `quit.decode.` and `decoded.` for one quit game,
+    and the two are one game to the watcher in either order."""
+    await StatFileWatcher._on_file(write_stat(stat_dir, 100, prefix="quit.decode."))
+    await StatFileWatcher._on_file(write_stat(stat_dir, 100))
     assert captures == [(1, "auto")]
 
 

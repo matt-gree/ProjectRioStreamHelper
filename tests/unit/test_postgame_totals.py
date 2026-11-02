@@ -37,6 +37,18 @@ def test_stars_won_ignores_non_star_chance_and_unresolved():
     assert postgame_stats.stars_won(events) == (1, 0)
 
 
+def test_result_code_reads_current_and_older_labels():
+    # Rio 2.3.0 renamed these, and older stat files keep the old labels.
+    for label in ("Error", "Error - Input"):
+        assert postgame_stats.result_code({"Result of AB": label}) == 11
+    for label in ("Fielders Choice", "Error - Chem"):
+        assert postgame_stats.result_code({"Result of AB": label}) == 12
+
+
+def test_stars_won_counts_older_error_labels():
+    assert postgame_stats.stars_won([ev(0, "Error - Chem")]) == (1, 0)
+
+
 def test_stars_won_accepts_numeric_result_codes():
     # Raw (undecoded) files carry the numeric final-result code.
     assert postgame_stats.stars_won([ev(0, 7), ev(1, 1)]) == (2, 0)

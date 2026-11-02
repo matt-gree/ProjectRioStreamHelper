@@ -23,6 +23,9 @@ from server.postgame import files as pgf
     ("123456", "123456"),
     ("1,234,567", "1234567"),      # HUD feed writes comma-grouped strings
     ("  42 ", "42"),
+    ("b9ac74dcdeacc", "b9ac74dcdeacc"),   # hex from Rio 2.3.0
+    ("B9AC74DCDEACC", "b9ac74dcdeacc"),
+    ("0123", "0123"),                     # a string, never a number
 ])
 def test_norm_game_id_canonicalizes_all_sources(raw, expected):
     assert pgf.norm_game_id(raw) == expected
@@ -91,7 +94,7 @@ def test_candidates_filter_by_filename_gameid(stat_dir):
     keep = write_stat(stat_dir, 42)
     write_stat(stat_dir, 99)
     write_stat(stat_dir, 42, name="notdecoded_42.json")   # wrong prefix
-    (stat_dir / "decoded.noid.json").write_bytes(b"{}")   # no trailing _<digits>
+    (stat_dir / "decoded.noid.json").write_bytes(b"{}")   # no trailing _<id>
     assert pgf.candidate_files("42") == [keep]
 
 
@@ -99,6 +102,23 @@ def test_candidates_newest_first(stat_dir):
     old = write_stat(stat_dir, 42, name="decoded.old_42.json", age=100)
     new = write_stat(stat_dir, 42, name="decoded.new_42.json")
     assert pgf.candidate_files("42") == [new, old]
+
+
+def test_candidates_put_decoded_before_a_newer_quit_file(stat_dir):
+    decoded = write_stat(stat_dir, 42, name="decoded.g_42.json", age=100)
+    quit_file = write_stat(stat_dir, 42, name="quit.decode.g_42.json")
+    assert pgf.candidate_files("42") == [decoded, quit_file]
+
+
+@pytest.mark.parametrize("name", [
+    "quit.g_42.json",           # encoded: `quit.` is also the start of `quit.decode.`
+    "crash.g_42.json",
+    "crash.decode.g_42.json",
+    "quit.decode.g_42.txt",
+])
+def test_only_decoded_and_quit_decode_files_are_candidates(stat_dir, name):
+    write_stat(stat_dir, 42, name=name)
+    assert pgf.candidate_files("42") == []
 
 
 # --- find_file (the authoritative gate) ---
@@ -153,6 +173,75 @@ def test_find_file_normalizes_comma_grouped_hud_gameid(stat_dir):
     assert (path, reason) == (p, None)
 
 
+@pytest.mark.parametrize("name_id, in_file, board", [
+    ("b9ac74dcdeacc", "b9ac74dcdeacc", "b9ac74dcdeacc"),  # 2.3.0, letters in it
+    ("1234567890123", "1234567890123", "1234567890123"),  # 2.3.0, all digits
+    ("3359673959", "3,359,673,959", "3,359,673,959"),     # old decimal, grouped
+    ("3359673959", "3359673959", 3359673959),             # old decimal, int feed
+    ("B9AC74DCDEACC", "b9ac74dcdeacc", "b9ac74dcdeacc"),  # case can't reject it
+])
+def test_find_file_matches_the_same_id_in_every_form(stat_dir, name_id, in_file, board):
+    p = write_stat(stat_dir, name_id, in_file_gid=in_file,
+                   name=f"decoded.20261031T130630_Alice-Vs-Bob_{name_id}.json")
+    path, reason = pgf.find_file(board)
+    assert (path, reason) == (p, None)
+
+
+def test_find_file_does_not_match_another_games_hex_id(stat_dir):
+    write_stat(stat_dir, "b9ac74dcdeacc")
+    path, reason = pgf.find_file("b9ac74dcdeacd")
+    assert path is None and "No stat file found" in reason
+
+
+def test_find_file_finds_a_quit_file_on_its_own(stat_dir):
+    p = write_stat(stat_dir, "b9ac74dcdeacc", name="quit.decode.g_b9ac74dcdeacc.json")
+    path, reason = pgf.find_file("b9ac74dcdeacc")
+    assert (path, reason) == (p, None)
+
+
+def test_find_file_prefers_decoded_over_a_newer_quit_file(stat_dir):
+    # why: the `quit.decode.` half of a pair can still hold the unfinished event.
+    decoded = write_stat(stat_dir, 42, name="decoded.g_42.json", age=100)
+    write_stat(stat_dir, 42, name="quit.decode.g_42.json")
+    path, reason = pgf.find_file("42")
+    assert (path, reason) == (decoded, None)
+
+
+def test_find_file_falls_back_to_quit_when_decoded_is_unreadable(stat_dir):
+    (stat_dir / "decoded.g_42.json").write_bytes(b'{"GameID": "4')
+    quit_file = write_stat(stat_dir, 42, name="quit.decode.g_42.json", age=100)
+    path, reason = pgf.find_file("42")
+    assert (path, reason) == (quit_file, None)
+
+
+# --- is_stat_file / is_quit_game ---
+
+@pytest.mark.parametrize("name, expected", [
+    ("decoded.20261031T130630_A-Vs-B_abc.json", True),
+    ("quit.decode.20261031T130630_A-Vs-B_abc.json", True),
+    ("quit.20261031T130630_A-Vs-B_abc.json", False),
+    ("crash.20261031T130630_A-Vs-B_abc.json", False),
+    ("crash.decode.20261031T130630_A-Vs-B_abc.json", False),
+    ("20261031T130630_A-Vs-B_abc.json", False),
+    ("decoded.20261031T130630_A-Vs-B_abc.json.tmp", False),
+])
+def test_is_stat_file(name, expected):
+    assert pgf.is_stat_file(name) is expected
+
+
+def test_a_quit_file_is_a_quit_game_whatever_is_inside_it(stat_dir):
+    assert pgf.is_quit_game("quit.decode.g_42.json") is True
+
+
+def test_a_decoded_file_is_a_quit_game_only_with_a_quit_twin(stat_dir):
+    write_stat(stat_dir, 42, name="decoded.20230501T204932_A-Vs-B_42.json")
+    write_stat(stat_dir, 7, name="decoded.20230501T210000_A-Vs-B_7.json")
+    # A second apart: the timestamp comes off the clock, once per file.
+    write_stat(stat_dir, 42, name="quit.decode.20230501T204931_A-Vs-B_42.json")
+    assert pgf.is_quit_game("decoded.20230501T204932_A-Vs-B_42.json") is True
+    assert pgf.is_quit_game("decoded.20230501T210000_A-Vs-B_7.json") is False
+
+
 # --- list_files (manual pick) ---
 
 def test_list_files_empty_when_dir_missing(tmp_path, set_setting):
@@ -175,7 +264,7 @@ def test_list_files_descriptors_newest_first_skipping_replays(stat_dir):
     assert out[1] == {
         "file": "decoded.a_1.json", "gameId": "1",
         "awayPlayer": "A", "homePlayer": "B",
-        "awayScore": 3, "homeScore": 5, "endDate": "d1",
+        "awayScore": 3, "homeScore": 5, "endDate": "d1", "quit": False,
     }
 
 
@@ -183,6 +272,39 @@ def test_list_files_respects_limit(stat_dir):
     for i in range(5):
         write_stat(stat_dir, i, name=f"decoded.g_{i}.json", age=i)
     assert len(pgf.list_files(limit=2)) == 2
+
+
+def test_list_files_includes_a_quit_file_on_its_own(stat_dir):
+    write_stat(stat_dir, 42, name="quit.decode.g_42.json")
+    out = pgf.list_files()
+    assert [(d["file"], d["quit"]) for d in out] == [("quit.decode.g_42.json", True)]
+
+
+@pytest.mark.parametrize("decoded_age, quit_age", [(0, 100), (100, 0)])
+def test_list_files_shows_a_pair_once_as_the_decoded_file(stat_dir, decoded_age, quit_age):
+    write_stat(stat_dir, 42, name="decoded.g_42.json", age=decoded_age)
+    write_stat(stat_dir, 42, name="quit.decode.g_42.json", age=quit_age)
+    out = pgf.list_files()
+    assert [(d["file"], d["quit"]) for d in out] == [("decoded.g_42.json", True)]
+
+
+def test_list_files_shows_a_quit_file_when_its_decoded_twin_is_unreadable(stat_dir):
+    (stat_dir / "decoded.g_42.json").write_bytes(b"nope")
+    write_stat(stat_dir, 42, name="quit.decode.g_42.json")
+    assert [d["file"] for d in pgf.list_files()] == ["quit.decode.g_42.json"]
+
+
+def test_list_files_ignores_encoded_quit_and_crash_files(stat_dir):
+    for name in ("quit.g_42.json", "crash.g_42.json", "crash.decode.g_42.json"):
+        write_stat(stat_dir, 42, name=name)
+    assert pgf.list_files() == []
+
+
+def test_list_files_keeps_different_quit_games_that_share_an_id(stat_dir):
+    """Old quit files can have an id of 0, so the id alone doesn't pair files."""
+    write_stat(stat_dir, 0, name="quit.decode.20230417T145652_A-Vs-B_0.json")
+    write_stat(stat_dir, 0, name="quit.decode.20230820T201207_C-Vs-D_0.json")
+    assert len(pgf.list_files()) == 2
 
 
 # --- resolve_pick: the producer's override ---------------------------------

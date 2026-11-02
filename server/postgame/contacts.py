@@ -10,7 +10,11 @@ scoreboard-keyed caches stay in ``PostGame``.
 from loguru import logger
 
 from server.postgame.stats import HIT_CODES, result_code, star_cost
+from server.rio.pyrio.lookup import LookupDicts
 from server.rio.pyrio.stat_file_parser import StatObj
+
+# Decoded "Star Swing Five-Star" label → numeric code.
+_FIVE_STAR_CODES = {v: k for k, v in LookupDicts.FIVE_STAR.items()}
 
 
 def simulate_game_contacts(stat: StatObj | None, sb: int) -> dict:
@@ -29,6 +33,15 @@ def simulate_game_contacts(stat: StatObj | None, sb: int) -> dict:
     except Exception:
         logger.exception("[PostGame] sb{} contact simulation failed", sb)
         return {}
+
+
+def five_star_flags(contact: dict) -> dict:
+    """The contact's ``fiveStar`` (a connected Moonshot) and ``fiveStarFailed``
+    (an attempt without perfect contact) flags. "Star Swing Five-Star" is a
+    number in older and encoded files and a label in newer decoded ones."""
+    value = contact.get("Star Swing Five-Star")
+    code = value if isinstance(value, int) else _FIVE_STAR_CODES.get(value, 0)
+    return {"fiveStar": code == 1, "fiveStarFailed": code == 2}
 
 
 def runner_entries(ev: dict) -> list[dict]:
@@ -86,12 +99,11 @@ def fallback_flight(contact: dict) -> dict | None:
 
     ``simulate_game_contacts`` re-derives every contact's exact trajectory by
     replaying its recorded RNG through pyrio's swing model
-    (``hit_simulator.hit_simulation.simulate_hit_from_event``), which only
-    supports Slap/Charge/Star swings — a small slice of real contacts
-    (e.g. a recorded ``Type of Swing`` of "None", seen on weakly-fielded
-    come-backers) fall outside that model and the resimulator silently
-    skips them (``hit_analysis.simulate_contacts``) or raises
-    ``ValueError``. But the stat file already recorded the game's own
+    (``hit_simulator.hit_simulation.simulate_hit_from_event``), bunts
+    included — but a small slice of real contacts can't be reproduced
+    (e.g. inputs the model says wouldn't reach the ball), and the
+    resimulator raises ``ValueError`` and ``hit_analysis.simulate_contacts``
+    skips them. But the stat file already recorded the game's own
     contact point, landing point, apex height and hang time for every
     contact regardless of swing type — this draws one smooth parabola
     through those recorded points instead of re-deriving physics. Not a
@@ -138,7 +150,7 @@ def fallback_flight(contact: dict) -> dict | None:
         "power": power,
         "quality": contact.get("Contact Quality"),
         "typeName": contact.get("Type of Contact"),
-        "fiveStar": bool(contact.get("Star Swing Five-Star")),
+        **five_star_flags(contact),
         "approx": True,  # drawn from recorded points, not resimulated
     }
 
@@ -308,11 +320,11 @@ def character_abs(payload: dict, contacts: dict, sb: int, side: int,
                 "power": c.power,
                 "quality": c.sim.contact_quality,
                 "typeName": c.sim.contact_type_name,
-                "fiveStar": bool((pitch.get("Contact") or {}).get("Star Swing Five-Star")),
+                **five_star_flags(pitch.get("Contact") or {}),
             }
         elif pitch.get("Contact"):
-            # pyrio's resimulator has nothing for this event (unsupported
-            # swing type, or it raised) — draw an honest approximate
+            # pyrio's resimulator has nothing for this event (it raised)
+            # — draw an honest approximate
             # flight from the game's own recorded contact fields instead
             # of leaving the play with no animation. See fallback_flight.
             rec["contact"] = fallback_flight(pitch["Contact"])
