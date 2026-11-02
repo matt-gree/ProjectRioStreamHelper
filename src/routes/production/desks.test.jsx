@@ -2278,6 +2278,21 @@ describe('post-game stat file', () => {
         await waitFor(() => expect(calls()).toHaveLength(1));
     });
 
+    it('marks a quit game in the list', async () => {
+        board({ 1: { game_id: 'G1', player: { 1: { rioName: 'rjb' } } } }, {});
+        global.fetch.mockImplementation(() => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ files: [{
+                file: 'quit.decode.Game_999.json', endDate: 'Sat Oct 31', quit: true,
+            }] }),
+        }));
+        ui(<BoardDesk board={1} />);
+
+        fireEvent.click(screen.getByRole('button', { name: /Pick a file/ }));
+
+        expect(await screen.findByText('Quit \u00b7 Sat Oct 31')).toBeTruthy();
+    });
+
     it('captures the chosen file by name, past the game-id match', async () => {
         board({ 1: { game_id: 'G1', player: { 1: { rioName: 'rjb' } } } }, {});
         global.fetch.mockImplementation((url) => Promise.resolve({

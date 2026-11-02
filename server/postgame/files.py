@@ -1,10 +1,11 @@
 """Stat-file location + IO for the post-game capture (``server/postgame/capture.py``).
 
-Project Rio writes a decoded stat file per finished game under
+Project Rio writes a decoded stat file per game under
 ``StatFiles/MarioSuperstarBaseball/`` — a sibling of the ``HudFiles`` directory
-that holds ``decoded.hud.json``. Selection is **not** "newest file": a capture
-matches the file whose in-file ``GameID`` equals the just-finished game's id
-AND whose ``Loaded from HUD`` flag is ``0`` (a HUD-replay file is not real
+that holds ``decoded.hud.json``: ``decoded.*`` for a finished game,
+``quit.decode.*`` for one quit part way. Selection is **not** "newest file": a
+capture matches the file whose in-file ``GameID`` equals the just-finished game's
+id AND whose ``Loaded from HUD`` flag is ``0`` (a HUD-replay file is not real
 recorded data and is rejected).
 """
 import os
@@ -18,21 +19,29 @@ from server.settings import Settings
 
 _STAT_SUBDIR = ("StatFiles", "MarioSuperstarBaseball")
 _DECODED_PREFIX = "decoded."
-# Trailing _<digits>.json in a stat-file name is the GameID (decimal). Used only
-# as a cheap pre-filter; the GameID inside the file is the authoritative match.
-_FILENAME_GAMEID_RE = re.compile(r"_(\d+)\.json$")
+# A game quit part way. Project Rio with the quit fixes writes only this; earlier
+# versions write it a few ms before a `decoded.` file for the same game, with the
+# unfinished last event still in it, which is why `decoded.` wins a pair. The
+# encoded `quit.*` files share the first word and are not ours; nor is `crash.*`.
+_QUIT_PREFIX = "quit.decode."
+# Trailing _<id>.json in a stat-file name is the GameID: lowercase hex from Rio
+# 2.3.0, decimal before it, and this matches both. Used only as a cheap
+# pre-filter; the GameID inside the file is the authoritative match.
+_FILENAME_GAMEID_RE = re.compile(r"_([0-9a-fA-F]+)\.json$")
 
 
 def norm_game_id(g) -> str:
     """Canonical comparison form for a GameID from any source.
 
-    The stat file's ``GameID`` is a decimal string matching its filename; the
-    HUD feed writes ``score.{N}.game_id`` as a string while the Live-API path
-    writes an int. Normalize all of them to a comma/space-stripped string.
+    The stat file's ``GameID`` matches its filename: lowercase hex from Rio
+    2.3.0, a decimal string (often comma-grouped) before it. The HUD feed writes
+    ``score.{N}.game_id`` as the same string while the Live-API path writes an
+    int. Normalize all of them to a comma/space-stripped lowercase string — never
+    a number, because ``123`` alone does not say which base it is in.
     """
     if g is None:
         return ""
-    return str(g).replace(",", "").strip()
+    return str(g).replace(",", "").strip().lower()
 
 
 def stat_dir() -> Path:
@@ -59,8 +68,38 @@ def stat_dir() -> Path:
     return hud.parent.parent.joinpath(*_STAT_SUBDIR)
 
 
+def is_stat_file(name: str) -> bool:
+    """Whether ``name`` is a decoded stat file: ``decoded.*`` or ``quit.decode.*``."""
+    return name.startswith((_DECODED_PREFIX, _QUIT_PREFIX)) and name.endswith(".json")
+
+
+def _game_key(name: str) -> str:
+    """What a game's ``decoded.*`` and ``quit.decode.*`` names share: all of it
+    past the timestamp, which can differ across a second boundary. The GameID
+    alone would not do — old quit files can have an id of 0."""
+    return name.partition("_")[2]
+
+
+def is_quit_game(name: str) -> bool:
+    """Whether the stat file ``name`` is from a game that was quit.
+
+    Decided by filename, as a quit file or a ``decoded.*`` with a quit twin.
+    ``Quitter Team`` can't say: it stays "None" on a quit that wasn't made from
+    the pause menu, and pyrio's ``wasQuit`` has been true for every game.
+    """
+    if name.startswith(_QUIT_PREFIX):
+        return True
+    d = stat_dir()
+    if not d.is_dir():
+        return False
+    key = _game_key(name)
+    return any(p.name.startswith(_QUIT_PREFIX) and _game_key(p.name) == key
+               for p in d.iterdir())
+
+
 def candidate_files(game_id: str) -> list[Path]:
-    """Decoded stat files whose filename GameID matches, newest first.
+    """Decoded stat files whose filename GameID matches: ``decoded.*`` before
+    ``quit.decode.*``, each newest first.
 
     Filename match is a pre-filter only; ``find_file`` re-verifies the
     in-file GameID and the Loaded-from-HUD gate.
@@ -69,11 +108,11 @@ def candidate_files(game_id: str) -> list[Path]:
     if not d.is_dir():
         return []
     files = []
-    for p in d.glob(f"{_DECODED_PREFIX}*.json"):
+    for p in d.iterdir():
         m = _FILENAME_GAMEID_RE.search(p.name)
-        if m and (not game_id or norm_game_id(m.group(1)) == game_id):
+        if is_stat_file(p.name) and m and (not game_id or norm_game_id(m.group(1)) == game_id):
             files.append(p)
-    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    files.sort(key=lambda p: (p.name.startswith(_QUIT_PREFIX), -p.stat().st_mtime))
     return files
 
 
@@ -166,17 +205,28 @@ def resolve_pick(name: str) -> tuple[Path | None, str | None]:
 def list_files(limit: int = 25) -> list[dict]:
     """Recent usable (``Loaded from HUD == 0``) stat files for a manual pick.
 
-    Returns lightweight descriptors, newest first — no full parse.
+    Returns lightweight descriptors, newest first — no full parse. A game with
+    both a ``decoded.*`` and a ``quit.decode.*`` file is listed once, as the
+    ``decoded.*`` unless that one can't be used.
     """
     d = stat_dir()
     if not d.is_dir():
         return []
-    files = sorted(d.glob(f"{_DECODED_PREFIX}*.json"),
+    files = sorted((p for p in d.iterdir() if is_stat_file(p.name)),
                    key=lambda p: p.stat().st_mtime, reverse=True)
+    quit_keys = {_game_key(p.name) for p in files if p.name.startswith(_QUIT_PREFIX)}
+    decoded = {_game_key(p.name): p for p in files if p.name.startswith(_DECODED_PREFIX)}
+
+    def usable(data: dict | None) -> bool:
+        return data is not None and data.get("Loaded from HUD", 0) == 0
+
     out = []
     for p in files[: limit * 2]:
         data = load_json(p)
-        if data is None or data.get("Loaded from HUD", 0) != 0:
+        if not usable(data):
+            continue
+        twin = decoded.get(_game_key(p.name)) if p.name.startswith(_QUIT_PREFIX) else None
+        if twin is not None and usable(load_json(twin)):
             continue
         out.append({
             "file": p.name,
@@ -186,6 +236,7 @@ def list_files(limit: int = 25) -> list[dict]:
             "awayScore": data.get("Away Score"),
             "homeScore": data.get("Home Score"),
             "endDate": data.get("Date - End", ""),
+            "quit": _game_key(p.name) in quit_keys,
         })
         if len(out) >= limit:
             break

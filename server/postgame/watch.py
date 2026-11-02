@@ -4,9 +4,9 @@
 a local board has. The HUD feed has no final frame — it simply stops, or the next
 game overwrites it — and ``score.{N}.game_completed`` is written by the API paths
 alone (``server/rio/provider.py``, ``game_pool.py``). Project Rio, meanwhile,
-writes exactly one decoded stat file per finished game the moment it ends, which
-is also the precondition a capture needs: watching for the file means never
-firing before there is something to read.
+writes a decoded stat file the moment a game ends, or as the exit fade starts on
+a quit, which is also the precondition a capture needs: watching for the file
+means never firing before there is something to read.
 
 So this module is deliberately thin. It decides only WHEN to ask; whether a file
 is usable stays in ``postgame_files.find_file`` (GameID + Loaded-from-HUD), and
@@ -61,8 +61,9 @@ class StatFileWatcher:
     _stop: asyncio.Event | None = None
 
     # (sb, game_id) pairs already auto-captured this session. A file is written
-    # in more than one syscall, so `added` is usually followed by `modified`;
-    # this is what makes the capture once-per-game rather than once-per-write.
+    # in more than one syscall, so `added` is usually followed by `modified`, and
+    # a quit game can land two files; this is what makes the capture once-per-game
+    # rather than once-per-write. Which of the two it reads is find_file's call.
     # It is also what makes the producer's Clear STICK: having cleared a capture
     # they did not want, the file is still sitting there and every later write
     # in that directory would otherwise hand it back.
@@ -113,8 +114,7 @@ class StatFileWatcher:
             try:
                 async for changes in awatch(
                     d,
-                    watch_filter=lambda change, path: Path(path).name.startswith("decoded.")
-                    and path.endswith(".json"),
+                    watch_filter=lambda change, path: postgame_files.is_stat_file(Path(path).name),
                     stop_event=cls._stop,
                     debounce=300,
                     step=200,

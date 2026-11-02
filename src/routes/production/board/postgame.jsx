@@ -259,7 +259,7 @@ const StatFilePicker = memo(function StatFilePicker({ onPick, disabled }) {
                             <span className="min-w-0 flex-1 truncate text-right">{f.homePlayer || 'Home'}</span>
                         </span>
                         <span className="w-full truncate text-[10px] text-muted-foreground">
-                            {f.endDate || f.file}
+                            {f.quit && 'Quit \u00b7 '}{f.endDate || f.file}
                         </span>
                     </button>
                 ))}

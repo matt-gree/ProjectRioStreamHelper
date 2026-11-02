@@ -13,7 +13,7 @@ State shape (own ``postgame.*`` namespace, scoreboard-keyed; the match's lifecyc
 stage still flips to ``post`` when a match is bound)::
 
     postgame.{N}.present        bool
-    postgame.{N}.gameId         normalized decimal-string game id
+    postgame.{N}.gameId         normalized game id string (hex from Rio 2.3.0)
     postgame.{N}.capturedAt     ISO-8601 capture time
     postgame.{N}.sourceFile     stat-file basename
     postgame.{N}.meta           { startDate, endDate, stadium, tagSetId,
@@ -129,7 +129,11 @@ class PostGame:
         lines = dict(zip((0, 1), postgame_stats.linescore(events, stat)))
         derived = postgame_stats.char_event_derived(events)
 
-        winner_team = stat.winning_team()  # 0/1, or -1 tie
+        # A quit game has a score but no result: being ahead when somebody left
+        # is not a win, and Project Rio doesn't submit it either. The filename
+        # says so, not stat.wasQuit(), which is true of every game on some pyrios.
+        was_quit = postgame_files.is_quit_game(src_name)
+        winner_team = -1 if was_quit else stat.winning_team()  # 0/1, or -1 tie
         winner_side = 1 if winner_team == t1 else 2 if winner_team == t2 else 0
 
         meta = {
@@ -144,12 +148,20 @@ class PostGame:
             "gameMode": stats_api.game_mode_name(data.get("TagSetID")),
             "inningsSelected": stat.inningsSelected(),
             "inningsPlayed": stat.inningsPlayed(),
-            "isMercy": stat.isMercy(),
-            "wasQuit": stat.wasQuit(),
+            "isMercy": not was_quit and stat.isMercy(),
+            "wasQuit": was_quit,
             "quitter": stat.quitter(),
             "version": stat.version(),
             "winnerSide": winner_side,
         }
+        players = {
+            "1": postgame_stats.side_block(stat, t1, stars[t1], derived[t1]),
+            "2": postgame_stats.side_block(stat, t2, stars[t2], derived[t2]),
+        }
+        if was_quit:
+            # side_block reads the winner off the score.
+            for block in players.values():
+                block["isWinner"] = False
         return {
             "present": True,
             "gameId": norm_game_id(data.get("GameID")),
@@ -159,10 +171,7 @@ class PostGame:
             # Side → raw team_num, for consumers that need to walk the raw
             # (away/home-keyed) events in side terms (character_abs).
             "teamNums": {"1": t1, "2": t2},
-            "player": {
-                "1": postgame_stats.side_block(stat, t1, stars[t1], derived[t1]),
-                "2": postgame_stats.side_block(stat, t2, stars[t2], derived[t2]),
-            },
+            "player": players,
             # Per-inning runs by side; None = half not played ("X" cell).
             "linescore": {"1": lines[t1], "2": lines[t2]},
             # Heavy; kept out of State, served via REST.
