@@ -115,7 +115,7 @@ def frame_from_hud(hud: HUDSnapshot) -> dict:
         "batter": hud.batter_spot.index,
         "pitcher": hud.pitcher_spot.index,
     })
-    on_base = {r.start_base: r.spot.index for r in hud.runners if r.start_base}
+    on_base = {r.initial_base: r.spot.index for r in hud.runners if r.initial_base}
     for base, (word, _) in enumerate(_BASES, start=1):
         frame[f"runner_on_{word}"] = base in on_base
         frame[f"runner_on_{word}_roster"] = on_base.get(base, -1)
@@ -165,7 +165,7 @@ def frame_from_live(game: LiveGame) -> dict:
                 f"{prefix}_char": character.label,
                 # The feed reports only the batter's hand.
                 f"{prefix}_batting_hand": (
-                    _hand(game.batter_hand)
+                    _hand(game.batting_hand)
                     if side is game.batting_side and index == game.batter_spot
                     else 0
                 ),

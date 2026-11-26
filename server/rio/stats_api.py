@@ -289,7 +289,7 @@ async def fetch_completed_games(
             stadiums=[Stadium(stadium)] if stadium is not None else None,
             start_time=when(start_time),
             end_time=when(end_time),
-            limit=limit_games if limit_games is not None else 50,
+            limit_games=limit_games if limit_games is not None else 50,
             include_linescore=True,
         )
         rows = [completed_game_row(g) for g in games]

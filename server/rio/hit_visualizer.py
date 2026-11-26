@@ -40,9 +40,9 @@ def build_hit(play: Event, stadium: Stadium) -> dict | None:
 
     points = [[round(x, 3), round(y, 3), round(z, 3)] for x, y, z in hit.trajectory]
     warnings = []
-    if abs(hit.apex_height - contact.max_height) > _TOL_MAXHEIGHT:
-        warnings.append(f"max height off by {abs(hit.apex_height - contact.max_height):.1f}m")
-    hang = contact.hang_time_frames
+    if abs(hit.max_height - contact.max_height) > _TOL_MAXHEIGHT:
+        warnings.append(f"max height off by {abs(hit.max_height - contact.max_height):.1f}m")
+    hang = contact.hang_frames
     if hang is not None and abs(hit.hang_frames - hang) > _TOL_HANGTIME_FRAMES:
         warnings.append(f"hang time off by {abs(hit.hang_frames - hang)} frames")
     warning = "; ".join(warnings)
@@ -53,7 +53,7 @@ def build_hit(play: Event, stadium: Stadium) -> dict | None:
         "path": points,
         "landing": points[-1],
         "distance": round(hit.distance, 2),
-        "maxHeight": round(hit.apex_height, 2),
+        "maxHeight": round(hit.max_height, 2),
         "hangTime": hit.hang_frames,
         "stadium": stadium.label,
         "batter": play.batter.label,

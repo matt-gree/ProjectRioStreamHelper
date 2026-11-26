@@ -24,7 +24,7 @@ def test_char_event_derived_counts_what_the_events_say():
 def test_runner_entries_out_scored_and_advance():
     event = next(e for e in GAME.events if any(r.scored for r in e.runners))
     entries = postgame_contacts.runner_entries(event)
-    assert {r["base"] for r in entries} == {r.start_base for r in event.runners}
+    assert {r["base"] for r in entries} == {r.initial_base for r in event.runners}
     scored = [r for r in entries if r["scored"]]
     assert scored and all(r["resultBase"] == 4 and not r["out"] for r in scored)
 

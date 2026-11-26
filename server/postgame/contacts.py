@@ -38,9 +38,9 @@ def runner_entries(event: Event) -> list[dict]:
     """The play's runner movements: start base → end base (4 = scored, None = out)."""
     return [
         {
-            "base": r.start_base,
+            "base": r.initial_base,
             "char": r.spot.character.label,
-            "resultBase": r.end_base,
+            "resultBase": r.result_base,
             "scored": r.scored,
             "out": r.is_out,
             "steal": r.steal.label,
@@ -57,7 +57,7 @@ def recorded_flight(contact: Contact) -> dict | None:
     recorded hang time. Not a resimulation, but a real flight beats a blank one.
     Returns None without a hang time to draw over.
     """
-    frames = contact.hang_time_frames or 0
+    frames = contact.hang_frames or 0
     if contact.location is None or frames <= 0:
         return None
     sx, sz = contact.location
@@ -103,7 +103,7 @@ def _flight(record: ContactRecord) -> dict:
         "path": points,
         "landing": points[-1] if points else None,
         "distance": round(record.distance, 2),
-        "maxHeight": round(record.apex_height, 2),
+        "maxHeight": round(record.max_height, 2),
         "hangTime": record.hang_frames,
         "power": record.power,
         "quality": record.hit.contact_quality,
