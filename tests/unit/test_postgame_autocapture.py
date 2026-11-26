@@ -8,6 +8,8 @@ the same ``watchfiles`` loop HudWatcher already runs.
 import orjson
 import pytest
 
+from tests.stat_file import write_stat_file
+
 from server.postgame.watch import StatFileWatcher
 from server.settings import Settings
 
@@ -22,9 +24,8 @@ def stat_dir(tmp_path, set_setting):
 
 
 def write_stat(d, gid, *, loaded_from_hud=0):
-    p = d / f"decoded.Game_{gid}.json"
-    p.write_bytes(orjson.dumps({"GameID": str(gid), "Loaded from HUD": loaded_from_hud}))
-    return p
+    return write_stat_file(d / f"decoded.Game_{gid}.json",
+                           GameID=str(gid), **{"Loaded from HUD": loaded_from_hud})
 
 
 @pytest.fixture

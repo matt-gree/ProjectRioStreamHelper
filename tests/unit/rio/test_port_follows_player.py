@@ -16,7 +16,7 @@ import pytest
 
 from server.rio.hud_watcher import HudWatcher
 from server.rio.provider import RioGameDataProvider as P
-from server.rio.pyrio.stat_file_parser import HudObj
+from server.rio.hud_watcher import read_frame
 from server.state import State
 from server.utils.deep_dict import deep_get
 
@@ -25,7 +25,7 @@ FIXTURE_DIR = Path(__file__).resolve().parents[3] / "tests" / "data" / "hud"
 
 def _frame(name: str) -> dict:
     raw = orjson.loads((FIXTURE_DIR / f"{name}.json").read_bytes())
-    return HudWatcher._convert_hud_data_format(HudObj(raw))
+    return read_frame(raw, "2.2.0")[1]
 
 
 def _ports_by_player(raw_name: str) -> dict:

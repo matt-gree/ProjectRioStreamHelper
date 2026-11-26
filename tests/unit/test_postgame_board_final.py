@@ -8,12 +8,16 @@ only source with the last run in it.
 from server.postgame.capture import PostGame
 
 
-class _Stat:
-    def __init__(self, away, home):
-        self._s = (away, home)
+class _Team:
+    def __init__(self, score):
+        self.score = score
 
-    def score(self, team):
-        return self._s[team]
+
+class _Stat:
+    """The two final scores a settle reads off a pyrio Game."""
+
+    def __init__(self, away, home):
+        self.away, self.home = _Team(away), _Team(home)
 
 
 def _payload(gid="42", t1=0, t2=1):

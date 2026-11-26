@@ -18,23 +18,27 @@ from server.api import router_v1
 from server.rio import stats_api
 
 
-class _Cache:
-    """pyrio's completer cache — the disk-persisted full catalogue, which is
-    also what names a completed game's mode in `_process_games`."""
+class _TagSet:
+    def __init__(self, name, id):
+        self.name, self.id = name, id
+
+
+class _Client:
+    """pyrio's client: ``tag_sets.list()`` is the full catalogue (ended
+    seasons included), which also names a completed game's mode."""
 
     def __init__(self, modes=None, boom=False):
         self.modes = modes or {}
         self.boom = boom
+        self.cache = None
+        self.tag_sets = self
 
-    def game_mode_dictionary(self):
+    async def list(self, active_only=False, community_ids=None):
         if self.boom:
-            raise RuntimeError("cache unreadable")
-        return self.modes
+            from pyrio.web import APIResponseError
 
-
-class _Client:
-    def __init__(self, cache):
-        self.cache = cache
+            raise APIResponseError("catalogue unreadable")
+        return [_TagSet(name, id) for name, id in self.modes.items()]
 
 
 @pytest.fixture
@@ -46,13 +50,14 @@ def client():
 
 @pytest.fixture
 def catalogue(monkeypatch):
-    """Active list in memory; full catalogue behind the completer cache."""
+    """Active list in memory; full tag-set catalogue behind the client."""
     monkeypatch.setattr(stats_api, "_game_modes", {"S14": 14}, raising=False)
     monkeypatch.setattr(stats_api, "_game_modes_lock", None, raising=False)
     monkeypatch.setattr(stats_api, "_cache_refresh_lock", None, raising=False)
+    monkeypatch.setattr(stats_api, "_mode_names", {}, raising=False)
 
     def _install(modes=None, boom=False):
-        monkeypatch.setattr(stats_api, "_get_client", lambda: _Client(_Cache(modes, boom=boom)))
+        monkeypatch.setattr(stats_api, "_get_client", lambda: _Client(modes, boom=boom))
 
     return _install
 

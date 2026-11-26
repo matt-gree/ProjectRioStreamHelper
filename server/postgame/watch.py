@@ -153,16 +153,16 @@ class StatFileWatcher:
     async def _on_file(cls, path: Path) -> None:
         if not _flag("postgame.auto_capture"):
             return
-        data = postgame_files.load_json(path)
-        if data is None:
+        # Off the loop: a full parse, and the file may still be being written
+        # (it reads as None then, and the `modified` event that follows retries).
+        game = await asyncio.to_thread(postgame_files.read_game, path)
+        if game is None:
             return
         # A HUD-replay file is not recorded data. find_file rejects it too — this
         # check only avoids burning a capture attempt (and a _done slot) on it.
-        if data.get("Loaded from HUD", 0) != 0:
+        if game.loaded_from_hud:
             return
-        gid = norm_game_id(data.get("GameID"))
-        if not gid:
-            return
+        gid = str(game.id)
         sb = cls._board_carrying(gid)
         if sb is None:
             return

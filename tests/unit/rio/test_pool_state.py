@@ -6,7 +6,6 @@ currently-displayed game that falls out of scope finishes its turn before
 being dropped, never yanked mid-display)."""
 from unittest.mock import AsyncMock
 
-import pandas as pd
 import pytest
 
 from server.rio.game_pool import OngoingGamePool
@@ -27,7 +26,7 @@ def clean_ongoing_pool(monkeypatch):
 
 
 def _completed_df(rows):
-    return pd.DataFrame(rows)
+    return list(rows)
 
 
 # --- _chip_matches ---

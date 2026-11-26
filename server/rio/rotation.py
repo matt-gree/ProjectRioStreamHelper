@@ -9,7 +9,6 @@ from server.rio.game_pool import (
     apply_completed_game_dict,
 )
 from server.rio import stats_api
-from server.rio.game_pool import _sanitize_row
 from server.settings import Settings
 from server.state import State
 from server.utils.tasks import spawn
@@ -74,8 +73,8 @@ def with_league_logos(games: list | None) -> list:
 def _chip_kwargs(chip: dict) -> dict:
     """A filter chip's non-empty fields, shaped for stats_api.fetch_completed_games.
 
-    `start_time`/`end_time` are Unix seconds (the Rio API's convention — see
-    RioWeb._process_games, which parses timestamps with unit="s"); they narrow
+    `start_time`/`end_time` are Unix seconds (the Rio API's convention;
+    fetch_completed_games turns them into the aware times pyrio takes); they narrow
     the completed search to a date window. Only completed games are date/limit
     filtered — live games are "now", so `_chip_matches` ignores those fields.
     """
@@ -544,17 +543,14 @@ class PoolState:
                 if not kwargs:
                     continue
                 try:
-                    df = await stats_api.fetch_completed_games(**kwargs)
+                    rows = await stats_api.fetch_completed_games(**kwargs)
                 except Exception:
                     logger.exception(
                         "[PoolState] completed fetch failed for sb {} chip {}",
                         self.sb_id, chip.get("id"),
                     )
                     continue
-                if df.empty:
-                    continue
-                for _, row in df.iterrows():
-                    game = _sanitize_row(row.to_dict())
+                for game in rows:
                     gid = game.get("game_id")
                     if gid is None or gid in excluded or gid in result:
                         continue

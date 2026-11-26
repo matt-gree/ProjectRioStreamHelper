@@ -5,36 +5,22 @@ moved on still names the mode THIS game was played under.
 Resolution is cache-only: a capture runs under the post-game lock, and an
 unreachable Rio API must not hold it. Unknown → '', and the overlay falls back
 to the board's own mode."""
+import pyrio
 import pytest
 
-from server.postgame import stats as postgame_stats
 from server.postgame import PostGame
 from server.rio import stats_api
-
-
-class _StubStat:
-    def player(self, i): return ("Alice", "Bob")[i]
-    def stadium(self): return "Mario Stadium"
-    def inningsSelected(self): return 9
-    def inningsPlayed(self): return 9
-    def isMercy(self): return False
-    def wasQuit(self): return False
-    def quitter(self): return ""
-    def version(self): return "2.2.0"
-    def winning_team(self): return 0
+from tests.stat_file import stat_file_json, write_stat_file
 
 
 @pytest.fixture
-def stub_stats(monkeypatch):
-    monkeypatch.setattr(postgame_stats, "stars_won", lambda events: (0, 0))
-    monkeypatch.setattr(postgame_stats, "linescore", lambda events, stat: ([], []))
-    monkeypatch.setattr(postgame_stats, "char_event_derived", lambda events: {0: {}, 1: {}})
-    monkeypatch.setattr(postgame_stats, "side_block", lambda stat, t, stars, derived: {})
+def stub_stats():
+    """The capture's own shaping is real here; only the mode cache is stubbed."""
 
 
 def _payload(tag_set_id):
-    data = {"GameID": "42", "TagSetID": tag_set_id, "Events": []}
-    return PostGame._build_payload(("", ""), _StubStat(), data, "decoded.Game_42.json")
+    game = pyrio.read_game(stat_file_json(GameID="42", TagSetID=tag_set_id))
+    return PostGame._build_payload(("", ""), game, "decoded.Game_42.json")
 
 
 def test_capture_names_the_mode_from_the_cached_tag_set(monkeypatch, stub_stats):
@@ -66,14 +52,11 @@ async def test_a_rebuilt_capture_is_oriented_by_the_capture_not_the_board(
     while the persisted projection had Bob (home) on side 1, so the Spotlight
     walked Alice's at-bats under a character picked from Bob's list."""
     from server.postgame import files as postgame_files
-    import server.postgame.capture as pg_mod
     from server.state import State
 
-    (tmp_path / "decoded.Game_42.json").write_text("{}")
+    write_stat_file(tmp_path / "decoded.Game_42.json", GameID="42",
+                    **{"Away Player": "Alice", "Home Player": "Bob"})
     monkeypatch.setattr(postgame_files, "stat_dir", lambda: tmp_path)
-    monkeypatch.setattr(postgame_files, "load_json",
-                        lambda path: {"GameID": "42", "Events": []})
-    monkeypatch.setattr(pg_mod, "StatObj", lambda data: _StubStat())
 
     await State.SetBatch([
         ("postgame.1", {

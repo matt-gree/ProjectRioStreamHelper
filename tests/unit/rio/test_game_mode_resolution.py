@@ -8,14 +8,18 @@ make that wait unbounded:
   * the startup `force=True` refresh held the game-modes lock across pyrio's
     completer-cache rebuild (~42s cold), which nothing waiting on `_game_modes`
     needs; and
-  * pyrio builds its requests session with no HTTP timeout, so an unreachable
-    Project Rio is an indefinite wait rather than a failed one.
+  * an unreachable Project Rio could be an indefinite wait rather than a
+    failed one (pyrio's client now times out, but the live path keeps its own
+    much shorter budget).
 """
 import asyncio
 
 import pytest
 
 from server.rio import stats_api
+
+# Several tests below swap the client in by plain assignment; keep the real one.
+_REAL_GET_CLIENT = stats_api._get_client
 
 
 @pytest.fixture(autouse=True)
@@ -28,29 +32,45 @@ def _reset_module_cache(monkeypatch):
     yield
 
 
+class _TagSet:
+    def __init__(self, name, id):
+        self.name, self.id = name, id
+
+
 class _Client:
-    """Stand-in for pyrio's RioWeb: a fast mode list, a slow cache refresh."""
+    """Stand-in for pyrio's AsyncRioClient: a fast active list, a slow catalogue.
+
+    ``tag_sets.list(active_only=True)`` is the mode list (``list_game_modes``);
+    the full catalogue counts as ``refreshed`` after a ``cache.clear()`` and as
+    ``warmed`` otherwise.
+    """
 
     def __init__(self, refresh_delay=0.0, list_delay=0.0):
         self.refresh_delay = refresh_delay
         self.list_delay = list_delay
         self.refreshed = 0
         self.warmed = 0
+        self._cleared = False
         self.cache = self
+        self.tag_sets = self
 
-    def game_mode_dictionary(self):
-        self.warmed += 1
-        return {"Ranked": 7}
+    def clear(self):
+        self._cleared = True
 
-    def refresh_cache(self):
-        import time
-        time.sleep(self.refresh_delay)
-        self.refreshed += 1
+    async def list(self, active_only=False, community_ids=None):
+        if active_only:
+            return await self.list_game_modes()
+        await asyncio.sleep(self.refresh_delay)
+        if self._cleared:
+            self.refreshed += 1
+            self._cleared = False
+        else:
+            self.warmed += 1
+        return [_TagSet("Ranked", 7)]
 
-    def list_game_modes(self, active=False):
-        import time
-        time.sleep(self.list_delay)
-        return {"Tag Sets": [{"name": "Ranked", "id": 7}]}
+    async def list_game_modes(self):
+        await asyncio.sleep(self.list_delay)
+        return [_TagSet("Ranked", 7)]
 
 
 async def test_the_slow_cache_refresh_no_longer_gates_the_mode_list():
@@ -72,7 +92,7 @@ async def test_the_slow_cache_refresh_no_longer_gates_the_mode_list():
     assert waited < 0.3, f"live resolve waited {waited:.2f}s on the cache refresh"
 
     await startup
-    assert client.refreshed == 1, "the completer cache must still be refreshed"
+    assert client.refreshed == 1, "the tag-set catalogue must still be refreshed"
 
 
 async def test_a_concurrent_fetch_is_not_serialised_behind_the_cache_refresh():
@@ -99,18 +119,14 @@ async def test_a_concurrent_fetch_is_not_serialised_behind_the_cache_refresh():
 
 
 async def test_an_unreachable_api_gives_up_instead_of_holding_the_board():
-    """pyrio has no HTTP timeout, so without a budget this never returns and the
-    scoreboard never comes up."""
-    import threading
-
-    # A real blocking call (to_thread can't be cancelled), released explicitly so
-    # the suite doesn't pay for the hang it is simulating.
-    released = threading.Event()
+    """Without a budget a hung API holds the frame, and the scoreboard never comes up."""
+    # Released explicitly so the suite doesn't pay for the hang it is simulating.
+    released = asyncio.Event()
 
     class _Hanging(_Client):
-        def list_game_modes(self, active=False):
-            released.wait(30)
-            return {"Tag Sets": []}
+        async def list_game_modes(self):
+            await asyncio.wait_for(released.wait(), 30)
+            return []
 
     stats_api._get_client = lambda: _Hanging()
 
@@ -364,9 +380,11 @@ class _Failing(_Client):
         super().__init__()
         self.calls = 0
 
-    def list_game_modes(self, active=False):
+    async def list_game_modes(self):
+        from pyrio.web import APIConnectionError
+
         self.calls += 1
-        raise ConnectionError("rio is down")
+        raise APIConnectionError("rio is down")
 
 
 async def test_a_failed_mode_fetch_is_not_repeated_by_every_caller(monkeypatch):
@@ -405,9 +423,9 @@ async def test_budgeted_resolves_share_one_in_flight_fetch(monkeypatch):
     calls = []
     real = client.list_game_modes
 
-    def counted(active=False):
+    async def counted():
         calls.append(1)
-        return real(active)
+        return await real()
     client.list_game_modes = counted
     monkeypatch.setattr(stats_api, "_get_client", lambda: client)
 
@@ -436,18 +454,13 @@ async def test_a_retry_frame_does_not_wait_on_the_api(monkeypatch):
     assert seen == [0]
 
 
-def test_the_rio_session_carries_a_default_timeout():
-    """pyrio builds its session with none, so a hung Rio held a worker thread —
-    from the pool the HUD file read shares — forever."""
-    seen = {}
-
-    class _Session:
-        def request(self, method, url, **kw):
-            seen.update(kw)
-
-    s = _Session()
-    stats_api._with_default_timeout(s)
-    s.request("GET", "u")
-    assert seen["timeout"] == stats_api.HTTP_TIMEOUT
-    s.request("GET", "u", timeout=3)
-    assert seen["timeout"] == 3
+async def test_the_rio_client_carries_a_timeout(monkeypatch, tmp_path):
+    """A hung Rio must fail, not hold a request open forever: the shared client
+    is built with PRSH's connect/read budget."""
+    monkeypatch.setattr(stats_api, "_client", None)
+    monkeypatch.setattr(stats_api, "load_rio_key", lambda: None)
+    monkeypatch.setattr(stats_api, "user_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(stats_api, "_get_client", _REAL_GET_CLIENT)
+    client = stats_api._get_client()
+    assert client.timeout == stats_api.HTTP_TIMEOUT
+    assert client is stats_api._get_client()   # one client per event loop

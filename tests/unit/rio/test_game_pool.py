@@ -1,51 +1,14 @@
-"""Game-pool helpers: pandas/numpy row sanitizing, pinned-swap detection, and
-the completed-game apply path (swap + persist)."""
+"""Game-pool helpers: pinned-swap detection and the completed-game apply path
+(swap + persist)."""
 import math
 
-import numpy as np
-import pandas as pd
 import pytest
 
-from server.rio.game_pool import (
-    _sanitize_row,
-    apply_completed_game_dict,
-)
+from server.rio.game_pool import apply_completed_game_dict
 from server.rio.provider import pin_swap
 from server.settings import Settings
 from server.state import State
 from server.utils.deep_dict import deep_get
-
-
-# --- _sanitize_row ---
-
-def test_sanitize_timestamp_to_isoformat():
-    out = _sanitize_row({"t": pd.Timestamp("2024-01-02T03:04:05")})
-    assert out["t"] == "2024-01-02T03:04:05"
-
-
-def test_sanitize_nat_and_nan_to_none():
-    out = _sanitize_row({
-        "a": pd.NaT,
-        "b": np.float64(np.nan),
-        "c": float("nan"),
-    })
-    assert out == {"a": None, "b": None, "c": None}
-
-
-def test_sanitize_numpy_scalars_to_python_types():
-    out = _sanitize_row({
-        "i": np.int64(5),
-        "f": np.float64(1.5),
-        "b": np.bool_(True),
-    })
-    assert out["i"] == 5 and isinstance(out["i"], int)
-    assert out["f"] == 1.5 and isinstance(out["f"], float)
-    assert out["b"] is True and isinstance(out["b"], bool)
-
-
-def test_sanitize_passthrough_plain_values():
-    out = _sanitize_row({"s": "hello", "n": 7, "ok": True})
-    assert out == {"s": "hello", "n": 7, "ok": True}
 
 
 # --- pin_swap (the address-book pin layer) ---

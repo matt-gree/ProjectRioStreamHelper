@@ -9,18 +9,30 @@ recorded data and is rejected).
 """
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 from loguru import logger
+import pyrio
 
 from server.rio.provider import get_default_hud_file_path
 from server.settings import Settings
 
 _STAT_SUBDIR = ("StatFiles", "MarioSuperstarBaseball")
 _DECODED_PREFIX = "decoded."
-# Trailing _<digits>.json in a stat-file name is the GameID (decimal). Used only
-# as a cheap pre-filter; the GameID inside the file is the authoritative match.
-_FILENAME_GAMEID_RE = re.compile(r"_(\d+)\.json$")
+# Trailing _<id>.json in a stat-file name is the GameID: decimal before Rio
+# 2.3.0, hex from it. Used only as a cheap pre-filter; the GameID pyrio reads
+# from inside the file is the authoritative match.
+_FILENAME_GAMEID_RE = re.compile(r"_([0-9A-Fa-f]+)\.json$")
+
+
+def _filename_matches(token: str, game_id: str) -> bool:
+    """Whether a file name's id token can be ``game_id`` (a decimal string), read either way."""
+    try:
+        wanted = int(game_id)
+    except ValueError:
+        return False
+    return (token.isdigit() and int(token) == wanted) or int(token, 16) == wanted
 
 
 def norm_game_id(g) -> str:
@@ -71,26 +83,31 @@ def candidate_files(game_id: str) -> list[Path]:
     files = []
     for p in d.glob(f"{_DECODED_PREFIX}*.json"):
         m = _FILENAME_GAMEID_RE.search(p.name)
-        if m and (not game_id or norm_game_id(m.group(1)) == game_id):
+        if m and (not game_id or _filename_matches(m.group(1), game_id)):
             files.append(p)
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return files
 
 
-def load_json(path: Path) -> dict | None:
+def read_game(path: Path) -> pyrio.Game | None:
+    """A stat file read by pyrio, or None (logged) when it can't be read."""
     try:
-        import orjson
-        return orjson.loads(path.read_bytes())
-    except Exception:
-        logger.exception("[PostGame] failed to read stat file {}", path)
+        return pyrio.read_game(path)
+    except (pyrio.RioError, OSError) as e:
+        logger.warning("[PostGame] could not read stat file {}: {}", path, e)
         return None
+
+
+def display_time(when: datetime) -> str:
+    """A game time the way Rio's decoded files write it ("Sun Nov 22 20:36:20 2026"), local time."""
+    return (when.astimezone() if when.tzinfo else when).ctime()
 
 
 def find_file(game_id: str) -> tuple[Path | None, str | None]:
     """Locate the usable stat file for ``game_id``.
 
     Returns ``(path, None)`` on success, or ``(None, reason)`` when no file
-    matches or the only match is a HUD replay (``Loaded from HUD != 0``).
+    matches or the only match is a HUD replay (loaded from a HUD file).
     """
     gid = norm_game_id(game_id)
     if not gid:
@@ -102,12 +119,10 @@ def find_file(game_id: str) -> tuple[Path | None, str | None]:
 
     loaded_from_hud_seen = False
     for path in candidates:
-        data = load_json(path)
-        if data is None:
+        game = read_game(path)
+        if game is None or str(game.id) != gid:
             continue
-        if norm_game_id(data.get("GameID")) != gid:
-            continue
-        if data.get("Loaded from HUD", 0) != 0:
+        if game.loaded_from_hud:
             loaded_from_hud_seen = True
             continue
         return path, None
@@ -152,10 +167,10 @@ def resolve_pick(name: str) -> tuple[Path | None, str | None]:
     if not resolved.is_file():
         return None, f"No stat file named {path.name} in {d}."
 
-    data = load_json(resolved)
-    if data is None:
+    game = read_game(resolved)
+    if game is None:
         return None, f"Could not read stat file {path.name}."
-    if data.get("Loaded from HUD", 0) != 0:
+    if game.loaded_from_hud:
         return None, (
             f"{path.name} was loaded from a HUD replay "
             "(Loaded from HUD != 0) and has no usable stats."
@@ -164,10 +179,7 @@ def resolve_pick(name: str) -> tuple[Path | None, str | None]:
 
 
 def list_files(limit: int = 25) -> list[dict]:
-    """Recent usable (``Loaded from HUD == 0``) stat files for a manual pick.
-
-    Returns lightweight descriptors, newest first — no full parse.
-    """
+    """Recent usable (not HUD-replay) stat files for a manual pick, newest first."""
     d = stat_dir()
     if not d.is_dir():
         return []
@@ -175,17 +187,17 @@ def list_files(limit: int = 25) -> list[dict]:
                    key=lambda p: p.stat().st_mtime, reverse=True)
     out = []
     for p in files[: limit * 2]:
-        data = load_json(p)
-        if data is None or data.get("Loaded from HUD", 0) != 0:
+        game = read_game(p)
+        if game is None or game.loaded_from_hud:
             continue
         out.append({
             "file": p.name,
-            "gameId": norm_game_id(data.get("GameID")),
-            "awayPlayer": data.get("Away Player", ""),
-            "homePlayer": data.get("Home Player", ""),
-            "awayScore": data.get("Away Score"),
-            "homeScore": data.get("Home Score"),
-            "endDate": data.get("Date - End", ""),
+            "gameId": str(game.id),
+            "awayPlayer": game.away.player,
+            "homePlayer": game.home.player,
+            "awayScore": game.away.score,
+            "homeScore": game.home.score,
+            "endDate": display_time(game.end_time),
         })
         if len(out) >= limit:
             break

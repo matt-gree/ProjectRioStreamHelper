@@ -20,31 +20,44 @@ from loguru import logger
 from server.match import Match
 from server.participants import Participants
 from server.rio import stats_api
-from server.rio.game_pool import _sanitize_row
-from server.rio.pyrio.lookup import Lookup
-from server.rio.pyrio.team_name_algo import TEAM_NAMES_DICT
+from pyrio import CAPTAIN_TEAMS, Character, RioError, team_name
 from server.state import State
 
 # Game cards shown on the band (newest first). The summary still counts ALL games.
 MAX_CARDS = 5
 
 
-def default_team_name(captain) -> str:
-    """The captain's default MSB team name (the roster-independent one).
-
-    Completed-game records carry only captains, not rosters, so the full
-    ``team_name_algo`` can't run — the default (index 0) name is the honest
-    roster-independent answer (e.g. Mario → "Mario Heroes"). Empty on any
-    lookup failure; the overlay then falls back to the captain icon.
-    """
-    if not captain:
-        return ""
+def _character(name) -> Character | None:
     try:
-        simplified = Lookup.lookup("simplified_name", captain)
-        teams = TEAM_NAMES_DICT.get(simplified) or TEAM_NAMES_DICT.get(captain)
-        return (teams[0].get("Name") or "") if teams else ""
-    except Exception:
+        return Character(name) if name else None
+    except RioError:
+        return None
+
+
+def default_team_name(captain) -> str:
+    """The captain's default MSB team name, for a game whose roster isn't known.
+
+    Empty for a character who can't captain; the overlay then falls back to
+    the captain icon.
+    """
+    character = _character(captain)
+    if character is None or not character.is_captain:
         return ""
+    return CAPTAIN_TEAMS[character].default.label
+
+
+def game_team_name(roster, captain) -> str:
+    """The MSB team name a completed game's roster earned under its captain.
+
+    Rows carry both rosters (``stats_api.completed_game_row``); one that doesn't
+    falls back to the captain's default name.
+    """
+    characters = [_character(c) for c in roster or ()]
+    if len(characters) == 9 and all(characters):
+        name = team_name(characters, _character(captain))
+        if name is not None:
+            return name.label
+    return default_team_name(captain)
 
 
 def _norm(name) -> str:
@@ -80,8 +93,9 @@ def build_matchup(games: list[dict], side1_rio: str, side2_rio: str,
         h_score = g.get("home_score") or 0
         side1_score = a_score if away_is_1 else h_score
         side2_score = h_score if away_is_1 else a_score
-        side1_captain = (g.get("away_captain") if away_is_1 else g.get("home_captain")) or ""
-        side2_captain = (g.get("home_captain") if away_is_1 else g.get("away_captain")) or ""
+        side1, side2 = ("away", "home") if away_is_1 else ("home", "away")
+        side1_captain = g.get(f"{side1}_captain") or ""
+        side2_captain = g.get(f"{side2}_captain") or ""
 
         winner = 1 if side1_score > side2_score else 2 if side2_score > side1_score else None
         if winner:
@@ -97,8 +111,8 @@ def build_matchup(games: list[dict], side1_rio: str, side2_rio: str,
                 "awaySide": 1 if away_is_1 else 2,
                 "side1Captain": side1_captain,
                 "side2Captain": side2_captain,
-                "side1Team": default_team_name(side1_captain),
-                "side2Team": default_team_name(side2_captain),
+                "side1Team": game_team_name(g.get(f"{side1}_roster"), side1_captain),
+                "side2Team": game_team_name(g.get(f"{side2}_roster"), side2_captain),
                 "gameMode": g.get("game_mode") or "",
                 "stadium": g.get("stadium") or "",
             })
@@ -160,8 +174,7 @@ class Matchup:
             return {"error": "Both sides need a participant with a Rio name before "
                              "a head-to-head can be fetched."}
 
-        df = await stats_api.fetch_completed_games(username=[rio1], vs_username=[rio2])
-        games = [] if df.empty else [_sanitize_row(r.to_dict()) for _, r in df.iterrows()]
+        games = await stats_api.fetch_completed_games(username=[rio1], vs_username=[rio2])
 
         payload = build_matchup(games, rio1, rio2, match_id=m)
         # Address Book display tag per side (overlay prefers it over rioName); the

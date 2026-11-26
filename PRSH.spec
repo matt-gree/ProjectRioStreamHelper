@@ -109,7 +109,10 @@ def _public_game_assets() -> list:
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    # pyrio is the server/rio/pyrio submodule, a src layout: its package sits at
+    # src/pyrio, imported as top-level `pyrio` (server/paths.py puts the same
+    # directory on sys.path in dev).
+    pathex=['server/rio/pyrio/src'],
     binaries=[],
     datas=[
         # Frontend build output (only assets actually read at runtime —
@@ -139,14 +142,12 @@ a = Analysis(
         ('public/logo_tray.png', 'public'),
         ('public/logo_tray.icns', 'public'),
 
-        # pyrio submodule data. The hit simulator (Character Spotlight per-AB
-        # trajectories) reads these off disk via __file__-relative paths, so
-        # they must be copied into the bundle — PyInstaller only bundles .py
-        # modules by default. Missing them makes simulate_contacts raise
-        # FileNotFoundError, which server/postgame/capture.py swallows into an empty spotlight.
-        ('server/rio/pyrio/CharNames.csv', 'server/rio/pyrio'),
-        ('server/rio/pyrio/constants/character_attributes.csv', 'server/rio/pyrio/constants'),
-        ('server/rio/pyrio/constants/stadiums', 'server/rio/pyrio/constants/stadiums'),
+        # pyrio's data (character attributes, nicknames, stadium meshes and
+        # park sheets), read through importlib.resources. PyInstaller only
+        # bundles .py modules by default, and without these every character
+        # lookup and the hit sim fail.
+        ('server/rio/pyrio/src/pyrio/_data', 'pyrio/_data'),
+        ('server/rio/pyrio/src/pyrio/geometry/_data', 'pyrio/geometry/_data'),
 
         # RioVisualizer submodule: pure-Python `rio_visualizer` package
         # (server/rio/hit_visualizer.py imports rio_visualizer.api). Lives
@@ -236,9 +237,12 @@ a = Analysis(
         'PyObjCTools.AppHelper',
         'pystray._win32',    # Windows tray backend
 
-        # Data science (required by pyrio)
-        'pandas',
-        'numpy',
+        # pyrio: imported directly by the server, but its submodules are
+        # listed so a lazily imported one is never left out.
+        'pyrio',
+        'pyrio.web',
+        'pyrio.sim',
+        'pyrio.geometry',
 
         # Server modules
         'server',
@@ -253,7 +257,7 @@ a = Analysis(
         'server.rio.stats_api',
         'server.rio.game_pool',
         'server.rio.rotation',
-        'server.rio.pyrio',
+        'server.rio.frame',
         'server.api',
         'server.paths',
         'server.utils',
@@ -278,10 +282,8 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=['installer/runtime_hook_chdir.py'],
     excludes=[
-        # Dev-only, and pyrio-only. pyrio is a general-purpose library and PRSH
-        # imports a slice of it: game_summary, draw/draw_stadium and
-        # hit_simulator/hit_sim_visualizer are the matplotlib users and nothing
-        # here reaches them, so the plotting stack is pure weight.
+        # Dev-only, and nothing PRSH runs needs them: pyrio's own plotting
+        # (pyrio.plot) is the only matplotlib user and PRSH never imports it.
         'matplotlib',
         'scipy',
         'pytest',

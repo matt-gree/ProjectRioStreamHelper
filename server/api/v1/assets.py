@@ -8,12 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 
 from server.paths import default_msb_assets_dir, reveal_path
-from server.rio.pyrio.assets import (
-    required_captain_filenames,
-    required_character_filenames,
-    required_game_icon_filenames,
-    required_team_filenames,
-)
+from pyrio import Character, TeamName
 from server.settings import Settings
 from server.utils.router import method
 
@@ -34,8 +29,29 @@ async def get_msb_assets_path() -> Path:
     return default_msb_assets_dir()
 
 
-# Subfolder name → callable returning the canonical list of expected
-# filenames. The callables are pyrio's authoritative source of truth.
+# The MSB image pack names its art by the game's own ids, as pyrio's enums
+# carry them: character art (captains are a subset) by character id, team logos
+# by team-name (logo) id.
+
+
+def required_character_filenames() -> list[str]:
+    return [f"{c.id}.png" for c in sorted(Character)]
+
+
+def required_captain_filenames() -> list[str]:
+    return [f"{c.id}.png" for c in sorted(Character) if c.is_captain]
+
+
+def required_team_filenames() -> list[str]:
+    return [f"{t.id}.png" for t in sorted(TeamName)]
+
+
+def required_game_icon_filenames() -> list[str]:
+    """In-game icons: the batting/fielding team indicators and the superstar badge."""
+    return ["bat.png", "glove.png", "superstar.png"]
+
+
+# Subfolder name → callable returning the canonical list of expected filenames.
 REQUIRED_CATEGORIES: dict[str, callable] = {
     "characterIcons": required_character_filenames,
     "characters": required_character_filenames,

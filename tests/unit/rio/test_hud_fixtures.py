@@ -1,5 +1,5 @@
 """Replay-fixture validity: every capture in tests/data/hud/ must survive the
-real HUD pipeline (HudObj → HudWatcher flat dict → provider.parse_game_data).
+real HUD pipeline (pyrio.read_hud → frame_from_hud → provider.parse_game_data).
 
 These fixtures are what scripts/replay-hud.py feeds an isolated server, so a
 fixture that stops parsing would silently break the agent replay harness. The
@@ -21,14 +21,14 @@ import pytest
 
 from server.rio.hud_watcher import HudWatcher
 from server.rio.provider import RioGameDataProvider
-from server.rio.pyrio.stat_file_parser import HudObj
+from server.rio.hud_watcher import read_frame
 
 FIXTURE_DIR = Path(__file__).resolve().parents[3] / "tests" / "data" / "hud"
 
 
 def _parse(name: str) -> dict:
     raw = orjson.loads((FIXTURE_DIR / f"{name}.json").read_bytes())
-    flat = HudWatcher._convert_hud_data_format(HudObj(raw))
+    flat = read_frame(raw, "2.2.0")[1]
     return RioGameDataProvider.parse_game_data(flat)
 
 
@@ -106,7 +106,7 @@ def test_hud_file_is_read_as_bytes_so_the_locale_cannot_decode_it(tmp_path, monk
 # --- game over ------------------------------------------------------------
 #
 # The HUD writes no end-of-game event, so `game_over` is a predicate over one
-# frame (pyrio's HudObj.game_over). These pin the two ends of that: it reaches
+# frame (pyrio's HUDSnapshot.is_game_over). These pin the two ends of that: it reaches
 # State through the real pipeline, and it does not fire on a game in progress.
 
 
@@ -117,7 +117,7 @@ def test_hud_file_is_read_as_bytes_so_the_locale_cannot_decode_it(tmp_path, monk
 ])
 def test_game_over_rides_the_flat_dict(name, expected):
     raw = orjson.loads((FIXTURE_DIR / f"{name}.json").read_bytes())
-    assert HudWatcher._convert_hud_data_format(HudObj(raw))["game_over"] is expected
+    assert read_frame(raw, "2.2.0")[1]["game_over"] is expected
 
 
 @pytest.mark.asyncio
@@ -179,15 +179,17 @@ async def test_an_ongoing_api_game_is_never_marked_over_by_this_key(mock_socket)
 
 def test_a_resolved_frame_reports_its_play():
     """`game1_mid` is a "…b" frame, so `Previous Event` IS the play it
-    resolves — reported once, with Rio's own result word."""
+    resolves — reported once, with Rio's own result word. A 2.2.0 decoded file
+    labels the two catches the wrong way round; pyrio puts it right, so its
+    "Caught line-drive" is a "Caught"."""
     play = _parse("game1_mid")["play"]
-    assert play == {"event": "197b", "result": "Caught line-drive", "rbi": 0, "star": False}
+    assert play == {"event": "197b", "result": "Caught", "rbi": 0, "runs": 0, "star": False}
 
 
 def test_an_in_flight_frame_reports_no_play():
     raw = orjson.loads((FIXTURE_DIR / "game1_mid.json").read_bytes())
     raw["Event Num"] = "197"
-    flat = HudWatcher._convert_hud_data_format(HudObj(raw))
+    flat = read_frame(raw, "2.2.0")[1]
     assert flat["play"] is None
 
 
@@ -199,7 +201,7 @@ async def test_the_play_lands_on_the_board_keyed_by_game_and_event():
     parsed = _parse("game1_mid")
     await apply_parsed_game_to_state(parsed, 1)
     assert deep_get(State.state, "score.1.play") == {
-        "id": f"{parsed['game_id']}:197b", "result": "Caught line-drive", "rbi": 0, "star": False,
+        "id": f"{parsed['game_id']}:197b", "result": "Caught", "rbi": 0, "star": False,
     }
     # An in-flight frame leaves the last play alone rather than blanking it.
     await apply_parsed_game_to_state({**parsed, "play": None}, 1)

@@ -8,7 +8,7 @@ by the HUD provider (./provider), the API pools (./game_pool) and the clear
 """
 import re
 
-from server.rio.pyrio.lookup import LookupDicts
+from pyrio import Character, RioError, Stadium
 
 from server.rio import stats_api
 from server.rio.resurface import RESURFACE_MAP as _RESURFACE_MAP
@@ -73,32 +73,24 @@ def _clear_unresurfaced_prefix(entries: list[tuple], sb: str) -> None:
             entries.append((key, ""))
 
 
-# Map pyrio's human-readable stadium names to the slug values used by the
-# frontend's STADIUM_OPTIONS / stadium renderer.
-_STADIUM_SLUGS = {
-    "Mario Stadium":  "mario_stadium",
-    "Bowser Castle":  "bowser_castle",
-    "Wario Palace":   "wario_palace",
-    "Yoshi Park":     "yoshi_park",
-    "Peach Garden":   "peach_garden",
-    "DK Jungle":      "dk_jungle",
-    "Toy Field":      "toy_field",
-}
+# The frontend's STADIUM_OPTIONS slugs are pyrio's member names, lowercased.
+_STADIUM_SLUGS = frozenset(stadium.name.lower() for stadium in Stadium)
 
 
 def _stadium_slug(val) -> str:
-    """Resolve a stadium value to the frontend slug.
+    """Resolve a stadium value to the frontend slug ("bowser_castle").
 
-    Accepts an integer id (API ongoing feed), a human-readable name (HUD /
-    completed games), or an already-resolved slug. Returns '' when unknown.
+    Accepts an id, a name or alias pyrio knows, or an already-resolved slug.
+    Returns '' when unknown.
     """
-    if val is None or val == "" or val == -1:
+    if val is None or val == "" or val == -1 or isinstance(val, bool):
         return ""
-    if isinstance(val, bool):
+    if val in _STADIUM_SLUGS:
+        return val
+    try:
+        return Stadium(val).name.lower()
+    except (RioError, ValueError):
         return ""
-    if isinstance(val, int):
-        val = LookupDicts.STADIUM.get(val, "")
-    return _STADIUM_SLUGS.get(val, val)
 
 
 async def apply_parsed_game_to_state(parsed: dict, scoreboard_number: int, home_team: int = 2, side_reason: str = ""):
@@ -296,11 +288,8 @@ def _linescore_side(linescore, side: int) -> list:
 def _completed_roster(roster_ids, captain: str) -> tuple[list, int]:
     """Resolve a completed game's roster to (names, captain_index).
 
-    `roster_ids` is away_roster/home_roster from the /games API: nine character
-    IDs in roster order. It ships in the DEFAULT response — there is no
-    include_roster parameter to add (passing one changes nothing) — and pyrio's
-    _process_games leaves the column untouched, so it arrives here as a plain
-    list.
+    `roster_ids` is away_roster/home_roster of a completed-game row: nine
+    characters in roster order, by name (``stats_api.completed_game_row``) or id.
 
     The captain is a member of the roster rather than a thing beside it, so its
     index comes from finding it. That is what makes the captain ring land on the
@@ -314,8 +303,8 @@ def _completed_roster(roster_ids, captain: str) -> tuple[list, int]:
     names = []
     for cid in roster_ids if isinstance(roster_ids, (list, tuple)) else []:
         try:
-            names.append(LookupDicts.CHAR_NAME.get(int(cid), ""))
-        except (TypeError, ValueError):
+            names.append(Character(cid).label)
+        except (RioError, TypeError, ValueError):
             names.append("")
     if not any(names):
         return ([captain] if captain else []), 0

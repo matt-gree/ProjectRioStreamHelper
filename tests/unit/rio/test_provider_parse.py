@@ -6,7 +6,6 @@ fact that the HUD ships names while the API ships integer ids.
 """
 import pytest
 
-from server.rio.pyrio.lookup import LookupDicts
 from server.rio.provider import RioGameDataProvider as P
 from server.rio.apply import _stadium_slug
 
@@ -71,8 +70,7 @@ def test_resolve_position(val, expected):
 
 def test_resolve_position_inv_and_none_map_to_empty():
     # The int branch explicitly blanks the placeholder positions.
-    inv_ids = [k for k, v in LookupDicts.POSITION.items() if v in ("Inv", "None")]
-    for i in inv_ids:
+    for i in (255, None):  # the game's "Inv", and no position at all
         assert P._resolve_position(i) == ""
 
 

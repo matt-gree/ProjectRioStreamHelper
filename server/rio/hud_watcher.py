@@ -5,17 +5,56 @@ from typing import Callable, Awaitable
 
 from loguru import logger
 from watchfiles import awatch, Change
-from server.rio.pyrio.stat_file_parser import HudObj
+
+import pyrio
+from pyrio import HUDSnapshot, Version
+
+from server.rio.frame import frame_from_hud
+
+# The client a HUD file came from is read off the stat files it writes beside
+# it (see client_version). With none to read — a fresh install — assume the
+# release PRSH was last checked against.
+DEFAULT_CLIENT_VERSION = Version(2, 3, 0)
+
+_version_cache: dict = {"key": None, "version": DEFAULT_CLIENT_VERSION}
 
 
-def _norm_hand(val) -> int:
-    """Normalize a hand value to 0 (right) or 1 (left).
+def client_version() -> Version:
+    """The Project Rio client version writing the HUD file.
 
-    The HUD file may encode handedness as an int (0/1) or a string ("right"/"left").
+    A HUD file doesn't say, and pyrio needs to know (the same label means
+    different things across versions; 2.3.0 even writes the game id in hex).
+    The same client writes the stat files in the sibling StatFiles folder, and
+    every stat file records its version, so the newest one that reads is the
+    answer. Cached on the folder's mtime, which changes when a file is added.
     """
-    if isinstance(val, str):
-        return 1 if val.lower() == "left" else 0
-    return 1 if val else 0
+    from server.postgame import files as stat_files  # files imports provider, which imports us
+
+    folder = stat_files.stat_dir()
+    try:
+        key = (str(folder), folder.stat().st_mtime_ns)
+    except OSError:
+        return _version_cache["version"]
+    if key == _version_cache["key"]:
+        return _version_cache["version"]
+    version = None
+    for path in sorted(folder.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]:
+        try:
+            version = pyrio.read_game(path).version
+            break
+        except (pyrio.RioError, OSError, ValueError):
+            continue  # a crash dump or a half-written file: try the one before
+    _version_cache.update(key=key, version=version or _version_cache["version"])
+    return _version_cache["version"]
+
+
+def read_frame(data: dict, version: Version | str | None = None) -> tuple[HUDSnapshot, dict]:
+    """A HUD file's JSON as pyrio's snapshot and the board frame built from it.
+
+    ``version`` defaults to the client writing the stat files (client_version).
+    """
+    hud = pyrio.read_hud(data, version=version or client_version())
+    return hud, frame_from_hud(hud)
 
 
 class HudWatcher:
@@ -31,6 +70,8 @@ class HudWatcher:
         self.hud_file = hud_file
         self.on_update = on_update
         self.latest_game_data: dict | None = None
+        # The typed file behind latest_game_data, for code that wants pyrio's view.
+        self.latest_snapshot: HUDSnapshot | None = None
         self.last_error: str | None = None
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
@@ -97,7 +138,7 @@ class HudWatcher:
             logger.error(f"[HudWatcher] Watch loop fatal error: {e}")
 
     def _read_and_parse(self) -> dict | None:
-        """Read the HUD file and convert to flat game dict. Runs in thread.
+        """Read the HUD file and turn it into a frame (see ``server/rio/frame.py``). Runs in a thread.
 
         Read as BYTES, never text. Project Rio writes this file as UTF-8, but a
         text-mode open decodes with the locale codec — UTF-8 on macOS, the ANSI
@@ -105,202 +146,13 @@ class HudWatcher:
         every read raise UnicodeDecodeError there, and the board stayed frozen
         for the whole game. orjson takes bytes and assumes UTF-8 per the JSON
         spec, which is both correct and one decode cheaper.
+
+        Rio writes ``{}`` between games (before the first pitch of the next);
+        that frame carries no game and reads as None.
         """
         with open(self.hud_file, "rb") as f:
             data = orjson.loads(f.read())
-
-        hud = HudObj(data)
-        return self._convert_hud_data_format(hud)
-
-    @staticmethod
-    def _game_over(hud_data: HudObj) -> bool:
-        """Whether this frame is the last one of the game (pyrio's rule).
-
-        MSB's HUD has no end-of-game event — the frame recording the final out
-        or the winning run is simply the last one written — so this is a
-        predicate over ONE frame with no history. That is what makes it survive
-        a restart: PRSH's initial read (``RioGameDataProvider.Start``) re-derives
-        it from whatever is on disk, which is the only way to know that a board
-        coming up on a fresh boot is holding last night's finished game. Every
-        file-watching signal we have misses that case by construction, because
-        nothing changes.
-
-        Two guards, both resolving to False, because the wrong answer in the
-        other direction goes out on air as a live game called Final:
-
-        * an older pinned pyrio has no ``game_over``, and a submodule pin that
-          lags the code is a normal state mid-change, not a crash;
-        * a malformed frame must not take the HUD path down with it.
-        """
-        fn = getattr(hud_data, "game_over", None)
-        if fn is None:
-            return False
-        try:
-            return bool(fn())
-        except Exception:
-            logger.exception("[HUD] game_over check failed; treating as not over")
-            return False
-
-    @staticmethod
-    def _extract_play(hud_data: HudObj) -> dict | None:
-        """The play this frame RESOLVES, or None for an in-flight frame.
-
-        Project Rio writes two frames per event — "120" while the play is in
-        flight and "120b" when it resolves — and only the second describes a
-        finished play (`HudObj.event_resolved`); on it, ``Previous Event`` IS
-        that play. So a play is reported exactly once, keyed by its event
-        number, which is what lets a container rule fire on "a home run is hit"
-        once per home run rather than once per HUD write.
-
-        ``result`` is Rio's own ``Result of AB`` word ("HR", "Strikeout",
-        "Single", …, see ``LookupDicts.FINAL_RESULT``) — kept as Rio says it, so
-        a rule's vocabulary maps onto it in one place (server/automations.py).
-        """
-        try:
-            if not hud_data.event_resolved():
-                return None
-            hud_json = hud_data.hud_json
-            pe = hud_json.get("Previous Event")
-            if not isinstance(pe, dict):
-                return None
-            pitch = pe.get("Pitch") if isinstance(pe.get("Pitch"), dict) else {}
-            contact = pitch.get("Contact") if isinstance(pitch.get("Contact"), dict) else {}
-
-            def num(v):
-                try:
-                    return int(v)
-                except (TypeError, ValueError):
-                    return 0
-
-            return {
-                "event": str(hud_json.get("Event Num", "")),
-                "result": str(pe.get("Result of AB") or ""),
-                "rbi": num(pe.get("RBI")),
-                "star": bool(num(pitch.get("Star Pitch"))
-                             or pitch.get("Type of Swing") == "Star"
-                             or num(contact.get("Star Swing Five-Star"))),
-            }
-        except Exception:
-            logger.exception("[HUD] reading the resolved play failed")
+        if not data:
             return None
-
-    @staticmethod
-    def _extract_contact(hud_json: dict) -> dict | None:
-        """Pull the last completed contact (inputs + measured outputs).
-
-        Lives at ``Previous Event -> Pitch -> Contact``; the batter is identified
-        by ``Runner Batter`` (roster loc) + the contact's own ``Pitcher Team Id``,
-        which is robust to the current at-bat having already advanced. Values are
-        left raw (HUD stores many numbers as strings); hit_visualizer coerces.
-        Returns None when there is no batted-ball contact.
-        """
-        pe = hud_json.get("Previous Event")
-        if not isinstance(pe, dict):
-            return None
-        pitch = pe.get("Pitch")
-        if not isinstance(pitch, dict):
-            return None
-        con = pitch.get("Contact")
-        if not isinstance(con, dict):
-            return None
-        if con.get("Ball Power") in (None, ""):
-            return None  # swing-and-miss / take / walk — no flight
-
-        rb = hud_json.get("Runner Batter") or {}
-        return {
-            "pitcher_team_id": pitch.get("Pitcher Team Id"),
-            "pitcher_char": pitch.get("Pitcher Char Id"),
-            "batter_roster_loc": rb.get("Runner Roster Loc"),
-            "batter_char": rb.get("Runner Char Id"),
-            "type_of_swing": pitch.get("Type of Swing"),
-            "ball_x": con.get("Ball Contact Pos - X"),
-            "ball_z": con.get("Ball Contact Pos - Z"),
-            "charge_up": con.get("Charge Power Up"),
-            "charge_down": con.get("Charge Power Down"),
-            "frame": con.get("Frame of Swing Upon Contact"),
-            "rng": [con.get("RNG1"), con.get("RNG2"), con.get("RNG3")],
-            "vert_angle": con.get("Vert Angle"),
-            "horiz_angle": con.get("Horiz Angle"),
-            "ball_power": con.get("Ball Power"),
-            "landing": [
-                con.get("Ball Landing Position - X"),
-                con.get("Ball Landing Position - Y"),
-                con.get("Ball Landing Position - Z"),
-            ],
-            "max_height": con.get("Ball Max Height"),
-            "hang_time": con.get("Ball Hang Time"),
-            "result_primary": con.get("Contact Result - Primary"),
-            "result_secondary": con.get("Contact Result - Secondary"),
-            "result_of_ab": pe.get("Result of AB"),
-        }
-
-    @staticmethod
-    def _convert_hud_data_format(hud_data: HudObj) -> dict:
-        """Convert HudObj into a flat game dict matching the Project Rio API format.
-
-        Ported from the old RioHUDWatcher.convert_hud_data_format().
-        Uses pyrio's HudObj methods for all data access.
-        """
-        game = {
-            "away_captain": hud_data.captain_index(0),
-            "away_player": hud_data.player(0),
-            "away_score": hud_data.score(0),
-            "away_stars": hud_data.team_stars(0),
-            "away_logo": hud_data.logo(0),
-            "away_port": hud_data.port(0),
-            "away_inning_scores": hud_data.inning_scores(0),
-            "away_fielding_positions": hud_data.fielding_positions(0),
-            "away_defensive_diamond": hud_data.defensive_diamond(0),
-            "away_batter_roster_loc": hud_data.batter_roster_location_for(0),
-            "batter": hud_data.batter_roster_location(),
-            "half_inning": hud_data.half_inning(),
-            "home_captain": hud_data.captain_index(1),
-            "home_player": hud_data.player(1),
-            "home_score": hud_data.score(1),
-            "home_stars": hud_data.team_stars(1),
-            "home_logo": hud_data.logo(1),
-            "home_port": hud_data.port(1),
-            "home_inning_scores": hud_data.inning_scores(1),
-            "home_fielding_positions": hud_data.fielding_positions(1),
-            "home_defensive_diamond": hud_data.defensive_diamond(1),
-            "home_batter_roster_loc": hud_data.batter_roster_location_for(1),
-            "inning": hud_data.inning(),
-            "innings_selected": hud_data.innings_selected(),
-            "first_batting_team": hud_data.first_batting_team(),
-            "outs": hud_data.outs(),
-            "pitcher": hud_data.pitcher_roster_location(),
-            "runner_on_first": hud_data.runner_on_first(),
-            "runner_on_second": hud_data.runner_on_second(),
-            "runner_on_third": hud_data.runner_on_third(),
-            "runner_on_first_roster": hud_data.runner_roster_location(1),
-            "runner_on_second_roster": hud_data.runner_roster_location(2),
-            "runner_on_third_roster": hud_data.runner_roster_location(3),
-            "star_chance": bool(hud_data.star_chance()),
-            "stadium_id": hud_data.stadium(),
-            "game_id": hud_data.game_id(),
-            "start_time": -1,
-            "tag_set": hud_data.tag_set_id(),
-            "balls": hud_data.balls(),
-            "strikes": hud_data.strikes(),
-            "event_num": hud_data.event_number,
-            # Last completed contact (for the hit visualizer), or None.
-            "contact": HudWatcher._extract_contact(hud_data.hud_json),
-            # The play this frame resolves, or None mid-flight. See _extract_play.
-            "play": HudWatcher._extract_play(hud_data),
-            # Whether this frame is the last one of the game. See _game_over.
-            "game_over": HudWatcher._game_over(hud_data),
-        }
-
-        # Roster data using pyrio's RosterObj
-        for team_idx in range(2):
-            team_name = "away" if team_idx == 0 else "home"
-            ro = hud_data.roster_obj(team_idx)
-            for i in range(9):
-                game[f"{team_name}_roster_{i}_char"] = ro.char_id(i)
-                game[f"{team_name}_roster_{i}_batting_hand"] = _norm_hand(ro.batting_hand(i))
-                game[f"{team_name}_roster_{i}_fielding_hand"] = _norm_hand(ro.fielding_hand(i))
-                game[f"{team_name}_roster_{i}_is_starred"] = ro.is_starred(i)
-                game[f"{team_name}_roster_{i}_offensive"] = ro.offensive_stats(i)
-                game[f"{team_name}_roster_{i}_defensive"] = ro.defensive_stats(i)
-
-        return game
+        self.latest_snapshot, frame = read_frame(data)
+        return frame

@@ -4,7 +4,13 @@ post-game capture's `batting.line` (the spotlight picker prints it verbatim).
 A line that named every hit and walk but not a strikeout left "1-for-4" unable to
 say where two of the other three at-bats went.
 """
-from server.rio.pyrio.stat_formatters import format_batting_line
+from pyrio import BattingLine
+from pyrio import format_batting_line as _format
+
+
+def format_batting_line(*, walks_bb=0, walks_hbp=0, homeruns=0, **counts):
+    """The overlay's batting line, from the same counts PRSH's State carries."""
+    return _format(BattingLine(walks=walks_bb, hit_by_pitch=walks_hbp, home_runs=homeruns, **counts))
 
 
 def test_strikeouts_are_named():

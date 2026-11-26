@@ -26,7 +26,7 @@ never both fire for the same game.
 """
 import asyncio
 
-import pandas as pd
+from datetime import datetime, timezone
 from loguru import logger
 
 from server.match import Match
@@ -141,7 +141,7 @@ class GameEndWatcher:
         if not (away or home):
             return ""
         try:
-            df = await stats_api.fetch_completed_games(
+            rows = await stats_api.fetch_completed_games(
                 username=[away] if away else None,
                 vs_username=[home] if home else None,
                 limit_games=LOOKUP_LIMIT,
@@ -149,25 +149,16 @@ class GameEndWatcher:
         except Exception:
             logger.exception("[GameEnd] completed lookup failed")
             return ""
-        if df is None or df.empty or "winner_user" not in df.columns:
-            return ""
 
         # Keep only games that started at/after the one we followed (minus slack),
         # so an earlier game between the same pairing can't be mistaken for the
         # just-finished one. An empty result means "not ingested yet" → retry.
-        if start_time and "date_time_start" in df.columns:
-            try:
-                cutoff = pd.Timestamp(int(start_time) - START_SLACK, unit="s", tz="UTC")
-                col = pd.to_datetime(df["date_time_start"], utc=True)
-                df = df[col >= cutoff]
-            except Exception:
-                logger.exception("[GameEnd] start_time filter failed — using unfiltered result")
-        if df.empty:
-            return ""
+        def started(row) -> datetime:
+            return datetime.fromisoformat(row["date_time_start"])
 
-        try:
-            if "date_time_start" in df.columns:
-                df = df.sort_values("date_time_start", ascending=False)
-        except Exception:
-            pass
-        return str(df.iloc[0].get("winner_user") or "")
+        if start_time:
+            cutoff = datetime.fromtimestamp(int(start_time) - START_SLACK, timezone.utc)
+            rows = [r for r in rows if started(r) >= cutoff]
+        if not rows:
+            return ""
+        return str(max(rows, key=started).get("winner_user") or "")

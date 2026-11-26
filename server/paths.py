@@ -162,27 +162,33 @@ def rio_visualizer_dir() -> Path:
 def ensure_rio_visualizer_on_path() -> None:
     """Add the RioVisualizer submodule dir to ``sys.path`` (idempotent).
 
-    Enables ``from rio_visualizer.api import simulate`` from anywhere in PRSH.
+    Enables ``from rio_visualizer.api import load_stadium`` from anywhere in PRSH.
     """
     d = str(rio_visualizer_dir())
     if d not in sys.path:
         sys.path.insert(0, d)
 
 
-def ensure_pyrio_importable() -> None:
-    """Alias PRSH's vendored pyrio under the top-level name ``pyrio`` (idempotent).
+def pyrio_source_dir() -> Path:
+    """The directory holding the ``pyrio`` package of the ``server/rio/pyrio`` submodule.
 
-    pyrio lives at ``server/rio/pyrio`` and PRSH imports it as
-    ``server.rio.pyrio``. RioVisualizer (a standalone submodule) imports the hit
-    simulation engine as top-level ``pyrio`` (``from pyrio.hit_simulator...``).
-    Aliasing our single copy into ``sys.modules`` makes that import resolve to
-    the *same* package object instead of RioVisualizer pulling in its own nested
-    pyrio checkout — one canonical engine, no version drift. Must run before
-    ``rio_visualizer.api`` is first imported.
+    pyrio uses a src layout, so the package sits at ``<submodule>/src/pyrio``.
+    Frozen builds bundle it as an ordinary package (``PRSH.spec`` puts this
+    directory on PyInstaller's path), so nothing needs adding there.
     """
-    if "pyrio" in sys.modules:
+    return Path(__file__).resolve().parent / "rio" / "pyrio" / "src"
+
+
+def ensure_pyrio_importable() -> None:
+    """Put the pinned pyrio submodule first on ``sys.path`` (idempotent).
+
+    PRSH imports pyrio by its own name (``import pyrio``), and so does the
+    RioVisualizer submodule, so both get this one copy. Inserted FIRST so the
+    submodule's pin wins over any pyrio installed in the environment: the pin
+    is what CI tests against.
+    """
+    if _is_frozen():
         return
-    import importlib
-    sys.modules["pyrio"] = importlib.import_module("server.rio.pyrio")
-
-
+    d = str(pyrio_source_dir())
+    if d not in sys.path:
+        sys.path.insert(0, d)

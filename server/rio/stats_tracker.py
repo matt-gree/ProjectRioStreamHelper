@@ -4,114 +4,51 @@ State is keyed per scoreboard so flows on different scoreboards (HUD watcher,
 rotation, direct API assigns) can't corrupt each other's stats cache.
 
 On new game: fetches historical per-character stats from the Project Rio API.
-On each HUD update: reads current-game stats from the HUD game dict.
-On push: merges historical + current, computes derived stats, writes to State.
+On each HUD update: reads current-game stats from the frame.
+On push: adds history and this game (pyrio stat lines add with +), and writes
+them to State in the overlay's shape (server/rio/stat_lines.py).
 """
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-import pandas as pd
 from loguru import logger
-from server.rio.pyrio.lookup import LookupDicts
-from server.rio.pyrio.stat_formatters import (
-    derive_batting, derive_pitching,
-    format_batting_line, format_pitching_line,
-)
+from pyrio import BattingLine, Character, PitchingLine, RioError
+from pyrio.web import StatRow
+
 from server.rio import stats_api
+from server.rio.stat_lines import (
+    batting_counts, batting_state, format_batting_line, format_pitching_line,
+    pitching_counts, pitching_state,
+)
 from server.state import State
 from server.settings import Settings
 
 
-# Internal stat keys for batting (same keys used throughout HUD + merged logic).
-_BATTING_KEYS = [
-    "at_bats", "hits", "singles", "doubles", "triples", "homeruns",
-    "sac_flys", "strikeouts", "walks_bb", "walks_hbp", "rbi", "stolen_bases",
-]
-
-# Internal stat keys for pitching.
-_PITCHING_KEYS = [
-    "batters_faced", "runs_allowed", "walks_bb", "walks_hbp",
-    "hits_allowed", "total_pitches", "strikeouts_pitched", "outs_pitched",
-    "hrs_allowed",
-]
-
-_HUD_BATTING_MAP = {
-    "at_bats": "At Bats",
-    "hits": "Hits",
-    "singles": "Singles",
-    "doubles": "Doubles",
-    "triples": "Triples",
-    "homeruns": "Homeruns",
-    "sac_flys": "Sac Flys",
-    "strikeouts": "Strikeouts",
-    "walks_bb": "Walks (4 Balls)",
-    "walks_hbp": "Walks (Hit)",
-    "rbi": "RBI",
-    "stolen_bases": "Bases Stolen",
-}
-
-_HUD_PITCHING_MAP = {
-    "batters_faced": "Batters Faced",
-    "runs_allowed": "Runs Allowed",
-    "earned_runs": "Earned Runs",
-    "walks_bb": "Batters Walked",
-    "walks_hbp": "Batters Hit",
-    "hits_allowed": "Hits Allowed",
-    "total_pitches": "Pitches Thrown",
-    "strikeouts_pitched": "Strikeouts",
-    "outs_pitched": "Outs Pitched",
-    "hrs_allowed": "HRs Allowed",
-}
+def _character(name) -> Character | None:
+    """A character by name or id; None for an empty slot or one pyrio doesn't know."""
+    if name is None or name == "" or isinstance(name, bool):
+        return None
+    try:
+        return Character(name)
+    except RioError:
+        return None
 
 
-def _empty_batting() -> dict:
-    return {k: 0 for k in _BATTING_KEYS}
+def _batting(d) -> BattingLine:
+    """A frame's per-character batting dict (BattingLine fields) as a line."""
+    return BattingLine(**d) if isinstance(d, dict) and d else BattingLine()
 
 
-def _empty_pitching() -> dict:
-    return {k: 0 for k in _PITCHING_KEYS}
+def _pitching(d) -> PitchingLine:
+    return PitchingLine(**d) if isinstance(d, dict) and d else PitchingLine()
 
 
-def _resolve_df_col(row: pd.Series, category: str, stat: str) -> int | float:
-    val = row.get(f"{category}_summary_{stat}")
-    if val is not None and val == val:
-        return val
-    val = row.get(f"{category}_{stat}")
-    if val is not None and val == val:
-        return val
-    return 0
-
-
-def _extract_api_batting(row: pd.Series) -> dict:
-    return {key: int(_resolve_df_col(row, "Batting", key)) for key in _BATTING_KEYS}
-
-
-def _extract_api_pitching(row: pd.Series) -> dict:
-    return {key: int(_resolve_df_col(row, "Pitching", key)) for key in _PITCHING_KEYS}
-
-
-def _extract_hud_batting(offensive_stats: dict) -> dict:
-    return {our_key: offensive_stats.get(hud_key, 0)
-            for our_key, hud_key in _HUD_BATTING_MAP.items()}
-
-
-def _extract_hud_pitching(defensive_stats: dict) -> dict:
-    return {our_key: defensive_stats.get(hud_key, 0)
-            for our_key, hud_key in _HUD_PITCHING_MAP.items()}
-
-
-def _merge_batting(api: dict, hud: dict) -> dict:
-    merged = {key: api.get(key, 0) + hud.get(key, 0) for key in _BATTING_KEYS}
-    merged.update(derive_batting(**merged))
-    return merged
-
-
-def _merge_pitching(api: dict, hud: dict) -> dict:
-    merged = {key: api.get(key, 0) + hud.get(key, 0) for key in _PITCHING_KEYS}
-    # ERA uses earned_runs from HUD (not in API response — API has runs_allowed)
-    merged["earned_runs"] = hud.get("earned_runs", 0) + api.get("runs_allowed", 0)
-    merged.update(derive_pitching(**merged))
-    return merged
+def _api_pitching(line: PitchingLine) -> PitchingLine:
+    """Rio web's /stats/ doesn't report earned runs yet (pyrio reads 0), so
+    history counts every run allowed as earned until it does."""
+    if line.earned_runs == 0 and line.runs_allowed:
+        return replace(line, earned_runs=line.runs_allowed)
+    return line
 
 
 def _resolve_stats_tag(scoreboard_number: int) -> str | None:
@@ -124,10 +61,12 @@ def _resolve_stats_tag(scoreboard_number: int) -> str | None:
 @dataclass
 class _SbSlot:
     """Per-scoreboard stats state."""
-    api_index: dict[tuple[str, str], pd.Series] = field(default_factory=dict)
-    api_stats: pd.DataFrame = field(default_factory=pd.DataFrame)
+    # (casefolded username, character) -> that player's history with them
+    api_index: dict[tuple[str, Character], StatRow] = field(default_factory=dict)
+    api_stats: list[StatRow] = field(default_factory=list)
     rosters: dict[int, list[str]] = field(default_factory=dict)  # team_idx -> [9 chars]
     players: list[str] = field(default_factory=lambda: ["", ""])  # [away, home]
+    # team_idx -> roster_idx -> {"batting": BattingLine, "pitching": PitchingLine}
     hud_stats: dict[int, dict] = field(default_factory=dict)
     sides_swapped: bool = False
     api_ready: bool = False
@@ -187,11 +126,11 @@ class StatsTracker:
 
     @classmethod
     def _build_index(cls, slot: _SbSlot):
-        slot.api_index = {}
-        if slot.api_stats.empty:
-            return
-        for _, row in slot.api_stats.iterrows():
-            slot.api_index[(row["username"], row["char_name"])] = row
+        slot.api_index = {
+            ((row.user or "").casefold(), row.character): row
+            for row in slot.api_stats
+            if row.character is not None
+        }
 
     @classmethod
     async def on_new_game(
@@ -220,13 +159,13 @@ class StatsTracker:
             game_json.get("home_player", ""),
         ]
 
-        # Extract rosters; HUD uses string char names, API uses integer IDs.
+        # Rosters by character name (frames carry names; ids still resolve).
         for team_idx in range(2):
             team = "away" if team_idx == 0 else "home"
             raw = [game_json.get(f"{team}_roster_{i}_char", "") for i in range(9)]
             slot.rosters[team_idx] = [
-                LookupDicts.CHAR_NAME.get(c, str(c)) if isinstance(c, int) else str(c or "")
-                for c in raw
+                (c.label if (c := _character(name)) is not None else str(name or ""))
+                for name in raw
             ]
 
         logger.info(
@@ -271,8 +210,8 @@ class StatsTracker:
             )
             cls._build_index(slot)
             slot.api_ready = True
-            if not slot.api_stats.empty:
-                users = slot.api_stats["username"].unique().tolist()
+            if slot.api_stats:
+                users = sorted({row.user for row in slot.api_stats if row.user})
                 logger.info(
                     f"[StatsTracker] sb{scoreboard_number} API stats loaded for "
                     f"{users} ({len(slot.api_stats)} rows)"
@@ -295,11 +234,9 @@ class StatsTracker:
             team = "away" if team_idx == 0 else "home"
             slot.hud_stats[team_idx] = {}
             for i in range(9):
-                offensive = game_json.get(f"{team}_roster_{i}_offensive", {})
-                defensive = game_json.get(f"{team}_roster_{i}_defensive", {})
                 slot.hud_stats[team_idx][i] = {
-                    "batting": _extract_hud_batting(offensive),
-                    "pitching": _extract_hud_pitching(defensive),
+                    "batting": _batting(game_json.get(f"{team}_roster_{i}_batting")),
+                    "pitching": _pitching(game_json.get(f"{team}_roster_{i}_pitching")),
                 }
 
     @classmethod
@@ -310,8 +247,7 @@ class StatsTracker:
         Unlike a HUD file (which carries full per-roster offensive/defensive
         stats every frame), the ongoing-games feed only exposes the two active
         characters via `batter_stats` / `pitcher_stats`. Those dicts use the
-        same key names as the HUD roster stats, so the existing HUD extractors
-        apply directly.
+        same shape as a HUD frame's per-character lines (server/rio/frame.py).
 
         We accumulate snapshots into the slot across polls — preserving slots
         we've already recorded — so a live game's per-character current_game
@@ -333,13 +269,13 @@ class StatsTracker:
             team = slot.hud_stats.setdefault(team_idx, {})
             return team.setdefault(
                 roster_idx,
-                {"batting": _empty_batting(), "pitching": _empty_pitching()},
+                {"batting": BattingLine(), "pitching": PitchingLine()},
             )
 
         if isinstance(batter_loc, int) and 0 <= batter_loc <= 8 and batter_stats:
-            _cell(batting_idx, batter_loc)["batting"] = _extract_hud_batting(batter_stats)
+            _cell(batting_idx, batter_loc)["batting"] = _batting(batter_stats)
         if isinstance(pitcher_loc, int) and 0 <= pitcher_loc <= 8 and pitcher_stats:
-            _cell(fielding_idx, pitcher_loc)["pitching"] = _extract_hud_pitching(pitcher_stats)
+            _cell(fielding_idx, pitcher_loc)["pitching"] = _pitching(pitcher_stats)
 
     @classmethod
     async def push_stats_to_state(cls, scoreboard_number: int, sides_swapped: bool):
@@ -367,28 +303,26 @@ class StatsTracker:
 
                 prefix = f"{sb}.stats.{team_num}.character.{char_idx}"
 
-                api_row = slot.api_index.get((username, char_name))
-                api_batting = _extract_api_batting(api_row) if api_row is not None else _empty_batting()
-                api_pitching = _extract_api_pitching(api_row) if api_row is not None else _empty_pitching()
+                character = _character(char_name)
+                api_row = slot.api_index.get((username.casefold(), character)) if character else None
+                api_batting = (api_row.batting if api_row else None) or BattingLine()
+                api_pitching = _api_pitching((api_row.pitching if api_row else None) or PitchingLine())
 
                 hud_char = slot.hud_stats.get(data_team, {}).get(char_idx, {})
-                hud_batting = hud_char.get("batting", _empty_batting())
-                hud_pitching = hud_char.get("pitching", _empty_pitching())
-
-                merged_batting = _merge_batting(api_batting, hud_batting)
-                merged_pitching = _merge_pitching(api_pitching, hud_pitching)
+                hud_batting = hud_char.get("batting") or BattingLine()
+                hud_pitching = hud_char.get("pitching") or PitchingLine()
 
                 entries.extend([
                     (f"{prefix}.name", char_name),
-                    (f"{prefix}.api.batting", api_batting),
-                    (f"{prefix}.api.pitching", api_pitching),
-                    (f"{prefix}.batting", merged_batting),
-                    (f"{prefix}.pitching", merged_pitching),
+                    (f"{prefix}.api.batting", batting_counts(api_batting)),
+                    (f"{prefix}.api.pitching", pitching_counts(api_pitching)),
+                    (f"{prefix}.batting", batting_state(api_batting + hud_batting)),
+                    (f"{prefix}.pitching", pitching_state(api_pitching + hud_pitching)),
                     (f"{prefix}.current_game", {
-                        "batting": hud_batting,
-                        "pitching": hud_pitching,
-                        "batting_line": format_batting_line(**hud_batting),
-                        "pitching_line": format_pitching_line(**hud_pitching),
+                        "batting": batting_counts(hud_batting),
+                        "pitching": pitching_counts(hud_pitching),
+                        "batting_line": format_batting_line(hud_batting),
+                        "pitching_line": format_pitching_line(hud_pitching),
                     }),
                 ])
 

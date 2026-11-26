@@ -1,16 +1,13 @@
 import asyncio
 import hashlib
-import math
 
-import numpy as np
-import pandas as pd
 from loguru import logger
 from server import socketio
 from server.rio.provider import RioGameDataProvider, pin_swap
 from server.rio.apply import apply_parsed_game_to_state, apply_completed_game_to_state
 from server.rio import stats_api
 from server.rio.stats_api import get_last_completed_fetch_info
-from server.rio.pyrio.lookup import LookupDicts
+from server.rio.frame import frame_from_live
 from server.match import Match
 from server.rio.game_end import GameEndWatcher
 from server.settings import Settings
@@ -18,27 +15,6 @@ from server.settings import Settings
 # Polls a followed live game may be absent from the ongoing feed before we treat
 # it as ended (~2 poll intervals of grace against a flickering feed).
 END_MISS_TOLERANCE = 2
-
-
-def _sanitize_row(d: dict) -> dict:
-    """Convert pandas/numpy types to JSON-safe Python types."""
-    out = {}
-    for k, v in d.items():
-        if isinstance(v, (pd.Timestamp,)):
-            out[k] = v.isoformat() if pd.notna(v) else None
-        elif isinstance(v, (np.integer,)):
-            out[k] = int(v)
-        elif isinstance(v, (np.floating,)):
-            out[k] = None if math.isnan(v) else float(v)
-        elif isinstance(v, (np.bool_,)):
-            out[k] = bool(v)
-        elif isinstance(v, float) and math.isnan(v):
-            out[k] = None
-        elif v is pd.NaT:
-            out[k] = None
-        else:
-            out[k] = v
-    return out
 
 
 def _stable_ongoing_game_id(away_player: str, home_player: str, start_time) -> int:
@@ -178,49 +154,34 @@ class OngoingGamePool:
             except Exception:
                 pass  # best-effort; will show raw IDs if unavailable
 
-        raw = await stats_api.fetch_ongoing_games()
-        if not raw:
+        live_games = await stats_api.fetch_ongoing_games()
+        if not live_games:
             return
 
         new_games = {}
-        games_list = (
-            raw.get("ongoing_games")
-            or raw.get("games")
-            or (raw if isinstance(raw, list) else [])
-        )
-
         # Build reverse mapping: tag_set_id -> game_mode_name from cache
         tag_set_id_to_name = {v: k for k, v in stats_api._game_modes.items()} if stats_api._game_modes else {}
 
-        for g in games_list:
-            away_player = g.get("away_player", "")
-            home_player = g.get("home_player", "")
-            start_time = g.get("start_time", 0)
-
-            # Generate a stable synthetic game_id (the API does not provide one)
-            game_id = _stable_ongoing_game_id(away_player, home_player, start_time)
-
-            # Resolve integer captain indices to character names for display
-            away_cap_idx = g.get("away_captain", 0)
-            home_cap_idx = g.get("home_captain", 0)
+        for live in live_games:
+            game = frame_from_live(live)
+            away_player, home_player = game["away_player"], game["home_player"]
+            # A stable synthetic game_id (the API provides none)
+            game_id = _stable_ongoing_game_id(away_player, home_player, game["start_time"])
 
             # Resolve tag_set integer to a human-readable game mode name
-            tag_set_id = g.get("tag_set")
+            tag_set_id = game.get("tag_set")
             game_mode_name = tag_set_id_to_name.get(
                 tag_set_id, f"ID:{tag_set_id}" if tag_set_id is not None else ""
             )
 
-            # Build enriched game dict — all raw fields are preserved so that
-            # parse_game_data() can consume them unchanged when applying to a scoreboard.
-            game = dict(g)
             game["game_id"] = game_id
             game["source_type"] = "live_game"
             game["game_completed"] = False
             # Display-friendly aliases used by the frontend table
             game["away_user"] = away_player
             game["home_user"] = home_player
-            game["away_captain_name"] = LookupDicts.CHAR_NAME.get(away_cap_idx, str(away_cap_idx))
-            game["home_captain_name"] = LookupDicts.CHAR_NAME.get(home_cap_idx, str(home_cap_idx))
+            game["away_captain_name"] = live.away.captain.label if live.away.captain else ""
+            game["home_captain_name"] = live.home.captain.label if live.home.captain else ""
             game["game_mode_name"] = game_mode_name
 
             new_games[game_id] = game
@@ -440,19 +401,17 @@ class CompletedGamePool:
         than relying on the class-level cache.
         """
         filters = filters or {}
-        df = await stats_api.fetch_completed_games(**filters)
+        rows = await stats_api.fetch_completed_games(**filters)
         diag = get_last_completed_fetch_info()
 
         new_games: dict = {}
-        if not df.empty:
-            for _, row in df.iterrows():
-                game = _sanitize_row(row.to_dict())
-                game_id = game.get("game_id")
-                if game_id is None:
-                    continue
-                game["source_type"] = "rotator"
-                game["game_completed"] = True
-                new_games[game_id] = game
+        for game in rows:
+            game_id = game.get("game_id")
+            if game_id is None:
+                continue
+            game["source_type"] = "rotator"
+            game["game_completed"] = True
+            new_games[game_id] = game
 
         cls.games = new_games
         await socketio.emit("v1.game_pool.completed_update", {

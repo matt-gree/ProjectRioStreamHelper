@@ -1,143 +1,55 @@
-"""Post-game side totals: stars won from resolved Star Chance at-bats, the
-per-inning linescore reconstruction, and the aggregate block the Game Summary
-callout reads (no stat-file fields exist for the first two)."""
+"""Post-game side totals over a real game: stars won from star chances, the
+line score, and the aggregate block the Game Summary callout reads.
+
+The game rules (who wins a star chance, a line score's "X" cell, runs from the
+score) are pyrio's and tested there; these pin how PRSH lays them out.
+"""
+import pyrio
+from pyrio import Side
+
 from server.postgame import stats as postgame_stats
+from tests.stat_file import FIXTURE
+
+GAME = pyrio.read_game(FIXTURE)
 
 
-def ev(half, result, star_chance=1):
-    return {"Half Inning": half, "Result of AB": result, "Star Chance": star_chance}
+def test_stars_won_counts_each_sides_star_chances():
+    won = postgame_stats.stars_won(GAME)
+    expected = {side: sum(ab.star_chance_winner is side for ab in GAME.at_bats) for side in Side}
+    assert won == expected
+    assert sum(won.values()) == sum(ab.is_star_chance and ab.is_complete for ab in GAME.at_bats)
 
 
-# --- _stars_won ---
-
-def test_stars_won_out_goes_to_fielding_team():
-    # Top of the inning (half 0): away bats, so an out gives home the star.
-    assert postgame_stats.stars_won([ev(0, "Out")]) == (0, 1)
-    # Bottom (half 1): home bats, out goes to away.
-    assert postgame_stats.stars_won([ev(1, "Strikeout")]) == (1, 0)
-
-
-def test_stars_won_hit_goes_to_batting_team():
-    assert postgame_stats.stars_won([ev(0, "Single")]) == (1, 0)
-    assert postgame_stats.stars_won([ev(1, "HR")]) == (0, 1)
-
-
-def test_stars_won_walks_go_to_batting_team():
-    # A walk puts the batter on — the batting team keeps the star.
-    assert postgame_stats.stars_won([ev(0, "Walk (BB)"), ev(0, "Walk (HBP)")]) == (2, 0)
-    assert postgame_stats.stars_won([ev(1, "Walk (BB)")]) == (0, 1)
-
-
-def test_stars_won_ignores_non_star_chance_and_unresolved():
-    events = [
-        ev(0, "Single", star_chance=0),   # not a star chance
-        ev(0, "None"),                    # star chance, at-bat not resolved yet
-        ev(1, "Caught line-drive"),       # resolved: away (fielding) wins
-    ]
-    assert postgame_stats.stars_won(events) == (1, 0)
-
-
-def test_stars_won_accepts_numeric_result_codes():
-    # Raw (undecoded) files carry the numeric final-result code.
-    assert postgame_stats.stars_won([ev(0, 7), ev(1, 1)]) == (2, 0)
-
-
-def test_stars_won_tolerates_junk():
-    assert postgame_stats.stars_won([]) == (0, 0)
-    assert postgame_stats.stars_won(None) == (0, 0)
-    events = ["bogus", {"Star Chance": 1}, ev(0, None), ev(0, 3.5), ev(1, "Double")]
-    assert postgame_stats.stars_won(events) == (0, 1)
-
-
-# --- _linescore ---
-
-def lev(num, inning, half, away, home):
-    return {"Event Num": num, "Inning": inning, "Half Inning": half,
-            "Away Score": away, "Home Score": home}
-
-
-class _FinalScore:
-    def __init__(self, away, home):
-        self._s = {0: away, 1: home}
-
-    def score(self, t):
-        return self._s[t]
-
-
-def test_linescore_attributes_runs_to_innings():
-    events = [
-        lev(0, 1, 0, 0, 0), lev(1, 1, 1, 1, 0),   # away scores 1 in the 1st
-        lev(2, 2, 0, 1, 0), lev(3, 2, 1, 1, 2),   # home scores 2 in the 2nd
-        lev(4, 3, 0, 3, 2), lev(5, 3, 1, 3, 2),   # away scores 2 in the 3rd
-    ]
-    away, home = postgame_stats.linescore(events, _FinalScore(3, 2))
-    assert away == [1, 0, 2]
-    assert home == [0, 2, 0]
-
-
-def test_linescore_survives_the_event_num_byte_wrapping():
-    """Rio stores Event Num in a byte: event 256 is numbered 0 again. Sorting
-    by it pulled the extra innings' running scores to the front, so a 10-inning
-    11-6 game drew 11 and 6 in the 1st and zeros after. File order is truth."""
-    events = [lev(i % 256, 1 + i // 30, (i // 15) % 2, 0, 0) for i in range(270)]
-    events[-1].update({"Away Score": 5, "Home Score": 2})   # late runs, num 13
-    away, home = postgame_stats.linescore(events, _FinalScore(5, 2))
-    assert len(away) == 9
-    assert away[-1] == 5 and home[-1] == 2
-    assert sum(away[:-1]) == 0 and sum(home[:-1]) == 0
-
-
-def test_linescore_marks_unplayed_bottom_half_as_x():
-    # Home leads after the top of the last inning — bottom never played.
-    events = [lev(0, 1, 0, 0, 0), lev(1, 1, 1, 0, 3), lev(2, 2, 0, 1, 3)]
-    away, home = postgame_stats.linescore(events, _FinalScore(1, 3))
-    assert away == [0, 1]
-    assert home == [3, None]
-
-
-def test_linescore_reconciles_walkoff_runs_after_last_event():
-    # The winning run crosses after the final recorded event: box says 4,
-    # events only ever saw 3 — the difference lands in the last inning.
-    events = [lev(0, 1, 0, 2, 0), lev(1, 1, 1, 2, 3), lev(2, 2, 0, 2, 3),
-              lev(3, 2, 1, 2, 3)]
-    away, home = postgame_stats.linescore(events, _FinalScore(2, 4))
-    assert away == [2, 0]
-    assert home == [3, 1]
-
-
-def test_linescore_tolerates_junk():
-    assert postgame_stats.linescore([], _FinalScore(0, 0)) == ([], [])
-    assert postgame_stats.linescore(None, _FinalScore(0, 0)) == ([], [])
-    events = ["bogus", {"Inning": "x"}, lev(0, 1, 0, None, "n/a"), lev(1, 1, 1, 1, 0)]
-    away, home = postgame_stats.linescore(events, _FinalScore(1, 0))
-    assert away == [1]
-    assert home == [0]
-
-
-# --- _side_totals ---
-
-class _StubStat:
-    def score(self, t):
-        return 7 if t == 0 else 3
-
-    def hits(self, t):
-        return 11 if t == 0 else 6
-
-    def homeruns(self, t):
-        return 2 if t == 0 else 1
-
-    def strikeoutsPitched(self, t):
-        return 5 if t == 0 else 8
+def test_linescore_adds_up_to_the_final_score():
+    for side in Side:
+        line = postgame_stats.linescore(GAME, side)
+        assert line == list(GAME.inning_runs(side))
+        assert sum(r or 0 for r in line) == GAME.team(side).score
 
 
 def test_side_totals_shape():
-    totals = postgame_stats.side_totals(_StubStat(), 0, stars=4)
+    totals = postgame_stats.side_totals(GAME, Side.AWAY, stars=4)
+    team = GAME.away
     assert totals == {
-        "runs": 7,
-        "hits": 11,
-        "homeruns": 2,
+        "runs": team.score,
+        "hits": team.batting.hits,
+        "homeruns": team.batting.home_runs,
         "stars_won": 4,
-        "strikeouts_pitched": 5,
+        "strikeouts_pitched": team.pitching.strikeouts,
     }
-    totals = postgame_stats.side_totals(_StubStat(), 1, stars=0)
-    assert totals["runs"] == 3 and totals["strikeouts_pitched"] == 8
+
+
+def test_side_block_runs_add_up_and_star_swings_are_cost_weighted():
+    derived = postgame_stats.char_event_derived(GAME)
+    for side in Side:
+        block = postgame_stats.side_block(GAME, side, 0, derived)
+        chars = block["characters"]
+        assert len(chars) == 9
+        assert sum(c["batting"]["runs"] for c in chars) == GAME.team(side).score
+        for spot, char in zip(GAME.team(side).roster, chars):
+            swings = sum(e.is_star_swing for e in GAME.events if e.batter_spot == spot)
+            assert char["batting"]["star_swings"] == swings * spot.star_swing_cost
+            assert char["battingHand"] in ("Right", "Left")
+            assert (char["pitching"] is not None) is spot.was_pitcher
+        assert block["teamName"]
+        assert block["isWinner"] is (GAME.result.winner is side)

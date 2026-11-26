@@ -105,7 +105,7 @@ def reset_singletons():
         "ongoing_ended_follow": dict(OngoingGamePool._ended_follow),
         "completed_games": dict(CompletedGamePool.games),
         "pg_captured": dict(PostGame._captured),
-        "pg_stat_objs": dict(PostGame._stat_objs),
+        "pg_games": dict(PostGame._games),
         "pg_contacts": dict(PostGame._contacts),
         # The loaded event and its parsed brackets are class state too, so a
         # test that loads one leaves every later test looking at a provider
@@ -169,7 +169,7 @@ def reset_singletons():
     OngoingGamePool._ended_follow = {}
     CompletedGamePool.games = {}
     PostGame._captured = {}
-    PostGame._stat_objs = {}
+    PostGame._games = {}
     PostGame._contacts = {}
     StartGGProvider._bracket_cache = {}
     StartGGProvider._event_slug = None
@@ -213,7 +213,7 @@ def reset_singletons():
     OngoingGamePool._ended_follow = saved["ongoing_ended_follow"]
     CompletedGamePool.games = saved["completed_games"]
     PostGame._captured = saved["pg_captured"]
-    PostGame._stat_objs = saved["pg_stat_objs"]
+    PostGame._games = saved["pg_games"]
     PostGame._contacts = saved["pg_contacts"]
     StartGGProvider._bracket_cache = saved["sgg_bracket_cache"]
     StartGGProvider._event_slug = saved["sgg_event_slug"]

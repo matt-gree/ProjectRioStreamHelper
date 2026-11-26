@@ -11,6 +11,8 @@ import time
 import orjson
 import pytest
 
+from tests.stat_file import write_stat_file
+
 from server.postgame import files as pgf
 
 
@@ -69,10 +71,9 @@ def stat_dir(tmp_path, set_setting):
 def write_stat(d, gid, *, name=None, loaded_from_hud=0, in_file_gid=None,
                age=0, **fields):
     """A decoded stat file; ``age`` seconds pushes its mtime into the past."""
-    data = {"GameID": str(in_file_gid if in_file_gid is not None else gid),
-            "Loaded from HUD": loaded_from_hud, **fields}
-    p = d / (name or f"decoded.Game_{gid}.json")
-    p.write_bytes(orjson.dumps(data))
+    p = write_stat_file(d / (name or f"decoded.Game_{gid}.json"),
+                        GameID=str(in_file_gid if in_file_gid is not None else gid),
+                        **{"Loaded from HUD": loaded_from_hud}, **fields)
     if age:
         t = time.time() - age
         os.utime(p, (t, t))
@@ -164,7 +165,7 @@ def test_list_files_empty_when_dir_missing(tmp_path, set_setting):
 def test_list_files_descriptors_newest_first_skipping_replays(stat_dir):
     write_stat(stat_dir, 1, name="decoded.a_1.json", age=200,
                **{"Away Player": "A", "Home Player": "B",
-                  "Away Score": 3, "Home Score": 5, "Date - End": "d1"})
+                  "Away Score": 3, "Home Score": 5, "Date - End": "Sun Nov 22 20:36:20 2026"})
     write_stat(stat_dir, 2, name="decoded.b_2.json", age=100, loaded_from_hud=1)
     write_stat(stat_dir, 3, name="decoded.c_3.json",
                **{"Away Player": "C", "Home Player": "D"})
@@ -175,7 +176,7 @@ def test_list_files_descriptors_newest_first_skipping_replays(stat_dir):
     assert out[1] == {
         "file": "decoded.a_1.json", "gameId": "1",
         "awayPlayer": "A", "homePlayer": "B",
-        "awayScore": 3, "homeScore": 5, "endDate": "d1",
+        "awayScore": 3, "homeScore": 5, "endDate": "Sun Nov 22 20:36:20 2026",
     }
 
 

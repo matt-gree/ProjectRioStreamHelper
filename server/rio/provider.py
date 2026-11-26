@@ -4,10 +4,8 @@ import platform
 from pathlib import Path
 
 from loguru import logger
-from server.rio.pyrio.lookup import LookupDicts
-from server.rio.pyrio.team_name_algo import team_name
+from pyrio import Character, Position, RioError, TeamName, team_name
 
-from server.rio import hit_visualizer
 from server.rio.hud_watcher import HudWatcher
 from server.rio.resurface import RESURFACE_MAP as _RESURFACE_MAP
 from server.rio.apply import apply_parsed_game_to_state, clear_game_entries
@@ -343,50 +341,40 @@ class RioGameDataProvider:
             return cls.current_game
         return None
 
+    @staticmethod
+    def _code_label(kind, v) -> str:
+        """A coded value's label from its id or label; '' for None or one pyrio doesn't know.
+
+        Frames carry labels (``server/rio/frame.py``); ids still arrive from
+        older callers and tests, and both resolve the same way.
+        """
+        if v is None or v == "" or isinstance(v, bool):
+            return ""
+        try:
+            return kind(v).label
+        except (RioError, ValueError):
+            return "" if isinstance(v, int) else str(v)
+
     @classmethod
     def _resolve_char(cls, c) -> str:
-        """Convert a character value to a name string.
-
-        Handles both integer IDs (from the Project Rio API / HUD file) and
-        string names (already resolved). Returns '' for None.
-        """
-        if c is None:
-            return ''
-        if isinstance(c, int):
-            return LookupDicts.CHAR_NAME.get(c, str(c))
-        return str(c)
+        """A character's name from its id or name; '' for None."""
+        if isinstance(c, int) and not isinstance(c, bool):
+            return cls._code_label(Character, c) or str(c)
+        return "" if c is None else str(c)
 
     @classmethod
     def _resolve_logo(cls, v) -> str:
-        """Convert a team-logo value to its in-game name string.
+        """The in-game team-banner name from its id or name; '' for none.
 
-        Handles both integer ids (API ongoing feed) and name strings (HUD).
-        Returns '' for None. This is the explicit team-banner art, distinct
-        from the roster-derived team name (see _get_msb_team_name).
+        This is the explicit team-banner art, distinct from the roster-derived
+        team name (see _get_msb_team_name).
         """
-        if v is None or v == "":
-            return ''
-        if isinstance(v, bool):
-            return ''
-        if isinstance(v, int):
-            return LookupDicts.LOGO.get(v, '')
-        return str(v)
+        return cls._code_label(TeamName, v)
 
     @classmethod
     def _resolve_position(cls, v) -> str:
-        """Convert a fielding-position value to its abbreviation string.
-
-        Handles both integer ids (API ongoing feed) and abbreviation strings
-        (HUD). Returns '' for None/invalid.
-        """
-        if v is None or v == "":
-            return ''
-        if isinstance(v, bool):
-            return ''
-        if isinstance(v, int):
-            name = LookupDicts.POSITION.get(v, '')
-            return '' if name in ('Inv', 'None') else name
-        return str(v)
+        """A fielding position's abbreviation from its id or abbreviation; '' for none."""
+        return cls._code_label(Position, v)
 
     @classmethod
     def parse_game_data(cls, game_json: dict) -> dict:
@@ -425,16 +413,14 @@ class RioGameDataProvider:
                     for j in range(9)
                 ]
                 # Position-indexed diamond: index 0=P..8=RF -> roster slot there
-                # (or None). The HUD path supplies it directly via pyrio's
-                # HudObj.defensive_diamond(); the API ongoing feed has no such
-                # field, so derive it from the resolved positions instead.
+                # (or None). Frames carry it (server/rio/frame.py); derive it
+                # from the resolved positions for a dict that doesn't.
                 diamond = game_json.get(f"{team}_defensive_diamond")
                 if not isinstance(diamond, list):
                     diamond = [None] * 9
                     for slot, pos in enumerate(entrant["positions"]):
-                        idx = LookupDicts.POSITION_INDEX.get(pos)
-                        if idx is not None:
-                            diamond[idx] = slot
+                        if pos:
+                            diamond[Position(pos).id] = slot
                 entrant["diamond"] = diamond
                 entrant["captainIndex"] = game_json[f"{team}_captain"]
                 entrant["rioName"] = game_json[f"{team}_player"]
@@ -471,9 +457,8 @@ class RioGameDataProvider:
             fielding_roster = fielding_entrant["roster"]
             fielding_diamond = fielding_entrant.get("diamond", [None] * 9)
             field = {}
-            for pos_idx, label in LookupDicts.POSITION.items():
-                if not isinstance(pos_idx, int) or label == "Inv":
-                    continue
+            for position in Position:
+                pos_idx, label = position.id, position.label
                 slot = fielding_diamond[pos_idx] if pos_idx < len(fielding_diamond) else None
                 field[label] = (
                     fielding_roster[slot]
@@ -914,10 +899,11 @@ class RioGameDataProvider:
         """
         if not cls._hud_targets:
             return
-        hit = hit_visualizer.build_hit(game_json)
-        if hit is None:
+        hit = game_json.get("hit")  # flown off the HUD thread by server/rio/frame.py
+        if not hit:
             return
-        sig = hit.pop("_sig", None)
+        hit = dict(hit)
+        sig = tuple(hit.pop("sig", None) or ())
         if sig == cls._last_hit_sig:
             return
         cls._last_hit_sig = sig
@@ -1264,9 +1250,17 @@ class RioGameDataProvider:
         return parsed
 
     @classmethod
-    def _get_msb_team_name(cls, roster: list, captain_index: int) -> str:
-        """Generate the MSB team name from roster composition."""
-        try:
-            return team_name(roster, roster[captain_index])
-        except Exception:
+    def _get_msb_team_name(cls, roster: list, captain_index) -> str:
+        """The MSB team name a roster of character names earns ('' if it can't be named)."""
+        def character(name):
+            try:
+                return Character(name) if name else None
+            except RioError:
+                return None
+
+        characters = [character(c) for c in roster]
+        if len(characters) != 9:
             return ""
+        captain = characters[captain_index] if isinstance(captain_index, int) and 0 <= captain_index < len(characters) else None
+        name = team_name(characters, captain)
+        return "" if name is None else name.label

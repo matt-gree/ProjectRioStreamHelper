@@ -1,21 +1,27 @@
-"""Async wrapper around pyrio's RioWeb client for Project Rio API calls.
+"""Every Project Rio web API call PRSH makes, through pyrio's ``AsyncRioClient``.
 
-All Project Rio API interactions should go through this module.
-RioWeb uses sync requests.Session, so calls are wrapped in asyncio.to_thread().
+pyrio decodes each response into typed models (``StatRow``, ``GameSummary``,
+``LiveGame``, ``TagSet``…) and raises ``pyrio.web.APIError`` for anything that
+goes wrong on the wire. This module adds what is PRSH's own: the per-board
+fetch diagnostics, the game-mode name caches the live path reads without
+waiting, and completed games laid out as the row dicts the pools store.
 """
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import urlencode
 
-import pandas as pd
+import httpx
 from loguru import logger
+
+from pyrio import Character, RioError, Side, Stadium
+from pyrio.web import APIError, AsyncRioClient, DiskCache, GameSummary, LiveGame, StatRow, TagKind
+
 from server import socketio
 from server.paths import user_data_dir
-from server.rio.pyrio.rio_web import RioWeb
-from server.rio.pyrio.exceptions import RioAPIError
 
-_client: RioWeb | None = None
+_client: AsyncRioClient | None = None
+_client_loop: asyncio.AbstractEventLoop | None = None
 _ENV_PATH = user_data_dir() / ".env"
 
 # Diagnostic state for the last stats fetch — keyed by scoreboard so each
@@ -102,86 +108,61 @@ def load_rio_key() -> str | None:
     return None
 
 
-# (connect, read) seconds for every request PRSH makes through pyrio. pyrio
-# builds its session with NO timeout, so a Project Rio that accepts the
-# connection and never answers held a worker thread forever — and every
-# `asyncio.to_thread` in the process (the HUD file read, stat-file captures,
-# JSON dumps) shares that one bounded pool. A few hung polls starved the board.
-# The read budget is generous because the community fallback asks for a whole
-# season's games in one query.
-HTTP_TIMEOUT = (5.0, 60.0)
+# Connect fast, read slowly: the community fallback asks for a whole season's
+# games in one query. pyrio retries transient failures on its own.
+HTTP_TIMEOUT = httpx.Timeout(60.0, connect=5.0)
+# Tag sets, tags and users barely change; pyrio keeps them on disk for a day.
+REFERENCE_CACHE_TTL = 24 * 60 * 60
 
 
-def _with_default_timeout(session) -> None:
-    """Give a requests.Session a default timeout without touching pyrio."""
-    request = session.request
-
-    def timed(method, url, **kwargs):
-        kwargs.setdefault("timeout", HTTP_TIMEOUT)
-        return request(method, url, **kwargs)
-
-    session.request = timed
-
-
-def _get_client() -> RioWeb:
-    """Lazy singleton for the RioWeb API client."""
-    global _client
-    if _client is None:
-        key = load_rio_key()
-        cache_dir = str(user_data_dir() / "cache")
-        _client = RioWeb(rio_key=key, cache_dir=cache_dir)
-        _with_default_timeout(_client.session)
+def _get_client() -> AsyncRioClient:
+    """The shared client, rebuilt if the event loop changed (its connections belong to one loop)."""
+    global _client, _client_loop
+    loop = asyncio.get_running_loop()
+    if _client is None or _client_loop is not loop:
+        _client = AsyncRioClient(
+            api_key=load_rio_key(),
+            timeout=HTTP_TIMEOUT,
+            cache=DiskCache(user_data_dir() / "cache" / "rio", ttl=REFERENCE_CACHE_TTL),
+        )
+        _client_loop = loop
     return _client
+
+
+def _base_url() -> str:
+    return _get_client().base_url
+
+
+def _clean(value: str) -> str:
+    """Rio usernames and tags hold no whitespace; a pasted one sometimes does."""
+    return "".join(value.split())
 
 
 async def fetch_character_stats(
     usernames: list[str],
     tag: Optional[str] = None,
     scoreboard_number: int | None = None,
-) -> pd.DataFrame:
-    """Fetch per-character stats from the Project Rio API in a single request.
+) -> list[StatRow]:
+    """Per-player, per-character batting and pitching totals, in one request.
 
-    Uses by_user=1&by_char=1 with multiple username params.  The response
-    is processed by pyrio's RioWeb._process_stats() into a flat DataFrame with:
-      - Grouping columns: username, char_name
-      - Stat columns: Batting_summary_at_bats, Pitching_batters_faced, etc.
-
-    Returns an empty DataFrame on error.
+    One ``StatRow`` per (user, character), ``batting`` and ``pitching`` set.
+    Returns ``[]`` on error, recorded in the board's diagnostics.
 
     Args:
         scoreboard_number: which scoreboard's diagnostics slot to write to.
             If None, no diagnostics are recorded (the fetch still runs).
     """
-    # Remove all whitespace from string parameters
-    usernames = ["".join(u.split()) for u in usernames]
-    usernames = [u for u in usernames if u]
-    if tag:
-        tag = "".join(tag.split())
-
+    usernames = [u for u in (_clean(u) for u in usernames) if u]
+    tag = _clean(tag) if tag else None
     if not usernames:
-        return pd.DataFrame()
+        return []
 
-    client = _get_client()
-    player_diag = {}
-
-    # Single request with all usernames
-    params = {
-        "by_char": 1,
-        "by_user": 1,
-        "username": usernames,
-        "exclude_fielding": 1,
-    }
+    query = [("by_char", 1), ("by_user", 1), ("exclude_fielding", 1)]
     if tag:
-        params["tag"] = tag
+        query.append(("tag", tag))
+    query += [("username", u) for u in usernames]
+    diag_url = f"{_base_url()}/stats/?{urlencode(query)}"
 
-    # Build diagnostic URL
-    user_qs = "&".join(f"username={u}" for u in usernames)
-    base_qs = "by_char=1&by_user=1&exclude_fielding=1"
-    if tag:
-        base_qs += f"&tag={tag}"
-    diag_url = f"{client.base_url}/stats/?{base_qs}&{user_qs}"
-
-    # Set loading state immediately so the UI can show it
     if scoreboard_number is not None:
         loading_info = {
             "url": diag_url,
@@ -193,26 +174,22 @@ async def fetch_character_stats(
         _last_fetch_info[scoreboard_number] = loading_info
         await _emit_fetch_status(scoreboard_number, loading_info)
 
+    player_diag = {}
     try:
-        # raw=False → pyrio processes the response into a flat DataFrame
-        df = await asyncio.to_thread(client.get_stats, params)
-
+        rows = await _get_client().stats(
+            users=usernames,
+            tags=[tag] if tag else None,
+            by_user=True,
+            by_character=True,
+            exclude_fielding=True,
+        )
         for username in usernames:
-            if not df.empty and "username" in df.columns:
-                char_count = len(df[df["username"] == username])
-            else:
-                char_count = 0
+            char_count = sum(1 for r in rows if (r.user or "").casefold() == username.casefold())
             logger.info(f"[StatsAPI] sb{scoreboard_number} fetched stats for {username}: {char_count} characters")
             player_diag[username] = {"char_count": char_count, "error": None, "status": "done"}
-
-    except RioAPIError as e:
+    except RioError as e:
         logger.warning(f"[StatsAPI] sb{scoreboard_number} API error fetching stats: {e}")
-        df = pd.DataFrame()
-        for username in usernames:
-            player_diag[username] = {"char_count": 0, "error": str(e), "status": "error"}
-    except Exception as e:
-        logger.error(f"[StatsAPI] sb{scoreboard_number} unexpected error fetching stats: {e}")
-        df = pd.DataFrame()
+        rows = []
         for username in usernames:
             player_diag[username] = {"char_count": 0, "error": str(e), "status": "error"}
 
@@ -227,7 +204,41 @@ async def fetch_character_stats(
         _last_fetch_info[scoreboard_number] = done_info
         await _emit_fetch_status(scoreboard_number, done_info)
 
-    return df
+    return rows
+
+
+def completed_game_row(game: GameSummary) -> dict:
+    """A finished game as the JSON-safe row the pools, matchups and boards read.
+
+    Times are ISO 8601 in UTC; characters, the stadium and the game mode by
+    name. A tie names the away player as the winner, as Rio web's own tables do.
+    """
+    winner = game.winner or Side.AWAY
+    loser = winner.other
+    line = game.linescore
+    return {
+        "game_id": game.game_id,
+        "away_user": game.away.player,
+        "home_user": game.home.player,
+        "away_score": game.away.score,
+        "home_score": game.home.score,
+        "away_captain": game.away.captain.label,
+        "home_captain": game.home.captain.label,
+        "away_roster": [c.label for c in game.away.roster],
+        "home_roster": [c.label for c in game.home.roster],
+        "winner_user": game.team(winner).player,
+        "loser_user": game.team(loser).player,
+        "winner_score": game.team(winner).score,
+        "loser_score": game.team(loser).score,
+        "date_time_start": game.start_time.isoformat(),
+        "date_time_end": game.end_time.isoformat(),
+        "stadium": game.stadium.label,
+        "innings_played": game.innings_played,
+        "innings_selected": game.innings_selected,
+        "tag_set": game.tag_set_id,
+        "game_mode": mode_name_for(game.tag_set_id),
+        "linescore": None if line is None else {"0": list(line.away), "1": list(line.home)},
+    }
 
 
 async def fetch_completed_games(
@@ -243,64 +254,54 @@ async def fetch_completed_games(
     vs_captain: str | None = None,
     exclude_tag: list[str] | None = None,
     include_teams: bool | None = None,
-) -> pd.DataFrame:
-    """Fetch completed games from the Project Rio API.
+) -> list[dict]:
+    """Finished games matching the filters, newest first, as ``completed_game_row`` dicts.
 
-    Uses pyrio's get_games() which returns a processed DataFrame with
-    winner/loser columns, resolved timestamps, stadium names, and game mode names.
+    Times are unix seconds; ``stadium`` a stadium id; captains by name. Returns
+    ``[]`` on error, recorded in the completed-games diagnostics.
+    ``include_teams`` is accepted for old callers: rosters always come back.
     """
     global _last_completed_fetch_info
 
-    client = _get_client()
-    params = {}
-    if tag:
-        params["tag"] = tag
-    if username:
-        params["username"] = username
-    if vs_username:
-        params["vs_username"] = vs_username
-    if exclude_username:
-        params["exclude_username"] = exclude_username
-    if start_time is not None:
-        params["start_time"] = start_time
-    if end_time is not None:
-        params["end_time"] = end_time
-    if stadium is not None:
-        params["stadium"] = stadium
-    if limit_games is not None:
-        params["limit_games"] = limit_games
-    if captain:
-        params["captain"] = captain
-    if vs_captain:
-        params["vs_captain"] = vs_captain
-    if exclude_tag:
-        params["exclude_tag"] = exclude_tag
-    if include_teams is not None:
-        params["include_teams"] = include_teams
-    params["include_linescore"] = 1
+    query = [("include_linescore", 1)]
+    for key, values in (("tag", tag), ("username", username), ("vs_username", vs_username),
+                        ("exclude_username", exclude_username), ("exclude_tag", exclude_tag)):
+        query += [(key, v) for v in values or ()]
+    for key, value in (("start_time", start_time), ("end_time", end_time), ("stadium", stadium),
+                       ("limit_games", limit_games), ("captain", captain), ("vs_captain", vs_captain)):
+        if value not in (None, ""):
+            query.append((key, value))
+    diag_url = f"{_base_url()}/games/?{urlencode(query)}"
 
-    # Build the diagnostic URL matching what pyrio will send to the Rio API
-    qs_parts = []
-    for k, v in params.items():
-        if isinstance(v, list):
-            for item in v:
-                qs_parts.append((k, item))
-        else:
-            qs_parts.append((k, v))
-    diag_url = f"{client.base_url}/games/?{urlencode(qs_parts)}" if qs_parts else f"{client.base_url}/games/"
+    def when(seconds: int | None) -> datetime | None:
+        return None if seconds is None else datetime.fromtimestamp(seconds, timezone.utc)
 
     try:
-        df = await asyncio.to_thread(client.get_games, params)
-        count = len(df)
-        logger.info(f"[StatsAPI] Fetched {count} completed games")
+        await _ensure_mode_names()
+        games = await _get_client().games(
+            tags=tag or None,
+            exclude_tags=exclude_tag or None,
+            users=username or None,
+            vs_users=vs_username or None,
+            exclude_users=exclude_username or None,
+            captains=[Character.parse(captain)] if captain else None,
+            vs_captains=[Character.parse(vs_captain)] if vs_captain else None,
+            stadiums=[Stadium(stadium)] if stadium is not None else None,
+            start_time=when(start_time),
+            end_time=when(end_time),
+            limit=limit_games if limit_games is not None else 50,
+            include_linescore=True,
+        )
+        rows = [completed_game_row(g) for g in games]
+        logger.info(f"[StatsAPI] Fetched {len(rows)} completed games")
         _last_completed_fetch_info = {
             "url": diag_url,
-            "count": count,
+            "count": len(rows),
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "error": None,
         }
-        return df
-    except RioAPIError as e:
+        return rows
+    except RioError as e:
         logger.warning(f"[StatsAPI] API error fetching completed games: {e}")
         _last_completed_fetch_info = {
             "url": diag_url,
@@ -308,33 +309,23 @@ async def fetch_completed_games(
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "error": str(e),
         }
-        return pd.DataFrame()
-    except Exception as e:
-        logger.error(f"[StatsAPI] Unexpected error fetching completed games: {e}")
-        _last_completed_fetch_info = {
-            "url": diag_url,
-            "count": 0,
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-            "error": str(e),
-        }
-        return pd.DataFrame()
+        return []
 
 
-async def fetch_ongoing_games() -> dict:
-    """Fetch currently ongoing games from the Project Rio API."""
-    client = _get_client()
+async def fetch_ongoing_games() -> list[LiveGame]:
+    """Games in progress on Rio web; ``[]`` on error."""
     try:
-        return await asyncio.to_thread(client.get_live_games)
-    except RioAPIError as e:
+        return await _get_client().live_games()
+    except RioError as e:
         logger.warning(f"[StatsAPI] API error fetching live games: {e}")
-        return {}
-    except Exception as e:
-        logger.error(f"[StatsAPI] Unexpected error fetching live games: {e}")
-        return {}
+        return []
 
 
-# Cached game modes: {name: id}
+# Active game modes: {name: id}. What a producer picks from.
 _game_modes: dict[str, int] = {}
+# Every tag set Rio web has named, ended seasons included: {id: name}. What a
+# completed game's mode is named by.
+_mode_names: dict[int, str] = {}
 _game_modes_lock: asyncio.Lock | None = None
 _cache_refresh_lock: asyncio.Lock | None = None
 # The one in-flight fetch every budgeted (live-path) resolve shares, so a run of
@@ -350,15 +341,12 @@ _modes_failed_at: float | None = None
 MODES_RETRY_AFTER = 30.0
 
 # How long a LIVE path (a HUD frame resolving its game mode) will wait on the
-# game-mode cache before giving up and leaving the tag alone. pyrio builds its
-# session with no HTTP timeout, so "the API is unreachable" is indistinguishable
-# from "the API is slow" and can last forever — and the scoreboard is on air.
-# Resolution is a nicety; the board coming up is not.
+# game-mode list before giving up and leaving the tag alone. The board is on
+# air; resolution is a nicety.
 LIVE_RESOLVE_TIMEOUT = 2.0
 
-# How long after launch the completer-cache rebuild waits. It is CPU-bound in
-# pyrio and starves the event loop for ~40s cold, so running it at second zero
-# put ~13s between a HUD frame and the board appearing. Nothing live reads it.
+# How long after launch the full tag-set catalogue is fetched. Nothing live
+# reads it: it names the modes of COMPLETED games.
 STARTUP_CACHE_REFRESH_DELAY = 60.0
 
 
@@ -393,17 +381,10 @@ def _get_cache_refresh_lock() -> asyncio.Lock:
 
 
 async def fetch_game_modes(force: bool = False) -> dict[str, int]:
-    """Fetch active game modes from the Project Rio API.
+    """The active game modes, ``{name: tag_set_id}``, cached; ``force`` re-fetches.
 
-    Returns: {game_mode_name: tag_set_id}
-    Caches the result; pass force=True to re-fetch.
-
-    force=True also refreshes pyrio's disk-persisted CompleterCache (tags,
-    users, game modes — cache.pkl under user_data/cache/), which otherwise
-    trusts a timestamp that can survive up to a day across app restarts.
-    That cache backs the game-mode-name resolution used when displaying
-    completed games (RioWeb._process_games), so a stale pickle can hide a
-    just-added game mode there even after fetch_game_modes() itself refreshes.
+    ``force`` also refreshes the full catalogue (``fetch_all_game_modes``) past
+    its disk cache, so a just-added mode is named everywhere.
     """
     global _game_modes, _modes_failed_at
     if _game_modes and not force:
@@ -411,13 +392,10 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
     if not force and _modes_backing_off():
         return _game_modes
 
-    client = _get_client()
-
     # The mode list first, and alone under this lock. Everything that waits on
     # `_game_modes` — including a HUD frame resolving a new game's tag — waits
     # exactly as long as this one call, and no longer.
     async with _get_game_modes_lock():
-        # Double-check after acquiring lock (another coroutine may have filled it)
         if _game_modes and not force:
             return _game_modes
         # Re-checked under the lock: callers queued behind a failing fetch would
@@ -425,17 +403,14 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
         if not force and _modes_backing_off():
             return _game_modes
         try:
-            raw = await asyncio.to_thread(client.list_game_modes, active=True)
-            tag_sets = raw.get("Tag Sets", [])
-            _game_modes = {ts["name"]: ts["id"] for ts in tag_sets}
+            tag_sets = await _get_client().tag_sets.list(active_only=True)
+            _game_modes = {ts.name: ts.id for ts in tag_sets}
+            _mode_names.update({ts.id: ts.name for ts in tag_sets})
             _modes_failed_at = None
             logger.info(f"[StatsAPI] Fetched {len(_game_modes)} active game modes")
-        except RioAPIError as e:
+        except RioError as e:
             _modes_failed_at = asyncio.get_running_loop().time()
             logger.warning(f"[StatsAPI] API error fetching game modes: {e}")
-        except Exception as e:
-            _modes_failed_at = asyncio.get_running_loop().time()
-            logger.error(f"[StatsAPI] Unexpected error fetching game modes: {e}")
 
     if force:
         await refresh_completer_cache()
@@ -443,87 +418,71 @@ async def fetch_game_modes(force: bool = False) -> dict[str, int]:
     return _game_modes
 
 
+async def _ensure_mode_names() -> None:
+    """Fill the full catalogue once, for naming completed games' modes."""
+    if not _mode_names or _mode_names.keys() <= set(_game_modes.values()):
+        await warm_completer_cache()
+
+
+def mode_name_for(tag_set_id: int | None) -> str:
+    """A tag set's name from the cached catalogue; '' when unknown or none."""
+    if tag_set_id is None:
+        return ""
+    return _mode_names.get(tag_set_id, "")
+
+
 async def fetch_all_game_modes() -> dict[str, int]:
     """Every game mode Project Rio has ever named — ended seasons included.
 
     THE ACTIVE LIST IS NOT THE VOCABULARY. `fetch_game_modes` is the list to
-    PICK from — 16 modes against 196 — but a board's mode comes from the game it
-    is carrying, and a pool of completed games is mostly ended seasons that list
-    no longer names. Anything that has to SAY or MATCH a mode (the console's
-    pickers, the pool's mode filter) needs the whole catalogue; anything that
-    offers today's modes first still leads with the active one.
-
-    Reads the same disk-persisted map pyrio uses to name a completed game's mode
-    (`_process_games`), so this endpoint and the mode printed beside a game in
-    the games table can never disagree. Falls back to the active list — never an
-    exception and never empty when we know anything at all — because a picker
-    that offers less is a nuisance and one that offers nothing is broken.
+    PICK from, but a board's mode comes from the game it is carrying, and a
+    pool of completed games is mostly ended seasons that list no longer names.
+    Anything that has to SAY or MATCH a mode (the console's pickers, the pool's
+    mode filter) needs the whole catalogue. Falls back to the active list —
+    never empty when we know anything at all.
     """
-    client = _get_client()
-    modes = None
-    # The same lock the warm-up holds: a cold catalogue is a ~14s CPU-bound
-    # rebuild inside pyrio, and two of them at once is what starves the loop
-    # while a board is coming up.
+    await warm_completer_cache()
+    if _mode_names:
+        return {name: tag_set_id for tag_set_id, name in _mode_names.items()}
+    return dict(await fetch_game_modes())
+
+
+async def _load_catalogue(refresh: bool) -> None:
     async with _get_cache_refresh_lock():
         try:
-            modes = await asyncio.to_thread(client.cache.game_mode_dictionary)
-        except Exception as e:
+            client = _get_client()
+            if refresh and client.cache is not None:
+                client.cache.clear()
+            tag_sets = await client.tag_sets.list()
+            _mode_names.update({ts.id: ts.name for ts in tag_sets})
+        except RioError as e:
             logger.warning(f"[StatsAPI] Failed to read the full game-mode catalogue: {e}")
-    # Outside the lock: the active fetch can end up refreshing the completer
-    # cache, which takes this same lock.
-    return dict(modes) if modes else dict(await fetch_game_modes())
 
 
 async def refresh_completer_cache() -> None:
-    """Force-rebuild every section of pyrio's completer cache.
+    """Re-fetch the reference data (the tag-set catalogue) past pyrio's disk cache.
 
-    For an explicit "refresh" the producer asked for. Startup uses
-    `warm_completer_cache` instead — the cache manages its own staleness now, so
-    launching is not an occasion to re-fetch everything.
+    For an explicit "refresh" the producer asked for.
     """
-    client = _get_client()
-    async with _get_cache_refresh_lock():
-        try:
-            await asyncio.to_thread(client.cache.refresh_cache)
-        except Exception as e:
-            logger.warning(f"[StatsAPI] Failed to refresh completer cache: {e}")
+    await _load_catalogue(refresh=True)
 
 
 async def warm_completer_cache() -> None:
-    """Pull the one section PRSH actually reads into the completer cache.
-
-    PRSH never calls a completer accessor itself; the cache exists here so
-    pyrio's `_process_games` can turn a completed game's mode id into a name.
-    That is `game_mode_dictionary()` and nothing else — so warming the whole
-    cache meant fetching 9,600 users and a tag table to populate a 195-entry
-    map.
-
-    Reading the accessor IS the warm-up now: fresh costs nothing, stale answers
-    from disk and refreshes behind itself, and only a section we have never seen
-    goes to the network. No `force`, because forcing is what turned a launch
-    into three round-trips whether or not anything had changed.
-    """
-    client = _get_client()
-    async with _get_cache_refresh_lock():
-        try:
-            await asyncio.to_thread(lambda: client.cache.game_mode_dictionary())
-        except Exception as e:
-            logger.warning(f"[StatsAPI] Failed to warm completer cache: {e}")
+    """Load the tag-set catalogue, from pyrio's disk cache while it is fresh."""
+    await _load_catalogue(refresh=False)
 
 
 async def prime_caches() -> None:
     """Launch-time cache warmup, ordered so the board is never behind it.
 
-    The mode list first: it is ~2s, and a HUD frame resolving a new game's tag
-    blocks on it. The completer warm-up after a delay, because the first ever
-    fetch of the full mode table is ~14s and CPU-heavy enough inside pyrio to
-    compete with the producer bringing a board up. It is nothing on air — it
-    backs game-mode names in the COMPLETED games browser.
+    The active mode list first: a HUD frame resolving a new game's tag blocks
+    on it. The full catalogue after a delay: it names the modes in the
+    COMPLETED games browser, and nothing on air waits for it.
     """
     await fetch_game_modes()
     await asyncio.sleep(STARTUP_CACHE_REFRESH_DELAY)
     await warm_completer_cache()
-    logger.debug("[StatsAPI] deferred completer-cache warm-up complete")
+    logger.debug("[StatsAPI] deferred catalogue warm-up complete")
 
 
 async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:
@@ -531,14 +490,9 @@ async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:
 
     Ensures the game-mode cache is populated first. Returns '' when the id is
     missing, not an active game mode, or — when ``timeout`` is given — could not
-    be resolved in time.
-
-    ``timeout`` is for callers on a live path. Resolving costs a Project Rio
-    round-trip the first time, and pyrio's session has no HTTP timeout of its
-    own, so an unreachable API is an indefinite wait. A caller who is holding up
-    something that is on air passes a budget and accepts '' — which is already
-    the "unknown mode" answer, and already means "leave the current selection
-    alone".
+    be resolved in time. A caller holding up something on air passes a budget
+    and accepts '' — which is already the "unknown mode" answer, and already
+    means "leave the current selection alone".
     """
     global _modes_task
     if tag_set_id is None or tag_set_id == -1:
@@ -567,14 +521,11 @@ async def resolve_tag_set_name(tag_set_id, timeout: float | None = None) -> str:
 
 
 def game_mode_name(tag_set_id) -> str:
-    """Cache-only resolve of a tag-set id to its game-mode name; '' if unknown.
+    """Cache-only resolve of a tag-set id to its ACTIVE game-mode name; '' if unknown.
 
     The synchronous sibling of resolve_tag_set_name, for callers ON the hot
     path — apply_parsed_game_to_state runs per HUD frame, and the perf contract
-    for that path is no awaits that can become a network round-trip. This never
-    fetches: it answers from the cache the boot fetch and _apply_hud_game_mode
-    already fill, and returns '' until then, which is the same "unknown mode"
-    answer every other caller treats as "say nothing".
+    for that path is no awaits that can become a network round-trip.
     """
     if tag_set_id is None or tag_set_id == -1:
         return ""
@@ -587,33 +538,25 @@ def game_mode_name(tag_set_id) -> str:
 # ----- communities (address-book league import) ------------------------------
 #
 # A Rio COMMUNITY is the league's own membership list, and its game modes are
-# the tags that carry its `comm_id`. Both come off the completer cache (one
-# public, cached payload), so listing them costs nothing per call. The member
-# list is the one live call — and a PRIVATE community only answers it for a Rio
-# key whose account is inside it, which is exactly the case for a league like
-# the NNL. So a refused member list falls back to the people who have actually
-# PLAYED in the community's modes: public, and for a league book the better
-# answer anyway, since a member who has never played has nothing to put on air.
+# its tag sets. The member list is the one call that can be refused — a PRIVATE
+# community only answers it for a Rio key whose account is inside it, which is
+# exactly the case for a league like the NNL. So a refused member list falls
+# back to the people who have actually PLAYED in the community's modes: public,
+# and for a league book the better answer anyway, since a member who has never
+# played has nothing to put on air.
 
-# Games per mode for the fallback. Rio's default is 50 (see DEFAULT_LIMIT on
-# the console); a season is a few hundred games, so ask for them all.
+# Games per mode for the fallback. Rio's default is 50; a season is a few
+# hundred games, so ask for them all.
 _COMMUNITY_GAMES_PER_MODE = 1000
 
 
+async def _community_tags():
+    return await _get_client().tags.list(kinds=[TagKind.COMMUNITY])
+
+
 async def fetch_communities() -> list[str]:
-    client = _get_client()
-    names = await asyncio.to_thread(client.cache.communities)
-    return sorted(set(names), key=str.casefold)
-
-
-def _community_modes_sync(client: RioWeb, name: str) -> list[str]:
-    rows = client.cache._payload("tags").get("rows", [])
-    comm = next((r for r in rows if r.get("type") == "Community" and r.get("name") == name), None)
-    if comm is None:
-        return []
-    modes = client.cache.game_mode_dictionary()
-    return [r["name"] for r in rows
-            if r.get("comm_id") == comm.get("comm_id") and r.get("name") in modes]
+    tags = await _community_tags()
+    return sorted({t.name for t in tags}, key=str.casefold)
 
 
 async def fetch_community_roster(name: str) -> dict:
@@ -624,21 +567,22 @@ async def fetch_community_roster(name: str) -> dict:
     Raises ``LookupError`` when there is no such community.
     """
     client = _get_client()
-    if name not in await fetch_communities():
+    community = next((t for t in await _community_tags() if t.name == name), None)
+    if community is None:
         raise LookupError(f"No Rio community named {name!r}")
-    modes = await asyncio.to_thread(_community_modes_sync, client, name)
+    tag_sets = await client.tag_sets.list(community_ids=[community.community_id]) \
+        if community.community_id is not None else []
+    modes = [ts.name for ts in tag_sets]
     note = ""
     try:
-        data = await asyncio.to_thread(client.community_members, name)
-        users = client.cache.users_dictionary()
+        members = await client.communities.members(name)
+        users = {u.id: u.name for u in await client.users.list()}
         usernames = [
-            users.get(str(m.get("user_id")))
-            for m in (data or {}).get("Members", [])
-            if m.get("active", True) and not m.get("banned")
+            users[m.user_id] for m in members
+            if m.is_active and not m.is_banned and m.user_id in users
         ]
-        usernames = [u for u in usernames if u]
         source = "members"
-    except RioAPIError as e:
+    except APIError as e:
         logger.info("[StatsAPI] community {} members refused ({}); using its games", name, e)
         note = str(e)
         # Three at a time: a burst of a dozen season-sized queries is enough to
@@ -649,15 +593,13 @@ async def fetch_community_roster(name: str) -> dict:
             async with gate:
                 return await fetch_completed_games(tag=[mode], limit_games=_COMMUNITY_GAMES_PER_MODE)
 
-        frames = await asyncio.gather(*(one(m) for m in modes))
         seen = set()
         usernames = []
-        for df in frames:
-            for col in ("away_user", "home_user"):
-                if col in getattr(df, "columns", []):
-                    for u in df[col].dropna().tolist():
-                        if u and u.casefold() not in seen:
-                            seen.add(u.casefold())
-                            usernames.append(u)
+        for rows in await asyncio.gather(*(one(m) for m in modes)):
+            for row in rows:
+                for u in (row.get("away_user"), row.get("home_user")):
+                    if u and u.casefold() not in seen:
+                        seen.add(u.casefold())
+                        usernames.append(u)
         source = "games"
     return {"community": name, "modes": modes, "usernames": usernames, "source": source, "note": note}

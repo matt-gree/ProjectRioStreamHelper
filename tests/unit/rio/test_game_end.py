@@ -7,7 +7,7 @@ loop, and `_lookup_winner`'s start-time cutoff — the guard that keeps a Bo-ser
 rematch from re-crediting the previous game."""
 from unittest.mock import AsyncMock
 
-import pandas as pd
+from datetime import datetime, timezone
 import pytest
 
 import server.rio.game_end as game_end
@@ -231,13 +231,11 @@ _T0 = 1_700_000_000   # the followed game's start_time
 
 
 def _games_df(rows):
-    """rows: list of (winner_user, start_epoch_seconds)."""
-    return pd.DataFrame({
-        "winner_user": [w for w, _ in rows],
-        "date_time_start": [
-            pd.Timestamp(t, unit="s", tz="UTC").isoformat() for _, t in rows
-        ],
-    })
+    """rows: list of (winner_user, start_epoch_seconds), as completed-game rows."""
+    return [
+        {"winner_user": w, "date_time_start": datetime.fromtimestamp(t, timezone.utc).isoformat()}
+        for w, t in rows
+    ]
 
 
 @pytest.fixture
@@ -263,11 +261,6 @@ async def test_lookup_empty_names_short_circuits(fake_completed):
 
 async def test_lookup_not_ingested_yet_returns_empty(fake_completed):
     fake_completed["df"] = _games_df([])
-    assert await GameEndWatcher._lookup_winner("A", "B", _T0) == ""
-
-
-async def test_lookup_missing_winner_column_returns_empty(fake_completed):
-    fake_completed["df"] = pd.DataFrame({"something_else": [1]})
     assert await GameEndWatcher._lookup_winner("A", "B", _T0) == ""
 
 

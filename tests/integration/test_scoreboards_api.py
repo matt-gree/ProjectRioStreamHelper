@@ -576,10 +576,10 @@ def _hud_frame(name="game1_start"):
     import orjson
 
     from server.rio.hud_watcher import HudWatcher
-    from server.rio.pyrio.stat_file_parser import HudObj
+    from server.rio.hud_watcher import read_frame
 
     path = Path(__file__).resolve().parents[1] / "data" / "hud" / f"{name}.json"
-    return HudWatcher._convert_hud_data_format(HudObj(orjson.loads(path.read_bytes())))
+    return read_frame(orjson.loads(path.read_bytes()), "2.2.0")[1]
 
 
 def test_turning_the_hud_on_reseats_the_cached_frame_on_board_1(

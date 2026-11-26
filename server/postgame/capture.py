@@ -49,7 +49,7 @@ from server.postgame import contacts as postgame_contacts, files as postgame_fil
 from server.match import Match
 from server.postgame.files import norm_game_id
 from server.rio import stats_api
-from server.rio.pyrio.stat_file_parser import StatObj
+from pyrio import Game, Side, to_jsonable
 from server.state import State
 from server.utils.deep_dict import deep_get
 
@@ -61,9 +61,9 @@ class PostGame:
 
     # sb -> full structured payload (the projected fields PLUS "events")
     _captured: dict[int, dict] = {}
-    # sb -> parsed StatObj for the captured file (per-AB hit sim source)
-    _stat_objs: dict[int, "StatObj"] = {}
-    # sb -> {event_num: ContactRecord} lazily built by character_abs
+    # sb -> the captured game, read by pyrio (per-AB walkthrough source)
+    _games: dict[int, Game] = {}
+    # sb -> {event index: ContactRecord} lazily built by character_abs
     _contacts: dict[int, dict] = {}
 
     # Serializes capture(): two concurrent captures for the same board (double-
@@ -116,60 +116,60 @@ class PostGame:
         return 0, 1  # default: away=left, home=right
 
     @classmethod
-    def _build_payload(cls, seated: tuple[str, str], stat: StatObj, data: dict,
-                       src_name: str) -> dict:
-        away_name, home_name = stat.player(0), stat.player(1)
-        t1, t2 = cls._orient(seated, away_name, home_name)
+    def _build_payload(cls, seated: tuple[str, str], game: Game, src_name: str) -> dict:
+        t1, t2 = cls._orient(seated, game.away.player, game.home.player)
+        sides = {0: Side.AWAY, 1: Side.HOME}
 
-        # Stars won / per-inning runs / event-derived character counters per raw
-        # team, indexable by the corrected team_num (0=away, 1=home — same space
-        # _orient's t1/t2 live in).
-        events = data.get("Events") or []
-        stars = dict(zip((0, 1), postgame_stats.stars_won(events)))
-        lines = dict(zip((0, 1), postgame_stats.linescore(events, stat)))
-        derived = postgame_stats.char_event_derived(events)
-
-        winner_team = stat.winning_team()  # 0/1, or -1 tie
-        winner_side = 1 if winner_team == t1 else 2 if winner_team == t2 else 0
+        stars = postgame_stats.stars_won(game)
+        derived = postgame_stats.char_event_derived(game)
+        winner = game.result.winner
+        winner_side = (1 if winner is sides[t1] else 2) if winner is not None else 0
+        result = game.result
+        quitter = "Crash" if result.crashed else (result.quit_by.value if result.quit_by else "None")
 
         meta = {
-            "startDate": data.get("Date - Start", ""),
-            "endDate": data.get("Date - End", ""),
-            "stadium": stat.stadium(),
-            "tagSetId": data.get("TagSetID"),
+            "startDate": postgame_files.display_time(game.start_time),
+            "endDate": postgame_files.display_time(game.end_time),
+            "stadium": game.stadium.label,
+            "tagSetId": game.tag_set_id,
             # The mode THIS game was played under, by name — frozen at capture
             # so a summary shown after the board has moved on still names it.
             # Cache-only (never a network round-trip inside the capture lock);
             # '' when unknown, and the Game Summary falls back to the board's.
-            "gameMode": stats_api.game_mode_name(data.get("TagSetID")),
-            "inningsSelected": stat.inningsSelected(),
-            "inningsPlayed": stat.inningsPlayed(),
-            "isMercy": stat.isMercy(),
-            "wasQuit": stat.wasQuit(),
-            "quitter": stat.quitter(),
-            "version": stat.version(),
+            "gameMode": stats_api.game_mode_name(game.tag_set_id),
+            "inningsSelected": game.innings_selected,
+            "inningsPlayed": game.innings_played,
+            "isMercy": result.is_mercy,
+            "wasQuit": result.quit_by is not None,
+            "quitter": quitter,
+            "version": str(game.version),
             "winnerSide": winner_side,
             # Which SIDE was home — the Game Summary draws home on the bottom
             # row of its linescore whichever side it is seated on.
             "homeSide": 1 if t1 == 1 else 2,
         }
+
+        def block(team_num: int) -> dict:
+            side = sides[team_num]
+            return postgame_stats.side_block(game, side, stars[side], derived)
+
         return {
             "present": True,
-            "gameId": norm_game_id(data.get("GameID")),
+            "gameId": str(game.id),
             "capturedAt": datetime.now(timezone.utc).isoformat(),
             "sourceFile": src_name,
             "meta": meta,
-            # Side → raw team_num, for consumers that need to walk the raw
-            # (away/home-keyed) events in side terms (character_abs).
+            # Side → team_num (0 away, 1 home), for consumers that walk the
+            # game in side terms (character_abs).
             "teamNums": {"1": t1, "2": t2},
-            "player": {
-                "1": postgame_stats.side_block(stat, t1, stars[t1], derived[t1]),
-                "2": postgame_stats.side_block(stat, t2, stars[t2], derived[t2]),
-            },
+            "player": {"1": block(t1), "2": block(t2)},
             # Per-inning runs by side; None = half not played ("X" cell).
-            "linescore": {"1": lines[t1], "2": lines[t2]},
+            "linescore": {
+                "1": postgame_stats.linescore(game, sides[t1]),
+                "2": postgame_stats.linescore(game, sides[t2]),
+            },
             # Heavy; kept out of State, served via REST.
-            "events": data.get("Events", []),
+            "events": to_jsonable(game.events),
         }
 
     # ----- projection ------------------------------------------------------
@@ -203,7 +203,7 @@ class PostGame:
         ]
 
     @staticmethod
-    def _settle_board_entries(sb: int, board_game_id, stat: StatObj, payload: dict) -> list[tuple]:
+    def _settle_board_entries(sb: int, board_game_id, game: Game, payload: dict) -> list[tuple]:
         """Put the box score's FINAL on the board, when the board holds this game.
 
         A HUD frame's scores are PRE-play, and Project Rio writes no frame after
@@ -225,8 +225,8 @@ class PostGame:
         lines = payload.get("linescore") or {}
         base = f"score.{sb}"
         return [
-            (f"{base}.score_left", stat.score(t1)),
-            (f"{base}.score_right", stat.score(t2)),
+            (f"{base}.score_left", (game.away if t1 == 0 else game.home).score),
+            (f"{base}.score_right", (game.away if t2 == 0 else game.home).score),
             (f"{base}.away_linescore", lines.get("1") or []),
             (f"{base}.home_linescore", lines.get("2") or []),
             (f"{base}.game_over", True),
@@ -271,15 +271,15 @@ class PostGame:
             result = await asyncio.to_thread(cls._load, sb, seated, file, game_id)
             if "reason" in result:
                 return {"success": False, "scoreboard": sb, "reason": result["reason"]}
-            path, stat, payload = result["path"], result["stat"], result["payload"]
+            path, game, payload = result["path"], result["game"], result["payload"]
 
             payload["capturedBy"] = by if by in ("auto", "manual") else "manual"
             cls._attach_league_logos(sb, payload)
             cls._captured[sb] = payload
-            cls._stat_objs[sb] = stat
+            cls._games[sb] = game
             cls._contacts.pop(sb, None)  # rebuilt lazily for the new capture
             await State.SetBatch(cls._project_entries(sb, payload)
-                                 + cls._settle_board_entries(sb, game_id, stat, payload))
+                                 + cls._settle_board_entries(sb, game_id, game, payload))
             await State.Save()
             await cls._promote_match(sb)
 
@@ -366,7 +366,7 @@ class PostGame:
     def _load(cls, sb: int, seated: tuple[str, str], file: str | None, game_id) -> dict:
         """Find, read and parse a board's stat file. Blocking — run in a thread.
 
-        Returns ``{path, stat, payload}``, or ``{reason}`` saying why not.
+        Returns ``{path, game, payload}``, or ``{reason}`` saying why not.
         """
         if file:
             path, reason = postgame_files.resolve_pick(file)
@@ -376,17 +376,16 @@ class PostGame:
             logger.warning("[PostGame] sb{} capture failed: {}", sb, reason)
             return {"reason": reason}
 
-        data = postgame_files.load_json(path)
-        if data is None:
+        game = postgame_files.read_game(path)
+        if game is None:
             return {"reason": f"Could not read stat file {path.name}."}
 
         try:
-            stat = StatObj(data)
-            payload = cls._build_payload(seated, stat, data, path.name)
+            payload = cls._build_payload(seated, game, path.name)
         except Exception as e:
             logger.exception("[PostGame] sb{} parse failed for {}", sb, path.name)
             return {"reason": f"Failed to parse stat file: {e}"}
-        return {"path": path, "stat": stat, "payload": payload}
+        return {"path": path, "game": game, "payload": payload}
 
     @classmethod
     async def _promote_match(cls, sb: int) -> None:
@@ -440,7 +439,7 @@ class PostGame:
     async def clear(cls, sb: int) -> None:
         """Blank the post-game box score on a board and drop its cache."""
         cls._captured.pop(sb, None)
-        cls._stat_objs.pop(sb, None)
+        cls._games.pop(sb, None)
         cls._contacts.pop(sb, None)
         await State.SetBatch(cls._project_entries(sb, None))
         await State.Save()
@@ -455,7 +454,7 @@ class PostGame:
         """The board's captured payload, rebuilding the in-memory cache when a
         server restart wiped it. State durably records which stat file backs
         the projected box score (``postgame.{sb}.sourceFile``); re-parsing that
-        file restores ``_captured``/``_stat_objs`` so the heavy REST consumers
+        file restores ``_captured``/``_games`` so the heavy REST consumers
         (events, the Spotlight walkthrough) survive restarts.
 
         THE REBUILD IS ORIENTED BY THE CAPTURE, NOT BY THE BOARD. By the time a
@@ -477,12 +476,11 @@ class PostGame:
         if not path.is_file():
             logger.warning("[PostGame] sb{} cache rebuild: stat file {} is gone", sb, src)
             return None
-        data = postgame_files.load_json(path)
-        if data is None:
+        game = postgame_files.read_game(path)
+        if game is None:
             return None
         try:
-            stat = StatObj(data)
-            payload = cls._build_payload(cls._seated(pg.get("player")), stat, data, path.name)
+            payload = cls._build_payload(cls._seated(pg.get("player")), game, path.name)
         except Exception:
             logger.exception("[PostGame] sb{} cache rebuild failed from {}", sb, src)
             return None
@@ -491,7 +489,7 @@ class PostGame:
             if pg.get(key):
                 payload[key] = pg[key]
         cls._captured[sb] = payload
-        cls._stat_objs[sb] = stat
+        cls._games[sb] = game
         cls._contacts.pop(sb, None)
         logger.info("[PostGame] sb{} rebuilt capture cache from {}", sb, src)
         return payload
@@ -508,7 +506,7 @@ class PostGame:
         """
         if sb not in cls._contacts:
             cls._contacts[sb] = postgame_contacts.simulate_game_contacts(
-                cls._stat_objs.get(sb), sb)
+                cls._games.get(sb), sb)
         return cls._contacts[sb]
 
     @classmethod
@@ -523,5 +521,8 @@ class PostGame:
             return {"success": False, "reason": "No captured game on this scoreboard."}
         if side not in (1, 2) or not (0 <= char_index < 9):
             return {"success": False, "reason": "Invalid side or roster index."}
+        game = cls._games.get(sb)
+        if game is None:
+            return {"success": False, "reason": "No captured game on this scoreboard."}
         return postgame_contacts.character_abs(
-            payload, cls._contacts_for(sb), sb, side, char_index)
+            game, payload, cls._contacts_for(sb), sb, side, char_index)
