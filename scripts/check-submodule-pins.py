@@ -23,16 +23,23 @@ Exit 0 = every pin is fetchable. Exit 1 = at least one is local-only.
 from __future__ import annotations
 
 import configparser
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
+# A hook runs with GIT_DIR (and friends) set to the superproject's repository.
+# In a worktree GIT_DIR is absolute, so `git -C <submodule>` would still read
+# the superproject and every pin would look local-only. Let each call find its
+# repository from its cwd instead.
+_ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
 
 def _git(*args: str, cwd: Path = REPO) -> tuple[int, str]:
     p = subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True
+        ["git", *args], cwd=cwd, capture_output=True, text=True, env=_ENV
     )
     return p.returncode, (p.stdout + p.stderr).strip()
 
