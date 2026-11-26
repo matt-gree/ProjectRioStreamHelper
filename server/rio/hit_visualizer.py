@@ -34,7 +34,7 @@ def build_hit(play: Event, stadium: Stadium) -> dict | None:
     try:
         inputs = HitInputs.from_event(play, stadium=stadium)
         hit = simulate_hit(replace(inputs, overrides=HitOverrides.from_contact(contact)))
-    except ValueError as err:  # a bunt, or inputs the sim can't reach
+    except ValueError as err:  # an unrecorded swing, or inputs the sim can't reach
         logger.info(f"[hit_visualizer] not simulated: {err}")
         return None
 

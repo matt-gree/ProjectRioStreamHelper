@@ -52,7 +52,8 @@ def runner_entries(event: Event) -> list[dict]:
 def recorded_flight(contact: Contact) -> dict | None:
     """Approximate a ball in play's flight from the contact Rio recorded.
 
-    For contacts the hit sim doesn't fly (bunts): one smooth parabola from the
+    For contacts the hit sim doesn't fly (a swing the file didn't record, or a
+    file too old to replay): one smooth parabola from the
     contact point through the recorded apex to the recorded landing, over the
     recorded hang time. Not a resimulation, but a real flight beats a blank one.
     Returns None without a hang time to draw over.
