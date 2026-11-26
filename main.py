@@ -211,13 +211,29 @@ def _selftest() -> int:
         ('public/design',),
         ('public/game_assets',),
         ('public/logo.png',),
-        ('server/rio/pyrio/CharNames.csv',),
-        ('server/rio/pyrio/constants/character_attributes.csv',),
-        ('server/rio/pyrio/constants/stadiums',),
+        # pyrio's data: staged at pyrio/... by PRSH.spec, read from the
+        # submodule's src layout when run from source.
+        ('pyrio/_data', 'server/rio/pyrio/src/pyrio/_data'),
+        ('pyrio/geometry/_data', 'server/rio/pyrio/src/pyrio/geometry/_data'),
     ]
     for candidates in required:
         if not any((root / rel).exists() for rel in candidates):
             failures.append(f"missing bundled path: {' or '.join(candidates)}")
+
+    # The paths existing isn't the whole question: pyrio reads its data through
+    # importlib.resources, so load a piece of each folder the way the server
+    # does — character attributes and nicknames, walls, a collision mesh and a
+    # park sheet's hazards.
+    try:
+        import pyrio
+        from pyrio.geometry import hazards, triangles, walls
+
+        pyrio.Character.parse('mario').attributes
+        walls(pyrio.Stadium.MARIO_STADIUM)
+        triangles(pyrio.Stadium.BOWSER_CASTLE)
+        hazards(pyrio.Stadium.BOWSER_CASTLE)
+    except Exception as exc:
+        failures.append(f"pyrio data -> {exc.__class__.__name__}: {exc}")
 
     for failure in failures:
         print(f"selftest FAIL  {failure}")

@@ -25,7 +25,9 @@ jobs:
         with:
           # pyrio lives at server/rio/pyrio as a git submodule; without this the
           # provider/stats imports fail at collection and the whole suite errors.
-          submodules: recursive
+          # Not recursive: rio-visualizer carries its own pyrio submodule, which
+          # PRSH never imports (server/paths.py puts server/rio/pyrio first).
+          submodules: true
 
       - name: Setup Python
         uses: actions/setup-python@v5

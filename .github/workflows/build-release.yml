@@ -106,7 +106,9 @@ jobs:
       - name: Checkout (with submodules)
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          # Not recursive: rio-visualizer's own pyrio submodule is never
+          # bundled or imported; PRSH ships server/rio/pyrio (see PRSH.spec).
+          submodules: true
           fetch-depth: 0    # PRSH.spec runs freeze-version.py, which needs git history
 
       - name: Download frontend build
