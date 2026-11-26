@@ -15,7 +15,7 @@ def format_batting_line(*, walks_bb=0, walks_hbp=0, homeruns=0, **counts):
 
 def test_strikeouts_are_named():
     assert format_batting_line(at_bats=4, hits=1, homeruns=1, walks_hbp=1,
-                               strikeouts=2) == "1-for-4, HR, HBP, 2 K"
+                               strikeouts=2) == "1-for-4, HR, BB, 2 K"
 
 
 def test_a_single_strikeout_carries_no_count():
